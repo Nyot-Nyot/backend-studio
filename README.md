@@ -94,7 +94,31 @@ Langkah 10 — Lanjutkan ke task berikutnya: Setelah PR selesai dan merge dilaku
 
 ## Flowchart (visual sederhana)
 
-![Workflow Tim](assets/workflow.png)
+```mermaid
+flowchart TD
+    A[Pilih task di sprint-planning.md] --> B[Tambah sprint-planning.md<br>ke konteks AI]
+    B --> C[Berikan prompt ke AI]
+    C --> D[Test & verifikasi]
+    D --> E{Perlu perbaikan?}
+    E -->|Ya| C
+    E -->|Tidak| F[Push branch (epic-1)<br>& buka PR]
+    F --> G[Review oleh Scrum Master]
+    G --> H{Approve?}
+    H -->|Ya| I[Merge & lanjut<br>task berikutnya]
+    H -->|Tidak| J[Request changes]
+    J --> C
+
+    style A fill:#3b82f6,color:#ffffff
+    style B fill:#8b5cf6,color:#ffffff
+    style C fill:#10b981,color:#ffffff
+    style D fill:#f59e0b,color:#000000
+    style E fill:#f97316,color:#ffffff
+    style F fill:#ef4444,color:#ffffff
+    style G fill:#8b5cf6,color:#ffffff
+    style H fill:#f97316,color:#ffffff
+    style I fill:#10b981,color:#ffffff
+    style J fill:#ef4444,color:#ffffff
+```
 
 ## Alasan di balik workflow ini
 
