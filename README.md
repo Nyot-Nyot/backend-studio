@@ -96,15 +96,15 @@ Jadi intinya `sprint-1/todo.md`, `sprint-2/todo.md`, dan `sprint-3/todo.md` itu 
 
 ```mermaid
 flowchart TD
-    A[Pilih task di sprint-planning.md] --> B[Tambah sprint-planning.md<br>ke konteks AI]
+    A[Pilih task di sprint-planning.md] --> B[Tambah sprint-planning.md ke konteks AI]
     B --> C[Berikan prompt ke AI]
     C --> D[Test & verifikasi]
     D --> E{Perlu perbaikan?}
     E -->|Ya| C
-    E -->|Tidak| F[Push branch (epic-1)<br>& buka PR]
+    E -->|Tidak| F[Push branch epic-1<br>dan buka PR]
     F --> G[Review oleh Scrum Master]
     G --> H{Approve?}
-    H -->|Ya| I[Merge & lanjut<br>task berikutnya]
+    H -->|Ya| I[Merge dan lanjut task berikutnya]
     H -->|Tidak| J[Request changes]
     J --> C
 
