@@ -14,12 +14,6 @@ Persyaratan singkat: Node.js (LTS) dan npm. Untuk menjalankan: jalankan `npm ins
 
 Aplikasi ini bertujuan menyediakan lingkungan kerja lokal yang dapat memalsukan (mock) endpoint API sehingga pengembangan frontend dapat berjalan beriringan tanpa backend ready. Komponen pentingnya meliputi `sw.js` untuk intercept request, `mockEngine` untuk membangkitkan response, dan panel Test Console untuk mengirim/mengecek request.
 
-## Baca sebelum mulai
-
-Sebelum mulai mengerjakan task, pastikan untuk membaca `docs/sprint-planning.md` yang berisi daftar epic dan task beserta acceptance criteria-nya, baca singkat aja. File ini adalah panduan utama untuk memahami apa yang perlu dikerjakan dalam sprint saat ini.
-
-Jadi intinya `sprint-1/todo.md`, `sprint-2/todo.md`, dan `sprint-3/todo.md` itu pecahan rinci untuk setiap sprint berdasarkan task di `sprint-planning.md`.
-
 ## Apa itu Sprint, Epic, dan Task?
 
 Bayangkan Anda membangun rumah, inilah analoginya:
@@ -50,6 +44,12 @@ flowchart TD
     style KERJA3 fill:#ef4444,color:#ffffff
 ```
 
+## Baca sebelum mulai
+
+Sebelum mulai mengerjakan task, pastikan untuk membaca `docs/sprint-planning.md` yang berisi daftar epic dan task beserta acceptance criteria-nya, baca singkat aja. File ini adalah panduan utama untuk memahami apa yang perlu dikerjakan dalam sprint saat ini.
+
+Jadi intinya `sprint-1/todo.md`, `sprint-2/todo.md`, dan `sprint-3/todo.md` itu pecahan rinci untuk setiap sprint berdasarkan task di `sprint-planning.md`.
+
 ## Dokumen Pendukung
 
 -   [docs/prd.md](docs/prd.md) — Dokumen kebutuhan produk (Product Requirements Document).
@@ -61,13 +61,13 @@ flowchart TD
 
 ## Workflow Tim
 
-Langkah 1 — Pilih task: Buka `docs/sprint-planning.md` dan tentukan task yang akan dikerjakan, misalnya "Epic 1 – Task 1.1". Tandai secara internal siapa yang mengambil task tersebut agar tidak terjadi tumpang tindih pekerjaan.
+1. Pilih task: Buka `docs/sprint-planning.md` dan tentukan task yang akan dikerjakan, misalnya "Epic 1 – Task 1.1". Tandai secara internal siapa yang mengambil task tersebut agar tidak terjadi tumpang tindih pekerjaan.
 
-Langkah 2 — Tambahkan konteks ke AI assistant: Pastikan kamu menambahkan file `docs/sprint-1/todo.md` pada konteks chat Copilot atau Cursor sebelum nge-prompt agar AI memahami tujuan dan acceptance criteria dari task.
+2. Tambahkan konteks ke AI assistant: Pastikan kamu menambahkan file `docs/sprint-1/todo.md` pada konteks chat Copilot atau Cursor sebelum nge-prompt agar AI memahami tujuan dan acceptance criteria dari task.
 
-Langkah 3 — Berikan prompt yang jelas: Contoh prompt: `berdasarkan sprint-1 pada epic1 task 1.1 buat todo list local dan kerjakan satu persatu. kemudian tandai setiap task yg sudah selesai di docs/sprint1/todo.md. manfaatkan docs/ untuk memastikan setiap perubahan sesuai dan konsisten.` Beri potongan kode atau file terkait saat perlu.
+3. Berikan prompt yang jelas: Contoh prompt: `berdasarkan sprint-1 pada epic1 task 1.1 buat todo list local dan kerjakan satu persatu. kemudian tandai setiap task yg sudah selesai di docs/sprint1/todo.md. manfaatkan docs/ untuk memastikan setiap perubahan sesuai dan konsisten.` Beri potongan kode atau file terkait saat perlu.
 
-Langkah 4 — Kerjakan dan tandai progress: Kerjakan sub‑task satu per satu, jalankan aplikasi lokal untuk menguji, lalu tandai setiap sub‑task yang selesai di `docs/sprint-1/todo.md`. Contoh format todo yg udah selesai (potongan singkat):
+4. Kerjakan dan tandai progress: Kerjakan sub‑task satu per satu, jalankan aplikasi lokal untuk menguji, lalu tandai setiap sub‑task yang selesai di `docs/sprint-1/todo.md`. Contoh format todo yg udah selesai (potongan singkat):
 
 ```md
 ### Epic E1 – Service Worker Interceptor
@@ -80,17 +80,17 @@ Langkah 4 — Kerjakan dan tandai progress: Kerjakan sub‑task satu per satu, j
         -   [x] Terima response dari React (hasil `simulateRequest`), balas sebagai `Response` dengan status/body/headers, hormati `delay`.
 ```
 
-Langkah 5 — Test: Pastikan acceptance criteria terpenuhi dengan pengujian manual (DevTools/network untuk SW, manual call untuk mock engine) dan jika perlu, tambahkan test singkat.
+5. Test: Pastikan acceptance criteria terpenuhi dengan pengujian manual (DevTools/network untuk SW, manual call untuk mock engine) dan jika perlu, tambahkan test singkat.
 
-Langkah 6 — Push & branch naming: Buat branch sesuai konvensi tim (contoh: `epic-1`) lalu push perubahan ke remote.
+6. Push & branch naming: Buat branch sesuai konvensi tim (contoh: `epic-1`) lalu push perubahan ke remote.
 
-Langkah 7 — Ulangi sampai epic selesai: Lakukan iterasi dengan mengambil task berikutnya sampai semua task dalam epic selesai ditandai.
+7. Ulangi sampai epic selesai: Lakukan iterasi dengan mengambil task berikutnya sampai semua task dalam epic selesai ditandai.
 
-Langkah 8 — Buka PR: Buat pull request yang menjelaskan task yang diselesaikan, sertakan checklist dan referensi ke `docs/sprint-planning.md` serta `docs/sprint-1/todo.md`.
+8. Buka PR: Buat pull request yang menjelaskan task yang diselesaikan, sertakan checklist dan referensi ke `docs/sprint-planning.md` serta `docs/sprint-1/todo.md`.
 
-Langkah 9 — Review oleh Scrum Master: Tunggulah review; Scrum Master akan memberi komentar atau approve. Jika diminta revisi, perbaiki dan ulangi langkah testing serta update todo.
+9. Review oleh Scrum Master: Tunggulah review; Scrum Master akan memberi komentar atau approve. Jika diminta revisi, perbaiki dan ulangi langkah testing serta update todo.
 
-Langkah 10 — Lanjutkan ke task berikutnya: Setelah PR selesai dan merge dilakukan, pilih task berikutnya dan ulangi alur di atas.
+10. Lanjutkan ke task berikutnya: Setelah PR selesai dan merge dilakukan, pilih task berikutnya dan ulangi alur di atas.
 
 ## Flowchart (visual sederhana)
 
