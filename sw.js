@@ -6,6 +6,8 @@ self.addEventListener("activate", event => {
 	event.waitUntil(self.clients.claim());
 });
 
+const API_PREFIX = "/api/"; // Extracted for maintainability
+
 self.addEventListener("fetch", event => {
 	const url = new URL(event.request.url);
 
@@ -15,7 +17,7 @@ self.addEventListener("fetch", event => {
 	const isCrossOrigin = url.hostname !== self.location.hostname;
 
 	// Hanya intercept API endpoint (misal: /api/*)
-	const isApi = url.pathname.startsWith("/api/");
+	const isApi = url.pathname.startsWith(API_PREFIX);
 
 	if (isStatic || isHmr || url.pathname.startsWith("/node_modules/") || isCrossOrigin || !isApi) {
 		// biarkan langsung lewat ke network
@@ -36,7 +38,15 @@ async function handleRequest(event) {
 
 	let requestBody = "";
 	try {
-		requestBody = await event.request.text();
+		const method = (event.request.method || "GET").toUpperCase();
+		const mayHaveBody = method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE";
+		if (mayHaveBody) {
+			// Clone before consuming body to avoid locking the stream
+			const cloned = event.request.clone();
+			requestBody = await cloned.text();
+		} else {
+			requestBody = "";
+		}
 	} catch (e) {
 		requestBody = "";
 	}

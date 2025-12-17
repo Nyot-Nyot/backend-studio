@@ -94,18 +94,24 @@ function App() {
 		const loadedEnvVars = JSON.parse(localStorage.getItem(STORAGE_KEY_ENV_VARS) || "[]");
 		const lastProjectId = localStorage.getItem(STORAGE_KEY_ACTIVE_PROJECT);
 
+		// Determine projects and the active project ID first
+		let nextProjects: Project[];
+		let nextActiveProjectId: string;
 		if (loadedProjects.length === 0) {
-			setProjects([DEFAULT_PROJECT]);
-			setActiveProjectId(DEFAULT_PROJECT.id);
+			nextProjects = [DEFAULT_PROJECT];
+			nextActiveProjectId = DEFAULT_PROJECT.id;
 		} else {
-			setProjects(loadedProjects);
-			setActiveProjectId(lastProjectId || loadedProjects[0].id);
+			nextProjects = loadedProjects;
+			nextActiveProjectId = lastProjectId || loadedProjects[0].id;
 		}
+		setProjects(nextProjects);
+		setActiveProjectId(nextActiveProjectId);
 
+		// Initialize mocks; ensure default mock is created under the active project
 		if (!loadedMocks || loadedMocks.length === 0) {
 			const pingMock: MockEndpoint = {
 				id: crypto.randomUUID(),
-				projectId: DEFAULT_PROJECT.id,
+				projectId: nextActiveProjectId,
 				name: "Ping",
 				path: "/api/ping",
 				method: HttpMethod.GET,
@@ -151,13 +157,15 @@ function App() {
 				const { payload } = event.data;
 				const port = event.ports[0];
 
-				// Debug: log incoming payload to help diagnose placeholder replacement
-				console.debug("SW INTERCEPT payload:", {
-					method: payload.method,
-					url: payload.url,
-					headers: payload.headers,
-					bodySample: (payload.body || "").slice(0, 200),
-				});
+				// Debug: log incoming payload to help diagnose placeholder replacement (dev only)
+				if (import.meta.env?.DEV) {
+					console.debug("SW INTERCEPT payload:", {
+						method: payload.method,
+						url: payload.url,
+						headers: payload.headers,
+						bodySample: (payload.body || "").slice(0, 200),
+					});
+				}
 
 				const result = simulateRequest(
 					payload.method,
