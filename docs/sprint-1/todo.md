@@ -52,10 +52,10 @@
 
 ### Epic E2 – Integrasi `simulateRequest` + Logging
 
--   [ ] **Task 2.1 – Verifikasi integrasi di `App.tsx`** (1–2 jam)
+-   [x] **Task 2.1 - Verifikasi integrasi di `App.tsx`** (1-2 jam)
 
-    -   [ ] Listener `navigator.serviceWorker.addEventListener('message', ...)` memanggil `simulateRequest` dengan `mocksRef` & `envVarsRef`.
-    -   [ ] Hasil `SimulationResult` ditambah ke state `logs`.
+    -   [x] Listener `navigator.serviceWorker.addEventListener('message', ...)` memanggil `simulateRequest` dengan `mocksRef` & `envVarsRef`.
+    -   [x] Hasil `SimulationResult` ditambah ke state `logs`.
     -   Acceptance: Log baru muncul setiap ada request yang diintercept.
 
 -   [ ] **Task 2.2 – Uji kasus utama `simulateRequest`** (3–4 jam)
