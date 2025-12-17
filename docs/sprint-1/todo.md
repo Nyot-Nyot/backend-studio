@@ -14,39 +14,27 @@
 
 ### Epic E1 – Service Worker Interceptor
 
--   [x] **Task 1.1 – Implementasi & perapian `sw.js`** (3–4 jam)
+-   [ ] **Task 1.1 – Implementasi & perapian `sw.js`** (3–4 jam)
 
-    -   [x] Tambah handler `install` & `activate` (skipWaiting + clients.claim).
-    -   [x] Handler `fetch`:
-        -   [x] Filter hanya request API (hindari file statis, HMR, assets).
-        -   [x] Buat `MessageChannel`, kirim `{ method, url, headers, body }` ke client.
-        -   [x] Terima response dari React (hasil `simulateRequest`), balas sebagai `Response` dengan status/body/headers, hormati `delay`.
-    -   Acceptance: SW mengembalikan response dari mockEngine, non-API request tidak diintercept. ✅
+    -   [ ] Tambah handler `install` & `activate` (skipWaiting + clients.claim).
+    -   [ ] Handler `fetch`:
+        -   [ ] Filter hanya request API (hindari file statis, HMR, assets).
+        -   [ ] Buat `MessageChannel`, kirim `{ method, url, headers, body }` ke client.
+        -   [ ] Terima response dari React (hasil `simulateRequest`), balas sebagai `Response` dengan status/body/headers, hormati `delay`.
+    -   Acceptance: SW mengembalikan response dari mockEngine, non-API request tidak diintercept.
 
-    -   Note: Implemented filter to only intercept `/api/*`, added robust HMR/static exclusions, and added a default `/api/ping` mock for smoke testing.
+-   [ ] **Task 1.2 – Registrasi Service Worker di React** (1–2 jam)
 
-    -   **Verification checklist (manual)**:
-        -   Check Service Worker registration: `navigator.serviceWorker.getRegistration()` or Application → Service Workers in DevTools.
-        -   `GET /api/ping` should return 200 with JSON body `{ "pong": true }` and header `X-Powered-By: BackendStudio`.
-        -   Non-API requests (e.g., `/index.html`) should **not** be intercepted by the SW (no `X-Powered-By` header from mock, and Network shows normal response).
-        -   Create a custom mock (e.g., `POST /api/users` with `delay: 500`) via Mock Editor, submit a request from Test Console or `fetch`, and verify response status/body/delay and that a log entry appears in `LogViewer`.
-        -   If any behavior differs, collect browser Console and Network traces and report back for debugging.
+    -   [ ] Daftarkan SW di `index.tsx`/`App.tsx`.
+    -   [ ] Logging sederhana untuk success/fail register.
+    -   [ ] Pastikan SW aktif sebelum trafik utama (uji reload setelah install).
+    -   Acceptance: SW terdaftar, status terlihat di console, tidak mengganggu UI.
 
--   [x] **Task 1.2 – Registrasi Service Worker di React** (1–2 jam)
-
-    -   [x] Daftarkan SW di `index.tsx`/`App.tsx`.
-    -   [x] Logging sederhana untuk success/fail register.
-    -   [x] Pastikan SW aktif sebelum trafik utama (uji reload setelah install).
-    -   Acceptance: SW terdaftar, status terlihat di console, tidak mengganggu UI. ✅
-
--   [x] **Task 1.3 – Uji manual alur intercept** (2 jam)
-
-    -   [x] Buat 1–2 route mock sederhana (`GET /api/ping`, `POST /api/users`).
-    -   [x] Kirim request via DevTools `fetch` dan Test Console.
-    -   [x] Verifikasi response berasal dari `simulateRequest`, sesuai status/body.
-    -   Acceptance: Request API terlihat di Network tab sebagai “from SW”, respon sesuai mock. ✅
-
-    -   Note: Initial POST returned 404 on first try because no active mock matched ("No active route found for POST /api/users"); after creating/activating the POST `/api/users` mock with response template `{"id":"{{@body.id}}","name":"{{@body.name}}"}`, a retry returned 200 with injected values. To reproduce/debug, use the console commands shown in the verification checklist to inspect stored mocks (`localStorage.getItem('api_sim_mocks')`).
+-   [ ] **Task 1.3 – Uji manual alur intercept** (2 jam)
+    -   [ ] Buat 1–2 route mock sederhana (`GET /api/ping`, `POST /api/users`).
+    -   [ ] Kirim request via DevTools `fetch` dan Test Console.
+    -   [ ] Verifikasi response berasal dari `simulateRequest`, sesuai status/body.
+    -   Acceptance: Request API terlihat di Network tab sebagai “from SW”, respon sesuai mock.
 
 ---
 
@@ -88,8 +76,8 @@
 
 ## Catatan Harian (isi saat eksekusi)
 
--   Day 1: Implemented Task 1.1 — added install/activate handlers and robust fetch interceptor (only `/api/*`, excludes HMR/static), added MessageChannel/id payload, and a default `/api/ping` mock for smoke testing.
--   Day 2: Fixed SW response handling (headers/body stringify and error fallback). Awaiting verification of `/api/ping` and POST `/api/users` behavior from browser tests.
+-   Day 1: …
+-   Day 2: …
 -   Blockers/Risiko: …
 
 ---
