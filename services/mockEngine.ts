@@ -44,9 +44,13 @@ export const processMockResponse = (
     }
   }
 
-  // Debug helper: if parsedBody is null but requestBody exists, log a warning so we can see malformed JSON
+  // Debug helper: if parsedBody is null but requestBody exists, log a warning so we can see malformed JSON (dev only)
   if (requestBody && parsedBody === null) {
-    try { console.warn('mockEngine: failed to parse requestBody as JSON', requestBody.slice(0, 200)); } catch (e) { }
+    try {
+      if (import.meta.env?.DEV) {
+        console.warn('mockEngine: failed to parse requestBody as JSON', requestBody.slice(0, 200));
+      }
+    } catch (e) { }
   }
 
   // 0. Environment Variables Injection (User Defined)
