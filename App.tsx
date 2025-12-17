@@ -569,4 +569,105 @@ app.listen(PORT, () => {
 								</button>
 							</div>
 
-... (file truncated for brevity in this API call)
+							<div className="space-y-3">
+								{envVars.length === 0 ? (
+									<div className="text-center py-6 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 text-sm">
+										No environment variables defined.
+									</div>
+								) : (
+									<div className="grid grid-cols-12 gap-3 mb-2 px-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+										<div className="col-span-4">Variable Name</div>
+										<div className="col-span-7">Initial Value</div>
+										<div className="col-span-1"></div>
+									</div>
+								)}
+
+								{envVars.map(v => (
+									<div key={v.id} className="grid grid-cols-12 gap-3 items-center group">
+										<div className="col-span-4 relative">
+											<span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-mono select-none">{`{{`}</span>
+											<input
+												type="text"
+												value={v.key}
+												onChange={e => handleUpdateEnvVar(v.id, "key", e.target.value)}
+												placeholder="variable_name"
+												className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 pl-7 pr-7 text-sm font-mono text-slate-700 focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+											/>
+											<span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-mono select-none">{`}}`}</span>
+										</div>
+										<div className="col-span-7">
+											<input
+												type="text"
+												value={v.value}
+												onChange={e => handleUpdateEnvVar(v.id, "value", e.target.value)}
+												placeholder="Value"
+												className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-sm text-slate-700 focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+											/>
+										</div>
+										<div className="col-span-1 flex justify-end">
+											<button
+												onClick={() => handleDeleteEnvVar(v.id)}
+												className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+											>
+												<Trash2 className="w-4 h-4" />
+											</button>
+										</div>
+									</div>
+								))}
+							</div>
+						</div>
+
+						{/* AI Configuration Section */}
+						<div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+							<h3 className="text-xl font-semibold text-slate-800 mb-2 flex items-center">
+								<Key className="w-5 h-5 mr-3 text-violet-600" />
+								AI Configuration
+							</h3>
+
+							<p className="text-slate-500 text-sm mb-6 max-w-2xl leading-relaxed">
+								Enter your Google Gemini API Key to enable Magic Create and Auto-Generate features. The
+								key is stored securely in your browser's local storage.
+							</p>
+
+							<div className="max-w-xl space-y-4">
+								<div>
+									<label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+										Google Gemini API Key
+									</label>
+									<div className="relative">
+										<div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+											<ShieldCheck className="h-5 w-5 text-slate-400" />
+										</div>
+										<input
+											type={showApiKey ? "text" : "password"}
+											value={userApiKey}
+											onChange={e => setUserApiKey(e.target.value)}
+											className="block w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none transition-all text-sm font-mono"
+											placeholder="AIzaSy..."
+										/>
+										<button
+											onClick={() => setShowApiKey(!showApiKey)}
+											className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+										>
+											{showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+										</button>
+									</div>
+								</div>
+								<div className="flex items-center justify-between">
+									<a
+										href="https://aistudio.google.com/app/apikey"
+										target="_blank"
+										rel="noreferrer"
+										className="text-xs font-medium text-violet-600 hover:text-violet-700 hover:underline"
+									>
+										Get a free API Key
+									</a>
+									<button
+										onClick={handleSaveApiKey}
+										className="px-6 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-bold text-sm transition-all shadow-md shadow-violet-200 active:scale-95"
+									>
+										Save Key
+									</button>
+								</div>
+							</div>
+						</div>
