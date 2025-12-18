@@ -133,6 +133,32 @@ function App() {
 		setEnvVars(loadedEnvVars);
 	}, []);
 
+	// Request persistent storage (to reduce chance of data being wiped by the browser)
+	useEffect(() => {
+		const FLAG_KEY = "api_sim_persist_checked";
+		const alreadyChecked = localStorage.getItem(FLAG_KEY);
+		if (alreadyChecked) return;
+		(async () => {
+			try {
+				// Only run if StorageManager API is available
+				if (navigator.storage && navigator.storage.persist) {
+					const isPersisted = await navigator.storage.persisted?.();
+					if (!isPersisted) {
+						const granted = await navigator.storage.persist();
+						if (granted) {
+							addToast("Storage persistence granted. Your data is less likely to be cleared.", "success");
+						} else if (import.meta.env?.DEV) {
+							addToast("Storage persistence denied by the browser.", "info");
+						}
+					}
+					localStorage.setItem(FLAG_KEY, "1");
+				}
+			} catch (e) {
+				// Silent fail; no persistence on this browser
+			}
+		})();
+	}, []);
+
 	// --- PERSISTENCE ---
 	useEffect(() => {
 		if (projects.length > 0) localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));

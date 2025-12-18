@@ -78,10 +78,10 @@
     -   [x] Tampilkan hasil: status code, headers, body, waktu eksekusi.
     -   Acceptance: Bisa mengirim request ke mock, melihat response lengkap di UI.
 
--   [ ] **Task 3.2 – Integrasi dengan log & UX dasar** (1–2 jam)
-    -   [ ] Pastikan request dari Test Console otomatis tercatat di `logs`.
-    -   [ ] Tambah tombol “Run” dan “Re-run last request”.
-    -   [ ] Tampilkan error jelas jika `fetch` gagal (network/JSON parse).
+-   [x] **Task 3.2 – Integrasi dengan log & UX dasar** (1–2 jam)
+    -   [x] Pastikan request dari Test Console otomatis tercatat di `logs`.
+    -   [x] Tambah tombol “Run” dan “Re-run last request”.
+    -   [x] Tampilkan error jelas jika `fetch` gagal (network/JSON parse).
     -   Acceptance: Log bertambah setiap klik “Run”; error tampil bila request gagal.
 
 ---
