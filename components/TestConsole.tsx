@@ -51,12 +51,33 @@ const JsonViewer = ({ json }: { json: string }) => {
 
 export const TestConsole: React.FC<TestConsoleProps> = ({ mocks, state, setState }) => {
   const [isLoading, setIsLoading] = useState(false);
+  const [lastRequest, setLastRequest] = useState<{ method: HttpMethod; path: string; body?: string } | null>(null);
 
   const updateState = (updates: Partial<TestConsoleState>) => {
       setState({ ...state, ...updates });
   };
 
-  const handleSend = async () => {
+  const handleSend = async (override?: { method?: HttpMethod; path?: string; body?: string }) => {
+    const method = override?.method ?? state.method;
+    const path = override?.path ?? state.path;
+    const body = override?.body ?? state.body;
+
+    // Basic JSON validation for methods that have a body
+    if ((method === HttpMethod.POST || method === HttpMethod.PUT || method === HttpMethod.PATCH) && body) {
+      try { JSON.parse(body); } catch (e) {
+        updateState({
+          response: {
+            status: 0,
+            body: JSON.stringify({ error: 'Invalid JSON body', details: (e as Error).message }, null, 2),
+            time: 0,
+            headers: [],
+            error: 'Invalid JSON body'
+          }
+        });
+        return;
+      }
+    }
+
     setIsLoading(true);
     // Clear previous response while loading
     updateState({ response: null });
@@ -65,7 +86,7 @@ export const TestConsole: React.FC<TestConsoleProps> = ({ mocks, state, setState
     
     try {
         const options: RequestInit = {
-            method: state.method,
+            method,
             headers: {
                 'Content-Type': 'application/json',
                 // Add a flag so our Service Worker definitely knows to care about this
@@ -73,13 +94,16 @@ export const TestConsole: React.FC<TestConsoleProps> = ({ mocks, state, setState
             }
         };
 
-        if (state.method === HttpMethod.POST || state.method === HttpMethod.PUT || state.method === HttpMethod.PATCH) {
-            options.body = state.body;
+        if (method === HttpMethod.POST || method === HttpMethod.PUT || method === HttpMethod.PATCH) {
+            options.body = body;
         }
+
+        // Save last request for re-run capability
+        setLastRequest({ method, path, body });
 
         // REAL FETCH CALL!
         // This will be intercepted by sw.js -> App.tsx logic
-        const response = await fetch(state.path, options);
+        const response = await fetch(path, options);
         
         const responseText = await response.text();
         const duration = Date.now() - startTime;
@@ -91,6 +115,7 @@ export const TestConsole: React.FC<TestConsoleProps> = ({ mocks, state, setState
         });
 
         updateState({
+          method, path, body,
           response: {
             status: response.status,
             body: responseText,
@@ -114,6 +139,10 @@ export const TestConsole: React.FC<TestConsoleProps> = ({ mocks, state, setState
     }
   };
 
+  const handleRerun = async () => {
+    if (!lastRequest) return;
+    await handleSend(lastRequest);
+  };
   return (
     <div className="flex flex-col h-full bg-slate-50 animate-enter">
       {/* Header */}
@@ -160,20 +189,31 @@ export const TestConsole: React.FC<TestConsoleProps> = ({ mocks, state, setState
                 className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 text-sm font-mono focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none transition-all placeholder:text-slate-400"
                 />
                 
-                <button
-                onClick={handleSend}
-                disabled={isLoading || !state.path}
-                className="bg-brand-600 hover:bg-brand-500 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold px-8 rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center min-w-[120px]"
-                >
-                {isLoading ? (
-                    <RotateCcw className="w-5 h-5 animate-spin" />
-                ) : (
-                    <>
-                    <Play className="w-5 h-5 mr-2" />
-                    Send
-                    </>
-                )}
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleSend()}
+                    disabled={isLoading || !state.path}
+                    className="bg-brand-600 hover:bg-brand-500 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold px-6 rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center min-w-[110px]"
+                  >
+                    {isLoading ? (
+                      <RotateCcw className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <>
+                        <Play className="w-5 h-5 mr-2" />
+                        Send
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={handleRerun}
+                    disabled={isLoading || !lastRequest}
+                    className="bg-slate-200 hover:bg-slate-300 disabled:bg-slate-200 disabled:cursor-not-allowed text-slate-800 font-bold px-6 rounded-xl transition-all shadow active:scale-95 flex items-center justify-center min-w-[110px]"
+                    title={lastRequest ? `${lastRequest.method} ${lastRequest.path}` : 'No previous request'}
+                  >
+                    <RotateCcw className="w-5 h-5 mr-2" />
+                    Re-run
+                  </button>
+                </div>
             </div>
             
             {/* Request Body Input (for POST/PUT) */}
@@ -198,11 +238,11 @@ export const TestConsole: React.FC<TestConsoleProps> = ({ mocks, state, setState
              <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
                    <div className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg border ${
-                       state.response.status >= 400 
+                       state.response.status >= 400 || state.response.error
                        ? 'bg-red-50 text-red-700 border-red-200' 
                        : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                    }`}>
-                      {state.response.status >= 400 ? <AlertCircle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+                      {state.response.status >= 400 || state.response.error ? <AlertCircle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
                       <span className="font-bold text-sm">{state.response.status}</span>
                    </div>
                    <div className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 border border-slate-200">
@@ -214,6 +254,17 @@ export const TestConsole: React.FC<TestConsoleProps> = ({ mocks, state, setState
                     Size: {new Blob([state.response.body]).size} B
                 </div>
              </div>
+
+             {/* Error Banner */}
+             {state.response.error && (
+               <div className="px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-700 flex items-start gap-2">
+                 <AlertCircle className="w-4 h-4 mt-0.5" />
+                 <div>
+                   <div className="text-sm font-bold">{state.response.error}</div>
+                   <div className="text-xs opacity-80">Check your network connection or request body format.</div>
+                 </div>
+               </div>
+             )}
 
              {/* Response Body & Headers */}
              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

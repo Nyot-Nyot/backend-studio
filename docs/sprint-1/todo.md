@@ -52,36 +52,36 @@
 
 ### Epic E2 – Integrasi `simulateRequest` + Logging
 
--   [ ] **Task 2.1 – Verifikasi integrasi di `App.tsx`** (1–2 jam)
+-   [x] **Task 2.1 - Verifikasi integrasi di `App.tsx`** (1-2 jam)
 
-    -   [ ] Listener `navigator.serviceWorker.addEventListener('message', ...)` memanggil `simulateRequest` dengan `mocksRef` & `envVarsRef`.
-    -   [ ] Hasil `SimulationResult` ditambah ke state `logs`.
+    -   [x] Listener `navigator.serviceWorker.addEventListener('message', ...)` memanggil `simulateRequest` dengan `mocksRef` & `envVarsRef`.
+    -   [x] Hasil `SimulationResult` ditambah ke state `logs`.
     -   Acceptance: Log baru muncul setiap ada request yang diintercept.
 
--   [ ] **Task 2.2 – Uji kasus utama `simulateRequest`** (3–4 jam)
-    -   [ ] Path & query: `GET /api/users/123?active=true&page=2` cocok dengan `/api/users/:id`.
-    -   [ ] Variable injection: `{{@param.id}}` → `123`, `{{@query.page}}` → `2`.
-    -   [ ] Dynamic generators:
-        -   [ ] Placeholder bawaan: `{{$uuid}}`, `{{$randomEmail}}`, `{{$isoDate}}`, dll.
-        -   [ ] **Integrasi faker.js**: tambahkan placeholder baru (misal `{{$fakerName}}`, `{{$fakerEmail}}`, `{{$fakerCity}}`) yang menghasilkan data dummy acak; dokumentasikan di `MOCK_VARIABLES_HELP`.
-    -   [ ] Header default: `Content-Type: application/json`, `X-Powered-By: BackendStudio`.
+-   [x] **Task 2.2 – Uji kasus utama `simulateRequest`** (3–4 jam)
+    -   [x] Path & query: `GET /api/users/123?active=true&page=2` cocok dengan `/api/users/:id`.
+    -   [x] Variable injection: `{{@param.id}}` → `123`, `{{@query.page}}` → `2`.
+    -   [x] Dynamic generators:
+        -   [x] Placeholder bawaan: `{{$uuid}}`, `{{$randomEmail}}`, `{{$isoDate}}`, dll.
+        -   [x] **Integrasi faker.js**: tambahkan placeholder baru (misal `{{$fakerName}}`, `{{$fakerEmail}}`, `{{$fakerCity}}`) yang menghasilkan data dummy acak; dokumentasikan di `MOCK_VARIABLES_HELP`.
+    -   [x] Header default: `Content-Type: application/json`, `X-Powered-By: BackendStudio`.
     -   Acceptance: Semua placeholder bekerja, data dummy acak muncul konsisten, headers dan status sesuai definisi mock.
 
 ---
 
 ### Epic E3 – Test Console (HTTP Client Internal)
 
--   [ ] **Task 3.1 – Lengkapi fungsi utama `TestConsole`** (2–3 jam)
+-   [x] **Task 3.1 – Lengkapi fungsi utama `TestConsole`** (2–3 jam)
 
-    -   [ ] Form pilih HTTP method, path (manual atau pilih dari mocks aktif), body JSON (POST/PUT/PATCH).
-    -   [ ] Submit menggunakan `fetch` ke URL yang diisi (melewati SW).
-    -   [ ] Tampilkan hasil: status code, headers, body, waktu eksekusi.
+    -   [x] Form pilih HTTP method, path (manual atau pilih dari mocks aktif), body JSON (POST/PUT/PATCH).
+    -   [x] Submit menggunakan `fetch` ke URL yang diisi (melewati SW).
+    -   [x] Tampilkan hasil: status code, headers, body, waktu eksekusi.
     -   Acceptance: Bisa mengirim request ke mock, melihat response lengkap di UI.
 
--   [ ] **Task 3.2 – Integrasi dengan log & UX dasar** (1–2 jam)
-    -   [ ] Pastikan request dari Test Console otomatis tercatat di `logs`.
-    -   [ ] Tambah tombol “Run” dan “Re-run last request”.
-    -   [ ] Tampilkan error jelas jika `fetch` gagal (network/JSON parse).
+-   [x] **Task 3.2 – Integrasi dengan log & UX dasar** (1–2 jam)
+    -   [x] Pastikan request dari Test Console otomatis tercatat di `logs`.
+    -   [x] Tambah tombol “Run” dan “Re-run last request”.
+    -   [x] Tampilkan error jelas jika `fetch` gagal (network/JSON parse).
     -   Acceptance: Log bertambah setiap klik “Run”; error tampil bila request gagal.
 
 ---
