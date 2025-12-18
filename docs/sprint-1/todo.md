@@ -58,13 +58,13 @@
     -   [x] Hasil `SimulationResult` ditambah ke state `logs`.
     -   Acceptance: Log baru muncul setiap ada request yang diintercept.
 
--   [ ] **Task 2.2 – Uji kasus utama `simulateRequest`** (3–4 jam)
-    -   [ ] Path & query: `GET /api/users/123?active=true&page=2` cocok dengan `/api/users/:id`.
-    -   [ ] Variable injection: `{{@param.id}}` → `123`, `{{@query.page}}` → `2`.
-    -   [ ] Dynamic generators:
-        -   [ ] Placeholder bawaan: `{{$uuid}}`, `{{$randomEmail}}`, `{{$isoDate}}`, dll.
-        -   [ ] **Integrasi faker.js**: tambahkan placeholder baru (misal `{{$fakerName}}`, `{{$fakerEmail}}`, `{{$fakerCity}}`) yang menghasilkan data dummy acak; dokumentasikan di `MOCK_VARIABLES_HELP`.
-    -   [ ] Header default: `Content-Type: application/json`, `X-Powered-By: BackendStudio`.
+-   [x] **Task 2.2 – Uji kasus utama `simulateRequest`** (3–4 jam)
+    -   [x] Path & query: `GET /api/users/123?active=true&page=2` cocok dengan `/api/users/:id`.
+    -   [x] Variable injection: `{{@param.id}}` → `123`, `{{@query.page}}` → `2`.
+    -   [x] Dynamic generators:
+        -   [x] Placeholder bawaan: `{{$uuid}}`, `{{$randomEmail}}`, `{{$isoDate}}`, dll.
+        -   [x] **Integrasi faker.js**: tambahkan placeholder baru (misal `{{$fakerName}}`, `{{$fakerEmail}}`, `{{$fakerCity}}`) yang menghasilkan data dummy acak; dokumentasikan di `MOCK_VARIABLES_HELP`.
+    -   [x] Header default: `Content-Type: application/json`, `X-Powered-By: BackendStudio`.
     -   Acceptance: Semua placeholder bekerja, data dummy acak muncul konsisten, headers dan status sesuai definisi mock.
 
 ---

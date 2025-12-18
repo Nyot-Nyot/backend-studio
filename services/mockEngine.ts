@@ -126,7 +126,12 @@ export const processMockResponse = (
       const cities = ['New York', 'London', 'Tokyo', 'Jakarta', 'Berlin', 'Paris', 'Sydney'];
       return cities[Math.floor(Math.random() * cities.length)];
     },
-    '{{$randomBool}}': () => Math.random() > 0.5 ? 'true' : 'false'
+    '{{$randomBool}}': () => Math.random() > 0.5 ? 'true' : 'false',
+
+    // Faker-like aliases (no external dep): map to existing generators
+    '{{$fakerName}}': () => replacements['{{$randomName}}'](),
+    '{{$fakerEmail}}': () => replacements['{{$randomEmail}}'](),
+    '{{$fakerCity}}': () => replacements['{{$randomCity}}']()
   };
 
   Object.entries(replacements).forEach(([key, generator]) => {
@@ -143,8 +148,13 @@ export const MOCK_VARIABLES_HELP = [
   { label: '{{$randomInt}}', desc: 'Random number (0-1000)' },
   { label: '{{$randomName}}', desc: 'Random first name' },
   { label: '{{$randomEmail}}', desc: 'Random email address' },
+  { label: '{{$randomCity}}', desc: 'Random city' },
   { label: '{{$isoDate}}', desc: 'Current ISO 8601 Date' },
+  { label: '{{$fakerName}}', desc: 'Faker-like alias for random name' },
+  { label: '{{$fakerEmail}}', desc: 'Faker-like alias for random email' },
+  { label: '{{$fakerCity}}', desc: 'Faker-like alias for random city' },
   { label: '{{@param.id}}', desc: 'Value from URL path /:id' },
+  { label: '{{@query.page}}', desc: 'Value from query string e.g. ?page=2' },
   { label: '{{@body.name}}', desc: 'Value from JSON request body' },
   { label: '{{my_var}}', desc: 'User defined Env Variable' },
 ];
@@ -313,7 +323,9 @@ export const simulateRequest = (
   // -- STATELESS LOGIC --
   else {
     // Pass envVars to the processor
-    dynamicBody = processMockResponse(matchedMock.responseBody, pathname, matchedMock.path, envVars, body);
+    // Use full path with query to enable {{@query.*}} injection
+    const requestPathWithQuery = urlObj.pathname + (urlObj.search || '');
+    dynamicBody = processMockResponse(matchedMock.responseBody, requestPathWithQuery, matchedMock.path, envVars, body);
   }
 
   // Merge headers
