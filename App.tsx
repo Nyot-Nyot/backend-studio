@@ -151,10 +151,12 @@ function App() {
 							addToast("Storage persistence denied by the browser.", "info");
 						}
 					}
-					localStorage.setItem(FLAG_KEY, "1");
 				}
 			} catch (e) {
 				// Silent fail; no persistence on this browser
+			} finally {
+				// Mark that we've attempted the persistence check regardless of API support
+				localStorage.setItem(FLAG_KEY, "1");
 			}
 		})();
 	}, []);
