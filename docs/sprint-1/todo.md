@@ -71,11 +71,11 @@
 
 ### Epic E3 – Test Console (HTTP Client Internal)
 
--   [ ] **Task 3.1 – Lengkapi fungsi utama `TestConsole`** (2–3 jam)
+-   [x] **Task 3.1 – Lengkapi fungsi utama `TestConsole`** (2–3 jam)
 
-    -   [ ] Form pilih HTTP method, path (manual atau pilih dari mocks aktif), body JSON (POST/PUT/PATCH).
-    -   [ ] Submit menggunakan `fetch` ke URL yang diisi (melewati SW).
-    -   [ ] Tampilkan hasil: status code, headers, body, waktu eksekusi.
+    -   [x] Form pilih HTTP method, path (manual atau pilih dari mocks aktif), body JSON (POST/PUT/PATCH).
+    -   [x] Submit menggunakan `fetch` ke URL yang diisi (melewati SW).
+    -   [x] Tampilkan hasil: status code, headers, body, waktu eksekusi.
     -   Acceptance: Bisa mengirim request ke mock, melihat response lengkap di UI.
 
 -   [ ] **Task 3.2 – Integrasi dengan log & UX dasar** (1–2 jam)
