@@ -12,6 +12,26 @@ interface Message {
   timestamp: number;
 }
 
+interface ClientInfo {
+  id: string;
+  ip: string;
+  userAgent: string;
+  connectedAt: number;
+  name: string;
+}
+
+interface ServerStats {
+  connectedClients: number;
+  uptime: number;
+  memory: {
+    rss: number;
+    heapTotal: number;
+    heapUsed: number;
+    external: number;
+    arrayBuffers: number;
+  };
+}
+
 interface SocketConsoleProps {
   addToast: (message: string, type: 'success' | 'error' | 'info') => void;
 }
@@ -24,8 +44,8 @@ export const SocketConsole: React.FC<SocketConsoleProps> = ({ addToast }) => {
   const [inputMessage, setInputMessage] = useState('');
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
   const [totalClients, setTotalClients] = useState(0);
-  const [clientInfo, setClientInfo] = useState<any>(null);
-  const [serverStats, setServerStats] = useState<any>(null);
+  const [clientInfo, setClientInfo] = useState<ClientInfo | null>(null);
+  const [serverStats, setServerStats] = useState<ServerStats | null>(null);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
