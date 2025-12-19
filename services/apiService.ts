@@ -2,7 +2,7 @@ export type RandomUser = {
   name: string;
   email: string;
   avatar: string;
-  raw: any;
+  raw: unknown;
 };
 
 export async function fetchRandomUser(signal?: AbortSignal): Promise<RandomUser> {
