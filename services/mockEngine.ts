@@ -572,6 +572,11 @@ function handleEmailEndpoint(
     };
   }
 
+  // GET /api/email/stream - Server-Sent Events for real-time status updates
+  if (method === 'GET' && pathname === '/api/email/stream') {
+    return handleEmailSSE();
+  }
+
   // Unknown email endpoint
   return {
     response: {
@@ -581,6 +586,36 @@ function handleEmailEndpoint(
         { key: 'X-Powered-By', value: 'BackendStudio' }
       ],
       body: JSON.stringify({ error: 'Email endpoint not found' }),
+      delay: 0
+    }
+  };
+}
+
+// SSE (Server-Sent Events) handler for real-time email status updates  
+function handleEmailSSE(): SimulationResult {
+  if (import.meta.env?.DEV) {
+    console.log('SSE: Creating /api/email/stream endpoint');
+  }
+  
+  // For Service Worker context, we need to handle this differently
+  // Return a simple response that indicates SSE support but disable for now
+  const sseResponse = `data: ${JSON.stringify({
+    type: 'connected',
+    timestamp: Date.now(),
+    message: 'SSE connection established (fallback mode)'
+  })}\n\n`;
+
+  return {
+    response: {
+      status: 200,
+      headers: [
+        { key: 'Content-Type', value: 'text/event-stream' },
+        { key: 'Cache-Control', value: 'no-cache' },
+        { key: 'Connection', value: 'keep-alive' },
+        { key: 'Access-Control-Allow-Origin', value: '*' },
+        { key: 'X-Powered-By', value: 'BackendStudio' }
+      ],
+      body: sseResponse,
       delay: 0
     }
   };

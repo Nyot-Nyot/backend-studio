@@ -31,6 +31,7 @@ import { Sidebar } from "./components/Sidebar";
 import { TestConsole } from "./components/TestConsole";
 import { ExternalApiPanel } from "./components/ExternalApiPanel";
 import { EmailConsole } from "./components/EmailConsole";
+import { SocketConsole } from "./components/SocketConsole";
 import { ToastContainer, ToastMessage, ToastType } from "./components/Toast";
 import { generateEndpointConfig } from "./services/geminiService";
 import { simulateRequest } from "./services/mockEngine";
@@ -625,6 +626,8 @@ app.listen(PORT, () => {
 )}
 
 {view === "email" && <EmailConsole emailJSConfig={emailJSConfig} emailJSReady={emailJSReady} addToast={addToast} />}
+
+{view === "socket" && <SocketConsole addToast={addToast} />}
 
 				{view === "settings" && (
 					<div className="p-10 max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
