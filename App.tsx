@@ -28,6 +28,7 @@ import { LogViewer } from "./components/LogViewer";
 import { MockEditor } from "./components/MockEditor";
 import { Sidebar } from "./components/Sidebar";
 import { TestConsole } from "./components/TestConsole";
+import { ExternalApiPanel } from "./components/ExternalApiPanel";
 import { ToastContainer, ToastMessage, ToastType } from "./components/Toast";
 import { generateEndpointConfig } from "./services/geminiService";
 import { simulateRequest } from "./services/mockEngine";
@@ -582,6 +583,12 @@ app.listen(PORT, () => {
 				{view === "logs" && <LogViewer logs={logs} onClearLogs={() => setLogs([])} />}
 
 				{view === "database" && <DatabaseView />}
+
+{view === "externalApi" && (
+<div className="p-6">
+<ExternalApiPanel />
+</div>
+)}
 
 				{view === "settings" && (
 					<div className="p-10 max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
