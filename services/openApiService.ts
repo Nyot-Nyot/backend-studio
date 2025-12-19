@@ -1,127 +1,192 @@
-
 import { MockEndpoint, Project } from "../types";
 
 // Helper to convert internal path "/users/:id" to OpenAPI path "/users/{id}"
 const convertPathToOpenApi = (path: string) => {
-  return path.replace(/:([a-zA-Z0-9_]+)/g, '{$1}');
+  return path.replace(/:([a-zA-Z0-9_]+)/g, "{$1}");
 };
 
 // Helper to extract parameters from path
 const extractPathParams = (path: string) => {
   const matches = path.match(/:([a-zA-Z0-9_]+)/g);
   if (!matches) return [];
-  return matches.map(m => ({
+  return matches.map((m) => ({
     name: m.substring(1),
-    in: 'path',
+    in: "path",
     required: true,
-    schema: { type: 'string' }
+    schema: { type: "string" },
+    description: `${m.substring(1)} parameter`,
   }));
 };
 
 // Helper to infer JSON Schema from a value (Recursive)
 const inferSchema = (data: any): any => {
-  if (data === null) return { type: 'string', nullable: true };
-  
+  if (data === null) return { type: "string", nullable: true };
+
   const type = typeof data;
-  
+
   if (Array.isArray(data)) {
-    const itemSchema = data.length > 0 ? inferSchema(data[0]) : { type: 'string' };
+    const itemSchema =
+      data.length > 0 ? inferSchema(data[0]) : { type: "object" };
     return {
-      type: 'array',
-      items: itemSchema
-    };
-  }
-  
-  if (type === 'object') {
-    const properties: any = {};
-    Object.keys(data).forEach(key => {
-      properties[key] = inferSchema(data[key]);
-    });
-    return {
-      type: 'object',
-      properties
+      type: "array",
+      items: itemSchema,
     };
   }
 
-  if (type === 'number') return { type: Number.isInteger(data) ? 'integer' : 'number' };
-  if (type === 'boolean') return { type: 'boolean' };
-  
+  if (type === "object") {
+    const properties: any = {};
+    const required: string[] = [];
+
+    Object.keys(data).forEach((key) => {
+      properties[key] = inferSchema(data[key]);
+      required.push(key);
+    });
+
+    return {
+      type: "object",
+      properties,
+      required: required.length > 0 ? required : undefined,
+    };
+  }
+
+  if (type === "number")
+    return { type: Number.isInteger(data) ? "integer" : "number" };
+  if (type === "boolean") return { type: "boolean" };
+
   // Default to string (handles dynamic variables like {{$uuid}})
-  return { type: 'string', example: data };
+  return { type: "string", example: data };
 };
 
-export const generateOpenApiSpec = (project: Project, mocks: MockEndpoint[]) => {
-  const activeMocks = mocks.filter(m => m.isActive && m.projectId === project.id);
-  
+// Helper to get human-readable description for HTTP status codes
+const getStatusDescription = (statusCode: number, method: string): string => {
+  const descriptions: { [key: number]: string } = {
+    200: "OK - Request successful",
+    201: "Created - Resource created successfully",
+    204: "No Content - Request successful, no content to return",
+    400: "Bad Request - Invalid request",
+    401: "Unauthorized - Authentication required",
+    403: "Forbidden - Access denied",
+    404: "Not Found - Resource not found",
+    500: "Internal Server Error",
+  };
+
+  return descriptions[statusCode] || `Response with status ${statusCode}`;
+};
+
+export const generateOpenApiSpec = (
+  project: Project,
+  mocks: MockEndpoint[]
+) => {
+  const activeMocks = mocks.filter(
+    (m) => m.isActive && m.projectId === project.id
+  );
+
   const paths: any = {};
 
-  activeMocks.forEach(mock => {
+  activeMocks.forEach((mock) => {
     const openApiPath = convertPathToOpenApi(mock.path);
-    
+
     if (!paths[openApiPath]) {
       paths[openApiPath] = {};
     }
 
     const pathParams = extractPathParams(mock.path);
-    
-    let schema = { type: 'object' };
-    let example = {};
-    
+
+    let responseSchema = { type: "object" };
+    let responseExample = null;
+
     try {
-      example = JSON.parse(mock.responseBody);
-      schema = inferSchema(example);
+      responseExample = JSON.parse(mock.responseBody);
+      responseSchema = inferSchema(responseExample);
     } catch (e) {
       // If response body is not valid JSON, treat as plain text/string
-      schema = { type: 'string' };
+      responseSchema = { type: "string" };
+      responseExample = mock.responseBody;
     }
 
-    paths[openApiPath][mock.method.toLowerCase()] = {
+    // Build operation object
+    const operation: any = {
       summary: mock.name,
-      parameters: pathParams,
-      responses: {
-        [mock.statusCode]: {
-          description: "Successful response",
-          content: {
-            "application/json": {
-              schema: schema,
-              example: example
-            }
-          }
-        }
-      }
+      description: `${mock.method} ${mock.path} endpoint`,
+      tags: [extractTagFromPath(mock.path)],
     };
-    
-    // Add request body for POST/PUT/PATCH
-    if (['POST', 'PUT', 'PATCH'].includes(mock.method)) {
-        paths[openApiPath][mock.method.toLowerCase()].requestBody = {
-            required: true,
-            content: {
-                "application/json": {
-                    schema: {
-                        type: "object",
-                        properties: {
-                            key: { type: "string", example: "value" }
-                        }
-                    }
-                }
-            }
-        };
+
+    // Add parameters if any
+    if (pathParams.length > 0) {
+      operation.parameters = pathParams;
     }
+
+    // Add request body for POST/PUT/PATCH
+    if (["POST", "PUT", "PATCH"].includes(mock.method)) {
+      // Try to infer request schema from response, or use a generic object
+      let requestSchema = {
+        type: "object",
+        properties: { data: { type: "object" } },
+      };
+      let requestExample = { data: {} };
+
+      try {
+        const parsed = JSON.parse(mock.responseBody);
+        if (typeof parsed === "object" && !Array.isArray(parsed)) {
+          requestSchema = inferSchema(parsed);
+          requestExample = parsed;
+        }
+      } catch (e) {
+        // Keep defaults
+      }
+
+      operation.requestBody = {
+        required: true,
+        description: `Request body for ${mock.method.toLowerCase()} ${
+          mock.path
+        }`,
+        content: {
+          "application/json": {
+            schema: requestSchema,
+            example: requestExample,
+          },
+        },
+      };
+    }
+
+    // Add responses
+    operation.responses = {
+      [mock.statusCode]: {
+        description: getStatusDescription(mock.statusCode, mock.method),
+        content: {
+          "application/json": {
+            schema: responseSchema,
+            ...(responseExample && { example: responseExample }),
+          },
+        },
+      },
+    };
+
+    paths[openApiPath][mock.method.toLowerCase()] = operation;
   });
 
   return {
     openapi: "3.0.0",
     info: {
-      title: project.name,
+      title: project.name || "API",
       description: "Generated by Backend Studio",
-      version: "1.0.0"
+      version: "1.0.0",
     },
     servers: [
       {
         url: "http://localhost:3000",
-        description: "Local Development Server"
-      }
+        description: "Local Development Server",
+      },
     ],
-    paths: paths
+    paths: paths,
+    components: {
+      schemas: {},
+    },
   };
+};
+
+// Helper to extract a tag from path (e.g. /users/:id -> users)
+const extractTagFromPath = (path: string): string => {
+  const parts = path.split("/").filter(Boolean);
+  return parts.length > 0 ? parts[0] : "default";
 };

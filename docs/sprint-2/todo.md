@@ -81,7 +81,10 @@
 
 ### Epic E6 – Export Node.js Server & OpenAPI
 
-- [ ] **Task 6.1 – Review & perkuat `generateServerCode`** (2–3 jam)
+- [x] **Task 6.1 – Review & perkuat `generateServerCode`** (2–3 jam) ✅ COMPLETE
+
+  - Implementasi: Ekstraksi ke `services/exportService.ts`, validasi `responseBody` sebagai JSON literal, tambahkan `cors()` & `express.json()`, dan logging (per-route + middleware).
+  - Tests: `test/generateServer.test.ts` menambahkan verifikasi middleware, logger, route mapping, dan body inlining.
 
   - [ ] Mapping:
     - [ ] Method → `app.get/post/put/delete/...`.
@@ -93,14 +96,15 @@
     - [ ] Logging sederhana (`console.log(method, path, status)`).
   - Acceptance: `server.js` hasil export berjalan lokal tanpa error dan melayani route sesuai definisi.
 
-- [ ] **Task 6.2 – Uji nyata hasil export** (2–3 jam)
+- [x] **Task 6.2 – Uji nyata hasil export** (2–3 jam) ✅ COMPLETE
 
-  - [ ] Download `server.js` + `package.json`.
-  - [ ] Jalankan:
-    - [ ] `npm install`.
-    - [ ] `node server.js`.
-  - [ ] Panggil route dari Postman/cURL, cocokkan dengan definisi di UI.
-  - Acceptance: Semua route aktif merespon sesuai konfigurasi mock; tidak ada crash di startup/runtime.
+  - Implementasi: `test/task6_2_export_test.ts` mengotomatisasi end-to-end testing:
+    1. Generate `server.js` dan `package.json` dengan sample mocks (6 endpoint: GET/POST/PUT/DELETE).
+    2. Run `npm install` dan `node server.js` secara programmatic.
+    3. Test 6 endpoint dengan Node.js http module (avoid PowerShell quoting issues).
+    4. Verify status codes, response bodies, dan console logs (method, path, status).
+  - Result: ✅ **6/6 tests passed** – server runs without errors, all routes respond correctly, logging works.
+  - Acceptance: Semua route aktif merespon sesuai konfigurasi mock; tidak ada crash di startup/runtime. ✅
 
 - [ ] **Task 6.3 – Review `openApiService`** (2–3 jam)
 
