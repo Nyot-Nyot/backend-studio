@@ -6,16 +6,16 @@ import { sendRealEmail, EmailJSConfig } from '../services/realEmailService';
 interface EmailConsoleProps {
   emailJSConfig: EmailJSConfig;
   emailJSReady: boolean;
+  addToast: (message: string, type: 'success' | 'error' | 'info') => void;
 }
 
-export const EmailConsole: React.FC<EmailConsoleProps> = ({ emailJSConfig, emailJSReady }) => {
+export const EmailConsole: React.FC<EmailConsoleProps> = ({ emailJSConfig, emailJSReady, addToast }) => {
   const [to, setTo] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
   const [outbox, setOutbox] = useState<EmailMessage[]>([]);
   const [expandedTraces, setExpandedTraces] = useState<Set<string>>(new Set());
-  const [showSuccess, setShowSuccess] = useState(false);
   const [emailMode, setEmailMode] = useState<'mock' | 'real'>('mock');
 
   // Load outbox from localStorage and check EmailJS config
@@ -40,17 +40,17 @@ export const EmailConsole: React.FC<EmailConsoleProps> = ({ emailJSConfig, email
 
   const handleSend = async () => {
     if (!to || !subject || !body) {
-      alert('Please fill in all fields');
+      addToast('Please fill in all fields', 'error');
       return;
     }
 
     if (!validateEmail(to)) {
-      alert('Please enter a valid email address');
+      addToast('Please enter a valid email address', 'error');
       return;
     }
 
     if (emailMode === 'real' && !emailJSReady) {
-      alert('EmailJS is not configured. Please configure it in Settings first.');
+      addToast('EmailJS is not configured. Please configure it in Settings first.', 'error');
       return;
     }
 
@@ -64,18 +64,14 @@ export const EmailConsole: React.FC<EmailConsoleProps> = ({ emailJSConfig, email
         );
 
         if (result.success) {
-          // Show success animation
-          setShowSuccess(true);
-          setTimeout(() => setShowSuccess(false), 3000);
-          
           // Clear form
           setTo('');
           setSubject('');
           setBody('');
           
-          alert(`Real email sent successfully! Message ID: ${result.messageId}`);
+          addToast(`Real email sent successfully! Message ID: ${result.messageId}`, 'success');
         } else {
-          alert(`Failed to send real email: ${result.error}`);
+          addToast(`Failed to send real email: ${result.error}`, 'error');
         }
       } else {
         // Send mock email (existing logic)
@@ -86,10 +82,6 @@ export const EmailConsole: React.FC<EmailConsoleProps> = ({ emailJSConfig, email
         });
 
         if (response.ok) {
-          // Show success animation
-          setShowSuccess(true);
-          setTimeout(() => setShowSuccess(false), 3000);
-          
           // Clear form
           setTo('');
           setSubject('');
@@ -100,13 +92,15 @@ export const EmailConsole: React.FC<EmailConsoleProps> = ({ emailJSConfig, email
           if (stored) {
             setOutbox(JSON.parse(stored));
           }
+          
+          addToast('Mock email sent successfully!', 'success');
         } else {
           const error = await response.json();
-          alert(`Failed to send email: ${error.error}`);
+          addToast(`Failed to send email: ${error.error}`, 'error');
         }
       }
     } catch (error) {
-      alert(`Network error: ${error}`);
+      addToast(`Network error: ${error}`, 'error');
     } finally {
       setSending(false);
     }
@@ -208,13 +202,6 @@ export const EmailConsole: React.FC<EmailConsoleProps> = ({ emailJSConfig, email
         </div>
       </div>
 
-      {/* Success Toast */}
-      {showSuccess && (
-        <div className="fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-in slide-in-from-right-full duration-300 z-50">
-          <Sparkles className="w-4 h-4" />
-          <span>Email sent successfully!</span>
-        </div>
-      )}
 
       {/* Send Email Form */}
       <div className="bg-gradient-to-br from-white to-slate-50 rounded-2xl border border-slate-200 p-8 shadow-xl relative overflow-hidden">
