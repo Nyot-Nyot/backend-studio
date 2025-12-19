@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Mail, Send, Clock, CheckCircle, XCircle, AlertTriangle, ChevronDown, ChevronRight, User, Calendar, Zap, Terminal, Sparkles, Globe, Settings } from 'lucide-react';
 import { EmailMessage, validateEmail } from '../services/emailService';
-import { sendRealEmail, getEmailJSConfig, initEmailJS } from '../services/realEmailService';
+import { sendRealEmail, EmailJSConfig } from '../services/realEmailService';
 
 interface EmailConsoleProps {
-  // Could add props for callbacks if needed
+  emailJSConfig: EmailJSConfig;
+  emailJSReady: boolean;
 }
 
-export const EmailConsole: React.FC<EmailConsoleProps> = () => {
+export const EmailConsole: React.FC<EmailConsoleProps> = ({ emailJSConfig, emailJSReady }) => {
   const [to, setTo] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
@@ -16,7 +17,6 @@ export const EmailConsole: React.FC<EmailConsoleProps> = () => {
   const [expandedTraces, setExpandedTraces] = useState<Set<string>>(new Set());
   const [showSuccess, setShowSuccess] = useState(false);
   const [emailMode, setEmailMode] = useState<'mock' | 'real'>('mock');
-  const [emailJSReady, setEmailJSReady] = useState(false);
 
   // Load outbox from localStorage and check EmailJS config
   useEffect(() => {
@@ -28,19 +28,6 @@ export const EmailConsole: React.FC<EmailConsoleProps> = () => {
     };
 
     loadOutbox();
-
-    // Check EmailJS configuration
-    const checkEmailJS = () => {
-      const config = getEmailJSConfig();
-      if (config && config.serviceId && config.templateId && config.publicKey) {
-        const ready = initEmailJS(config);
-        setEmailJSReady(ready);
-      } else {
-        setEmailJSReady(false);
-      }
-    };
-
-    checkEmailJS();
 
     // Listen for status updates via custom events
     const handleStatusUpdate = (event: CustomEvent) => {
@@ -71,16 +58,9 @@ export const EmailConsole: React.FC<EmailConsoleProps> = () => {
     try {
       if (emailMode === 'real') {
         // Send real email via EmailJS
-        const config = getEmailJSConfig();
-        if (!config) {
-          alert('EmailJS configuration not found');
-          setSending(false);
-          return;
-        }
-
         const result = await sendRealEmail(
           { to, subject, body, fromName: 'Backend Studio' },
-          config
+          emailJSConfig
         );
 
         if (result.success) {

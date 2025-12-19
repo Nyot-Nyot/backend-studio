@@ -35,7 +35,7 @@ import { ToastContainer, ToastMessage, ToastType } from "./components/Toast";
 import { generateEndpointConfig } from "./services/geminiService";
 import { simulateRequest } from "./services/mockEngine";
 import { generateOpenApiSpec } from "./services/openApiService";
-import { EmailJSConfig, getEmailJSConfig, saveEmailJSConfig, validateEmailJSConfig } from './services/realEmailService';
+import { EmailJSConfig, getEmailJSConfig, saveEmailJSConfig, validateEmailJSConfig, initEmailJS } from './services/realEmailService';
 import { EnvironmentVariable, HttpMethod, LogEntry, MockEndpoint, Project, TestConsoleState, ViewState } from "./types";
 
 const STORAGE_KEY_PROJECTS = "api_sim_projects";
@@ -76,6 +76,7 @@ function App() {
 	const [emailJSConfig, setEmailJSConfig] = useState<EmailJSConfig>(() => 
 		getEmailJSConfig() || { serviceId: '', templateId: '', publicKey: '' }
 	);
+	const [emailJSReady, setEmailJSReady] = useState(false);
 	const [showEmailJSKeys, setShowEmailJSKeys] = useState(false);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -142,6 +143,20 @@ function App() {
 		}
 		setEnvVars(loadedEnvVars);
 	}, []);
+
+	// EmailJS configuration effect
+	useEffect(() => {
+		const checkEmailJS = () => {
+			if (emailJSConfig.serviceId && emailJSConfig.templateId && emailJSConfig.publicKey) {
+				const ready = initEmailJS(emailJSConfig);
+				setEmailJSReady(ready);
+			} else {
+				setEmailJSReady(false);
+			}
+		};
+
+		checkEmailJS();
+	}, [emailJSConfig]);
 
 	// Request persistent storage (to reduce chance of data being wiped by the browser)
 	useEffect(() => {
@@ -609,7 +624,7 @@ app.listen(PORT, () => {
 </div>
 )}
 
-{view === "email" && <EmailConsole />}
+{view === "email" && <EmailConsole emailJSConfig={emailJSConfig} emailJSReady={emailJSReady} />}
 
 				{view === "settings" && (
 					<div className="p-10 max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
