@@ -10,7 +10,9 @@
     "test:db": "npx tsx test/dbService.test.ts",
     "test:db:integration": "npx tsx test/dbService.integration.test.ts",
     "test:simulateRequest": "npx tsx test/simulateRequest.test.ts",
-    "test:databaseView": "npx tsx test/databaseView.test.ts"
+    "test:databaseView": "npx tsx test/databaseView.test.ts",
+    "test:auth": "npx tsx test/authSimulation.test.ts",
+    "test:scenarios": "npx tsx test/authScenarios.test.ts"
   },
   "dependencies": {
     "lucide-react": "^0.561.0",
