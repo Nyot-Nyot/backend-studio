@@ -1,4 +1,5 @@
 import emailjs from '@emailjs/browser';
+import { STORAGE_KEYS } from '../constants';
 
 export interface EmailJSConfig {
   serviceId: string;
@@ -75,7 +76,7 @@ export async function sendRealEmail(
 // Get EmailJS config from localStorage
 export function getEmailJSConfig(): EmailJSConfig | null {
   try {
-    const stored = localStorage.getItem('api_sim_emailjs_config');
+    const stored = localStorage.getItem(STORAGE_KEYS.EMAILJS_CONFIG);
     return stored ? JSON.parse(stored) : null;
   } catch (error) {
     return null;
@@ -84,7 +85,7 @@ export function getEmailJSConfig(): EmailJSConfig | null {
 
 // Save EmailJS config to localStorage
 export function saveEmailJSConfig(config: EmailJSConfig): void {
-  localStorage.setItem('api_sim_emailjs_config', JSON.stringify(config));
+  localStorage.setItem(STORAGE_KEYS.EMAILJS_CONFIG, JSON.stringify(config));
 }
 
 // Validate EmailJS config

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Mail, Send, Clock, CheckCircle, XCircle, AlertTriangle, ChevronDown, ChevronRight, User, Calendar, Zap, Terminal, Sparkles, Globe, Settings } from 'lucide-react';
 import { EmailMessage, validateEmail } from '../services/emailService';
 import { sendRealEmail, EmailJSConfig } from '../services/realEmailService';
+import { STORAGE_KEYS } from '../constants';
 
 interface EmailConsoleProps {
   emailJSConfig: EmailJSConfig;
@@ -21,7 +22,7 @@ export const EmailConsole: React.FC<EmailConsoleProps> = ({ emailJSConfig, email
   // Load initial outbox data
   useEffect(() => {
     const loadOutbox = () => {
-      const stored = localStorage.getItem('api_sim_email_outbox');
+      const stored = localStorage.getItem(STORAGE_KEYS.EMAIL_OUTBOX);
       if (stored) {
         setOutbox(JSON.parse(stored));
       }
@@ -33,7 +34,7 @@ export const EmailConsole: React.FC<EmailConsoleProps> = ({ emailJSConfig, email
   // Set up event listener for real-time email status updates
   useEffect(() => {
     const handleStatusUpdate = (event: CustomEvent) => {
-      const stored = localStorage.getItem('api_sim_email_outbox');
+      const stored = localStorage.getItem(STORAGE_KEYS.EMAIL_OUTBOX);
       if (stored) {
         setOutbox(JSON.parse(stored));
       }
@@ -93,7 +94,7 @@ export const EmailConsole: React.FC<EmailConsoleProps> = ({ emailJSConfig, email
           setBody('');
           
           // Reload outbox
-          const stored = localStorage.getItem('api_sim_email_outbox');
+          const stored = localStorage.getItem(STORAGE_KEYS.EMAIL_OUTBOX);
           if (stored) {
             setOutbox(JSON.parse(stored));
           }

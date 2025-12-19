@@ -10,6 +10,7 @@ import {
   validateEmail,
   scheduleStatusUpdate 
 } from './emailService';
+import { STORAGE_KEYS } from '../constants';
 
 // Helper: Match Route Pattern
 export const matchRoute = (pattern: string, requestPath: string): { matches: boolean, params: any } => {
@@ -375,8 +376,8 @@ function handleEmailEndpoint(
     console.log('handleEmailEndpoint called:', { method, pathname, body });
   }
   
-  const OUTBOX_KEY = 'api_sim_email_outbox';
-  const INBOX_KEY = 'api_sim_email_inbox';
+  const OUTBOX_KEY = STORAGE_KEYS.EMAIL_OUTBOX;
+  const INBOX_KEY = STORAGE_KEYS.EMAIL_INBOX;
 
   // POST /api/email/send
   if (method === 'POST' && pathname === '/api/email/send') {
