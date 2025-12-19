@@ -142,6 +142,9 @@ export const EmailConsole: React.FC<EmailConsoleProps> = ({ emailJSConfig, email
   };
 
   const getEmailAvatar = (email: string) => {
+    if (!email || typeof email !== 'string' || email.length === 0) {
+      return '?';
+    }
     return email.charAt(0).toUpperCase();
   };
 
