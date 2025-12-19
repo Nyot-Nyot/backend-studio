@@ -38,18 +38,17 @@ export const ExternalApiPanel: React.FC = () => {
     setLoading(true);
     setError(null);
     setUser(null); // clear previous user so error is more visible
-    let t: any;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
-      
       const controller = new AbortController();
-      t = setTimeout(() => controller.abort(), 15000); // timeout 15s
+      timeoutId = setTimeout(() => controller.abort(), 15000); // timeout 15s
       const u = await fetchRandomUser(controller.signal);
       setUser(u);
     } catch (e: unknown) {
       const errorMsg = getErrorMessage(e);
       setError(errorMsg);
     } finally {
-      if (t) clearTimeout(t);
+      if (timeoutId) clearTimeout(timeoutId);
       setLoading(false);
     }
   };
