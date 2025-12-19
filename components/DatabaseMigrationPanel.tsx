@@ -4,6 +4,7 @@ import { STORAGE_KEYS } from "../constants";
 import { exportAllData, importAllData, isIndexedDBAvailable } from "../services/indexedDB";
 import { getLocalStorageBackup, getMigrationStatus, resetMigrationState, runMigration } from "../services/migration";
 import { StorageService } from "../services/storageService";
+import { Project } from "../types";
 
 interface DatabaseMigrationPanelProps {
 	addToast: (message: string, type: "success" | "error" | "info") => void;
@@ -95,7 +96,7 @@ export const DatabaseMigrationPanel: React.FC<DatabaseMigrationPanelProps> = ({ 
 				localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(data.projects));
 				// Choose a preferred active project: prefer the first non-default imported project; fall back to first
 				if (Array.isArray(data.projects) && data.projects.length > 0) {
-					const preferred = data.projects.find((p: any) => p.id !== "default") || data.projects[0];
+					const preferred = data.projects.find((p: Project) => p.id !== "default") || data.projects[0];
 					localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT, preferred.id);
 				}
 			}
