@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, Activity, Settings, FolderPlus, ChevronDown, Check, X, FlaskConical, Sparkles, Trash2, PenTool, Box, PanelLeftClose, PanelLeftOpen, Search, Rocket, Database } from 'lucide-react';
+import { LayoutDashboard, Activity, Settings, FolderPlus, ChevronDown, Check, X, FlaskConical, Sparkles, Trash2, PenTool, Box, PanelLeftClose, PanelLeftOpen, Search, Rocket, Database, MessageSquare } from 'lucide-react';
 import { ViewState, Project } from '../types';
 
 interface SidebarProps {
@@ -237,6 +237,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {activeIndicator('email')}
               <span className={`w-5 h-5 flex items-center justify-center text-lg font-bold ${currentView === 'email' ? 'text-brand-400' : 'text-slate-500 group-hover:text-slate-300'}`}>@</span>
               {!isCollapsed && <span className="font-medium">Email Console</span>}
+            </div>
+            <div onClick={() => onChangeView('socket')} className={navItemClass('socket')} title="Socket Console">
+              {activeIndicator('socket')}
+              <MessageSquare className={`w-5 h-5 ${currentView === 'socket' ? 'text-brand-400' : 'text-slate-500 group-hover:text-slate-300'}`} />
+              {!isCollapsed && <span className="font-medium">Socket Console</span>}
             </div>
           </nav>
         </div>

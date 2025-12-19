@@ -18,6 +18,8 @@ export const EmailConsole: React.FC<EmailConsoleProps> = ({ emailJSConfig, email
   const [outbox, setOutbox] = useState<EmailMessage[]>([]);
   const [expandedTraces, setExpandedTraces] = useState<Set<string>>(new Set());
   const [emailMode, setEmailMode] = useState<'mock' | 'real'>('mock');
+  const [sseConnected, setSseConnected] = useState(false);
+  const [sseEventSource, setSseEventSource] = useState<EventSource | null>(null);
 
   // Load initial outbox data
   useEffect(() => {
@@ -31,7 +33,21 @@ export const EmailConsole: React.FC<EmailConsoleProps> = ({ emailJSConfig, email
     loadOutbox();
   }, []);
 
-  // Set up event listener for real-time email status updates
+  // Set up Server-Sent Events connection for real-time updates (disabled for now)
+  useEffect(() => {
+    // SSE temporarily disabled due to Service Worker ReadableStream compatibility issues
+    // Using custom events as primary real-time mechanism
+    if (emailMode === 'mock') {
+      setSseConnected(true); // Simulate connection for UI (using custom events)
+      if (import.meta.env?.DEV) {
+        console.log('Real-time updates: Using custom events (SSE fallback)');
+      }
+    } else {
+      setSseConnected(false);
+    }
+  }, [emailMode]);
+
+  // Fallback: Set up custom event listener for browsers without SSE support
   useEffect(() => {
     const handleStatusUpdate = (event: CustomEvent) => {
       const stored = localStorage.getItem(STORAGE_KEYS.EMAIL_OUTBOX);
@@ -193,11 +209,19 @@ export const EmailConsole: React.FC<EmailConsoleProps> = ({ emailJSConfig, email
           </div>
           
           {/* Status indicator */}
-          <div className="flex items-center space-x-2 text-sm text-slate-500">
+          <div className="flex items-center space-x-4 text-sm text-slate-500">
             {emailMode === 'mock' ? (
               <>
-                <Terminal className="w-4 h-4" />
-                <span>SMTP Simulation</span>
+                <div className="flex items-center space-x-2">
+                  <Terminal className="w-4 h-4" />
+                  <span>SMTP Simulation</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className={`w-2 h-2 rounded-full ${sseConnected ? 'bg-green-500 animate-pulse' : 'bg-slate-400'}`}></div>
+                  <span className={sseConnected ? "text-green-600" : "text-slate-400"}>
+                    {sseConnected ? "Real-time Active" : "Real-time Inactive"}
+                  </span>
+                </div>
               </>
             ) : (
               <>
