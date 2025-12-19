@@ -5,7 +5,9 @@
 const WebSocket = require('ws');
 const http = require('http');
 
-const PORT = 3200;
+// Server configuration from environment variables
+const PORT = process.env.WS_PORT || process.env.PORT || 3200;
+const HOST = process.env.WS_HOST || 'localhost';
 const server = http.createServer();
 const wss = new WebSocket.Server({ server });
 
@@ -220,10 +222,15 @@ setInterval(() => {
 }, 30000); // Every 30 seconds
 
 // Start server
-server.listen(PORT, () => {
+server.listen(PORT, HOST, () => {
   console.log('🚀 WebSocket Server Started');
-  console.log(`📡 Listening on ws://localhost:${PORT}`);
+  console.log(`📡 Listening on ws://${HOST}:${PORT}`);
   console.log('🎯 Ready for Socket Programming demonstration');
+  console.log('');
+  console.log('Configuration:');
+  console.log(`  • Host: ${HOST}`);
+  console.log(`  • Port: ${PORT}`);
+  console.log(`  • Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log('');
   console.log('Features available:');
   console.log('  • Real-time chat messaging');
@@ -231,6 +238,11 @@ server.listen(PORT, () => {
   console.log('  • Typing indicators');
   console.log('  • Email status broadcasting');
   console.log('  • Live connection stats');
+  console.log('');
+  console.log('Environment variables:');
+  console.log('  • WS_PORT or PORT: Server port (default: 3200)');
+  console.log('  • WS_HOST: Server host (default: localhost)');
+  console.log('  • NODE_ENV: Environment mode');
   console.log('');
 });
 
