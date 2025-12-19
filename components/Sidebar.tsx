@@ -228,6 +228,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <Settings className={`w-5 h-5 ${currentView === 'settings' ? 'text-brand-400' : 'text-slate-500 group-hover:text-slate-300'}`} />
               {!isCollapsed && <span className="font-medium">Configuration</span>}
             </div>
+            <div onClick={() => onChangeView('externalApi')} className={navItemClass('externalApi')} title="External API">
+              {activeIndicator('externalApi')}
+              <Rocket className={`w-5 h-5 ${currentView === 'externalApi' ? 'text-brand-400' : 'text-slate-500 group-hover:text-slate-300'}`} />
+              {!isCollapsed && <span className="font-medium">External API</span>}
+            </div>
           </nav>
         </div>
 

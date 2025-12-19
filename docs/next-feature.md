@@ -162,9 +162,10 @@ Non-goals: Multi-user sync, production email sending, paid third-party dependenc
 ## 7. Tasks & Milestones
 
 Milestone A: External API Panel
-- [ ] services/apiService.ts: fetchRandomUser
-- [ ] components/ExternalApiPanel.tsx
-- [ ] Sidebar entry + route
+- [x] services/apiService.ts: fetchRandomUser
+- [x] components/ExternalApiPanel.tsx
+- [x] Sidebar entry + route
+- [x] Cache-busting and offline error handling
 
 Milestone B: Email Protocol Simulation
 - [ ] Email mocks in mockEngine/sw
