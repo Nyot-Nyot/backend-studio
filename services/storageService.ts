@@ -1,6 +1,7 @@
 import { STORAGE_KEYS } from '../constants';
 import { IndexedDBService, STORES, isIndexedDBAvailable } from './indexedDB';
 import { shouldRunMigration, runMigration, getMigrationStatus } from './migration';
+import { Project, MockEndpoint, EnvironmentVariable, LogEntry, EmailMessage } from '../types';
 
 // Storage backend type
 type StorageBackend = 'localStorage' | 'indexedDB';
@@ -57,19 +58,19 @@ export class StorageService {
   }
 
   // Projects storage
-  static async getProjects(): Promise<any[]> {
+  static async getProjects(): Promise<Project[]> {
     if (this.backend === 'indexedDB') {
-      return IndexedDBService.getAll(STORES.PROJECTS);
+      return IndexedDBService.getAll<Project>(STORES.PROJECTS);
     } else {
       const data = localStorage.getItem(STORAGE_KEYS.PROJECTS);
-      return data ? JSON.parse(data) : [];
+      return data ? JSON.parse(data) as Project[] : [];
     }
   }
 
-  static async saveProjects(projects: any[]): Promise<void> {
+  static async saveProjects(projects: Project[]): Promise<void> {
     if (this.backend === 'indexedDB') {
       await IndexedDBService.clear(STORES.PROJECTS);
-      await IndexedDBService.putMany(STORES.PROJECTS, projects);
+      await IndexedDBService.putMany<Project>(STORES.PROJECTS, projects);
       // dual-write mirror for backward compatibility
       localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(projects));
     } else {
@@ -77,18 +78,18 @@ export class StorageService {
     }
   }
 
-  static async getProject(id: string): Promise<any | undefined> {
+  static async getProject(id: string): Promise<Project | undefined> {
     if (this.backend === 'indexedDB') {
-      return IndexedDBService.getById(STORES.PROJECTS, id);
+      return IndexedDBService.getById<Project>(STORES.PROJECTS, id);
     } else {
       const projects = await this.getProjects();
       return projects.find(p => p.id === id);
     }
   }
 
-  static async saveProject(project: any): Promise<void> {
+  static async saveProject(project: Project): Promise<void> {
     if (this.backend === 'indexedDB') {
-      await IndexedDBService.put(STORES.PROJECTS, project);
+      await IndexedDBService.put<Project>(STORES.PROJECTS, project);
       // dual-write
       const projects = await this.getProjects();
       const updated = Array.isArray(projects) ? [...projects.filter(p => p.id !== project.id), project] : [project];
@@ -120,19 +121,19 @@ export class StorageService {
   }
 
   // Mocks storage
-  static async getMocks(): Promise<any[]> {
+  static async getMocks(): Promise<MockEndpoint[]> {
     if (this.backend === 'indexedDB') {
-      return IndexedDBService.getAll(STORES.MOCKS);
+      return IndexedDBService.getAll<MockEndpoint>(STORES.MOCKS);
     } else {
       const data = localStorage.getItem(STORAGE_KEYS.MOCKS);
-      return data ? JSON.parse(data) : [];
+      return data ? JSON.parse(data) as MockEndpoint[] : [];
     }
   }
 
-  static async saveMocks(mocks: any[]): Promise<void> {
+  static async saveMocks(mocks: MockEndpoint[]): Promise<void> {
     if (this.backend === 'indexedDB') {
       await IndexedDBService.clear(STORES.MOCKS);
-      await IndexedDBService.putMany(STORES.MOCKS, mocks);
+      await IndexedDBService.putMany<MockEndpoint>(STORES.MOCKS, mocks);
       // dual-write mirror
       localStorage.setItem(STORAGE_KEYS.MOCKS, JSON.stringify(mocks));
     } else {
@@ -140,18 +141,18 @@ export class StorageService {
     }
   }
 
-  static async getMock(id: string): Promise<any | undefined> {
+  static async getMock(id: string): Promise<MockEndpoint | undefined> {
     if (this.backend === 'indexedDB') {
-      return IndexedDBService.getById(STORES.MOCKS, id);
+      return IndexedDBService.getById<MockEndpoint>(STORES.MOCKS, id);
     } else {
       const mocks = await this.getMocks();
       return mocks.find(m => m.id === id);
     }
   }
 
-  static async saveMock(mock: any): Promise<void> {
+  static async saveMock(mock: MockEndpoint): Promise<void> {
     if (this.backend === 'indexedDB') {
-      await IndexedDBService.put(STORES.MOCKS, mock);
+      await IndexedDBService.put<MockEndpoint>(STORES.MOCKS, mock);
       // dual-write mirror
       const mocks = await this.getMocks();
       const updated = Array.isArray(mocks) ? [...mocks.filter(m => m.id !== mock.id), mock] : [mock];
@@ -182,9 +183,9 @@ export class StorageService {
     }
   }
 
-  static async getMocksByProject(projectId: string): Promise<any[]> {
+  static async getMocksByProject(projectId: string): Promise<MockEndpoint[]> {
     if (this.backend === 'indexedDB') {
-      return IndexedDBService.getByIndex(STORES.MOCKS, 'projectId', projectId);
+      return IndexedDBService.getByIndex<MockEndpoint>(STORES.MOCKS, 'projectId', projectId);
     } else {
       const mocks = await this.getMocks();
       return mocks.filter(m => m.projectId === projectId);
@@ -192,19 +193,19 @@ export class StorageService {
   }
 
   // Environment Variables storage
-  static async getEnvVars(): Promise<any[]> {
+  static async getEnvVars(): Promise<EnvironmentVariable[]> {
     if (this.backend === 'indexedDB') {
-      return IndexedDBService.getAll(STORES.ENV_VARS);
+      return IndexedDBService.getAll<EnvironmentVariable>(STORES.ENV_VARS);
     } else {
       const data = localStorage.getItem(STORAGE_KEYS.ENV_VARS);
-      return data ? JSON.parse(data) : [];
+      return data ? JSON.parse(data) as EnvironmentVariable[] : [];
     }
   }
 
-  static async saveEnvVars(envVars: any[]): Promise<void> {
+  static async saveEnvVars(envVars: EnvironmentVariable[]): Promise<void> {
     if (this.backend === 'indexedDB') {
       await IndexedDBService.clear(STORES.ENV_VARS);
-      await IndexedDBService.putMany(STORES.ENV_VARS, envVars);
+      await IndexedDBService.putMany<EnvironmentVariable>(STORES.ENV_VARS, envVars);
       // dual-write mirror
       localStorage.setItem(STORAGE_KEYS.ENV_VARS, JSON.stringify(envVars));
     } else {
@@ -212,9 +213,9 @@ export class StorageService {
     }
   }
 
-  static async saveEnvVar(envVar: any): Promise<void> {
+  static async saveEnvVar(envVar: EnvironmentVariable): Promise<void> {
     if (this.backend === 'indexedDB') {
-      await IndexedDBService.put(STORES.ENV_VARS, envVar);
+      await IndexedDBService.put<EnvironmentVariable>(STORES.ENV_VARS, envVar);
       // dual-write mirror
       const envVars = await this.getEnvVars();
       const updated = Array.isArray(envVars) ? [...envVars.filter(e => e.id !== envVar.id), envVar] : [envVar];
@@ -246,19 +247,19 @@ export class StorageService {
   }
 
   // Logs storage
-  static async getLogs(): Promise<any[]> {
+  static async getLogs(): Promise<LogEntry[]> {
     if (this.backend === 'indexedDB') {
-      return IndexedDBService.getAll(STORES.LOGS);
+      return IndexedDBService.getAll<LogEntry>(STORES.LOGS);
     } else {
       const data = localStorage.getItem(STORAGE_KEYS.LOGS);
-      return data ? JSON.parse(data) : [];
+      return data ? JSON.parse(data) as LogEntry[] : [];
     }
   }
 
-  static async saveLogs(logs: any[]): Promise<void> {
+  static async saveLogs(logs: LogEntry[]): Promise<void> {
     if (this.backend === 'indexedDB') {
       await IndexedDBService.clear(STORES.LOGS);
-      await IndexedDBService.putMany(STORES.LOGS, logs);
+      await IndexedDBService.putMany<LogEntry>(STORES.LOGS, logs);
       // dual-write mirror
       localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(logs));
     } else {
@@ -266,9 +267,9 @@ export class StorageService {
     }
   }
 
-  static async addLog(log: any): Promise<void> {
+  static async addLog(log: LogEntry): Promise<void> {
     if (this.backend === 'indexedDB') {
-      await IndexedDBService.put(STORES.LOGS, log);
+      await IndexedDBService.put<LogEntry>(STORES.LOGS, log);
       // dual-write mirror
       const logs = await this.getLogs();
       const updated = Array.isArray(logs) ? [...logs, log] : [log];
@@ -290,19 +291,19 @@ export class StorageService {
   }
 
   // Email Outbox storage
-  static async getEmailOutbox(): Promise<any[]> {
+  static async getEmailOutbox(): Promise<EmailMessage[]> {
     if (this.backend === 'indexedDB') {
-      return IndexedDBService.getAll(STORES.EMAIL_OUTBOX);
+      return IndexedDBService.getAll<EmailMessage>(STORES.EMAIL_OUTBOX);
     } else {
       const data = localStorage.getItem(STORAGE_KEYS.EMAIL_OUTBOX);
-      return data ? JSON.parse(data) : [];
+      return data ? JSON.parse(data) as EmailMessage[] : [];
     }
   }
 
-  static async saveEmailOutbox(emails: any[]): Promise<void> {
+  static async saveEmailOutbox(emails: EmailMessage[]): Promise<void> {
     if (this.backend === 'indexedDB') {
       await IndexedDBService.clear(STORES.EMAIL_OUTBOX);
-      await IndexedDBService.putMany(STORES.EMAIL_OUTBOX, emails);
+      await IndexedDBService.putMany<EmailMessage>(STORES.EMAIL_OUTBOX, emails);
       // dual-write mirror
       localStorage.setItem(STORAGE_KEYS.EMAIL_OUTBOX, JSON.stringify(emails));
     } else {
@@ -310,9 +311,9 @@ export class StorageService {
     }
   }
 
-  static async addEmailToOutbox(email: any): Promise<void> {
+  static async addEmailToOutbox(email: EmailMessage): Promise<void> {
     if (this.backend === 'indexedDB') {
-      await IndexedDBService.put(STORES.EMAIL_OUTBOX, email);
+      await IndexedDBService.put<EmailMessage>(STORES.EMAIL_OUTBOX, email);
       // dual-write mirror
       const emails = await this.getEmailOutbox();
       const updated = Array.isArray(emails) ? [...emails, email] : [email];
@@ -324,9 +325,9 @@ export class StorageService {
     }
   }
 
-  static async updateEmailInOutbox(email: any): Promise<void> {
+  static async updateEmailInOutbox(email: EmailMessage): Promise<void> {
     if (this.backend === 'indexedDB') {
-      await IndexedDBService.put(STORES.EMAIL_OUTBOX, email);
+      await IndexedDBService.put<EmailMessage>(STORES.EMAIL_OUTBOX, email);
       // dual-write mirror
       const emails = await this.getEmailOutbox();
       const updated = Array.isArray(emails) ? emails.map(e => e.id === email.id ? email : e) : [email];
@@ -342,19 +343,19 @@ export class StorageService {
   }
 
   // Email Inbox storage
-  static async getEmailInbox(): Promise<any[]> {
+  static async getEmailInbox(): Promise<EmailMessage[]> {
     if (this.backend === 'indexedDB') {
-      return IndexedDBService.getAll(STORES.EMAIL_INBOX);
+      return IndexedDBService.getAll<EmailMessage>(STORES.EMAIL_INBOX);
     } else {
       const data = localStorage.getItem(STORAGE_KEYS.EMAIL_INBOX);
-      return data ? JSON.parse(data) : [];
+      return data ? JSON.parse(data) as EmailMessage[] : [];
     }
   }
 
-  static async saveEmailInbox(emails: any[]): Promise<void> {
+  static async saveEmailInbox(emails: EmailMessage[]): Promise<void> {
     if (this.backend === 'indexedDB') {
       await IndexedDBService.clear(STORES.EMAIL_INBOX);
-      await IndexedDBService.putMany(STORES.EMAIL_INBOX, emails);
+      await IndexedDBService.putMany<EmailMessage>(STORES.EMAIL_INBOX, emails);
       // dual-write mirror
       localStorage.setItem(STORAGE_KEYS.EMAIL_INBOX, JSON.stringify(emails));
     } else {

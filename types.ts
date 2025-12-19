@@ -68,4 +68,14 @@ export interface TestConsoleState {
   body?: string; // NEW: For POST/PUT requests in console
 }
 
+export interface EmailMessage {
+  id: string;
+  to: string;
+  subject: string;
+  body: string;
+  status: 'queued' | 'sending' | 'delivered' | 'failed';
+  trace: string[];
+  createdAt: number;
+  updatedAt?: number;
+}
 export type ViewState = 'dashboard' | 'editor' | 'logs' | 'settings' | 'test' | 'database' | 'externalApi' | 'email' | 'socket';
