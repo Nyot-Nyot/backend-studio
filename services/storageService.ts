@@ -1,7 +1,7 @@
 import { STORAGE_KEYS } from '../constants';
+import { EmailMessage, EnvironmentVariable, LogEntry, MockEndpoint, Project } from '../types';
 import { IndexedDBService, STORES, isIndexedDBAvailable } from './indexedDB';
-import { shouldRunMigration, runMigration, getMigrationStatus } from './migration';
-import { Project, MockEndpoint, EnvironmentVariable, LogEntry, EmailMessage } from '../types';
+import { getMigrationStatus, runMigration, shouldRunMigration } from './migration';
 
 // Storage backend type
 type StorageBackend = 'localStorage' | 'indexedDB';
@@ -14,7 +14,7 @@ export class StorageService {
   // Initialize storage service
   static async initialize(): Promise<void> {
     const migrationStatus = getMigrationStatus();
-    
+
     if (isIndexedDBAvailable()) {
       if (migrationStatus.completed) {
         this.backend = 'indexedDB';
@@ -26,7 +26,7 @@ export class StorageService {
           const result = await runMigration((stage, progress) => {
             console.log(`Migration: ${stage} (${progress}%)`);
           });
-          
+
           if (result.success) {
             this.backend = 'indexedDB';
             this.migrationCompleted = true;

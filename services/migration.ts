@@ -45,7 +45,7 @@ async function migrateStore(
 ): Promise<{ success: boolean; count: number; error?: string }> {
   try {
     const data = localStorage.getItem(localStorageKey);
-    
+
     if (!data || data === '[]' || data === '{}') {
       return { success: true, count: 0 };
     }
@@ -54,26 +54,26 @@ async function migrateStore(
     try {
       parsedData = JSON.parse(data);
     } catch (parseError) {
-      return { 
-        success: false, 
-        count: 0, 
-        error: `Failed to parse localStorage data: ${parseError}` 
+      return {
+        success: false,
+        count: 0,
+        error: `Failed to parse localStorage data: ${parseError}`
       };
     }
 
     // Transform data if needed (some stores might need ID generation, etc.)
     const records = transform ? transform(parsedData) : (Array.isArray(parsedData) ? parsedData : [parsedData]);
-    
+
     if (records.length > 0) {
       await IndexedDBService.putMany(indexedDBStore, records);
     }
 
     return { success: true, count: records.length };
   } catch (error) {
-    return { 
-      success: false, 
-      count: 0, 
-      error: error instanceof Error ? error.message : String(error) 
+    return {
+      success: false,
+      count: 0,
+      error: error instanceof Error ? error.message : String(error)
     };
   }
 }
@@ -93,14 +93,14 @@ export async function runMigration(
   try {
     // Set migration in progress flag
     localStorage.setItem(MIGRATION_FLAGS.IN_PROGRESS, Date.now().toString());
-    
+
     onProgress?.('Initializing IndexedDB...', 0);
-    
+
     // Initialize IndexedDB
     await initIndexedDB();
-    
+
     onProgress?.('Migrating projects...', 10);
-    
+
     // Migrate Projects
     const projectsResult = await migrateStore(
       STORAGE_KEYS.PROJECTS,
@@ -115,7 +115,7 @@ export async function runMigration(
     }
 
     onProgress?.('Migrating mocks...', 25);
-    
+
     // Migrate Mocks
     const mocksResult = await migrateStore(
       STORAGE_KEYS.MOCKS,
@@ -130,7 +130,7 @@ export async function runMigration(
     }
 
     onProgress?.('Migrating environment variables...', 40);
-    
+
     // Migrate Environment Variables
     const envVarsResult = await migrateStore(
       STORAGE_KEYS.ENV_VARS,
@@ -145,7 +145,7 @@ export async function runMigration(
     }
 
     onProgress?.('Migrating logs...', 60);
-    
+
     // Migrate Logs
     const logsResult = await migrateStore(
       STORAGE_KEYS.LOGS,
@@ -167,7 +167,7 @@ export async function runMigration(
     }
 
     onProgress?.('Migrating email outbox...', 75);
-    
+
     // Migrate Email Outbox
     const outboxResult = await migrateStore(
       STORAGE_KEYS.EMAIL_OUTBOX,
@@ -182,8 +182,8 @@ export async function runMigration(
     }
 
     onProgress?.('Migrating email inbox...', 85);
-    
-    // Migrate Email Inbox  
+
+    // Migrate Email Inbox
     const inboxResult = await migrateStore(
       STORAGE_KEYS.EMAIL_INBOX,
       STORES.EMAIL_INBOX
@@ -205,7 +205,7 @@ export async function runMigration(
       // Mark migration as completed
       localStorage.setItem(MIGRATION_FLAGS.COMPLETED, Date.now().toString());
       localStorage.removeItem(MIGRATION_FLAGS.IN_PROGRESS);
-      
+
       // Optional: Create backup of localStorage data before potential cleanup
       const backupData: any = {};
       Object.entries(STORAGE_KEYS).forEach(([key, storageKey]) => {
@@ -218,7 +218,7 @@ export async function runMigration(
         timestamp: Date.now(),
         data: backupData
       }));
-      
+
       onProgress?.('Migration completed successfully!', 100);
     } else {
       localStorage.setItem(MIGRATION_FLAGS.FAILED, JSON.stringify({
@@ -226,14 +226,14 @@ export async function runMigration(
         errors: result.errors
       }));
       localStorage.removeItem(MIGRATION_FLAGS.IN_PROGRESS);
-      
+
       onProgress?.('Migration completed with errors', 100);
     }
 
   } catch (error) {
     result.success = false;
     result.errors.push(error instanceof Error ? error.message : String(error));
-    
+
     localStorage.setItem(MIGRATION_FLAGS.FAILED, JSON.stringify({
       timestamp: Date.now(),
       errors: result.errors
