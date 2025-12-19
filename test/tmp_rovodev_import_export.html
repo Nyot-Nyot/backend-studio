@@ -1,0 +1,71 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8" /><title>Import/Export Test Harness</title></head>
+<body>
+  <h1>Backend Studio Import/Export Harness</h1>
+  <button id="seed">Seed LS Data</button>
+  <button id="migrate">Run Migration</button>
+  <button id="export">Export</button>
+  <input type="file" id="import" />
+  <pre id="log" style="white-space:pre-wrap; background:#f7fafc; padding:12px; border:1px solid #e2e8f0; max-height:50vh; overflow:auto"></pre>
+  <script type="module">
+    import { StorageService } from '../services/storageService.ts';
+    import { exportAllData, importAllData, initIndexedDB, STORES, IndexedDBService } from '../services/indexedDB.ts';
+    import { STORAGE_KEYS } from '../constants.ts';
+    import { runMigration, resetMigrationState, getMigrationStatus } from '../services/migration.ts';
+
+    const logEl = document.getElementById('log');
+    const log = (...args) => { logEl.textContent += args.map(a => typeof a==='string'?a:JSON.stringify(a,null,2)).join(' ') + '\n'; console.log(...args); };
+
+    const seed = () => {
+      const projects=[{id:'p1', name:'P1'}];
+      const mocks=[{id:'m1', projectId:'p1', path:'/api/ping', method:'GET'}];
+      const envVars=[{id:'e1', projectId:'p1', key:'BASE_URL', value:'http://localhost'}];
+      localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(projects));
+      localStorage.setItem(STORAGE_KEYS.MOCKS, JSON.stringify(mocks));
+      localStorage.setItem(STORAGE_KEYS.ENV_VARS, JSON.stringify(envVars));
+      log('Seeded LS');
+    };
+
+    document.getElementById('seed').onclick = seed;
+
+    document.getElementById('migrate').onclick = async () => {
+      resetMigrationState();
+      const res = await runMigration((s,p)=>log('progress', s, p));
+      log('migration result', res);
+      await StorageService.initialize();
+      log('backend', StorageService.getBackend());
+      const idbProjects = await IndexedDBService.getAll(STORES.PROJECTS);
+      log('idbProjects', idbProjects);
+    };
+
+    document.getElementById('export').onclick = async () => {
+      await initIndexedDB();
+      const data = await exportAllData();
+      log('exported', data);
+      const blob = new Blob([JSON.stringify(data)], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a=document.createElement('a'); a.href=url; a.download='backup.json'; a.click(); URL.revokeObjectURL(url);
+    };
+
+    document.getElementById('import').onchange = async (e) => {
+      const file = e.target.files?.[0];
+      if(!file) return;
+      const text = await file.text();
+      const data = JSON.parse(text);
+      await importAllData(data);
+      // mirror LS (match panel behavior)
+      if (data.projects) localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(data.projects));
+      if (data.mocks) localStorage.setItem(STORAGE_KEYS.MOCKS, JSON.stringify(data.mocks));
+      if (data.envVars) localStorage.setItem(STORAGE_KEYS.ENV_VARS, JSON.stringify(data.envVars));
+      if (data.logs) localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(data.logs));
+      if (data.emailOutbox) localStorage.setItem(STORAGE_KEYS.EMAIL_OUTBOX, JSON.stringify(data.emailOutbox));
+      if (data.emailInbox) localStorage.setItem(STORAGE_KEYS.EMAIL_INBOX, JSON.stringify(data.emailInbox));
+      localStorage.setItem('api_sim_migration_completed', Date.now().toString());
+      log('imported');
+      const idbProjects = await IndexedDBService.getAll(STORES.PROJECTS);
+      log('idbProjects(after import)', idbProjects);
+    };
+  </script>
+</body>
+</html>

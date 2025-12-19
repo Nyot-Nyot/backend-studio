@@ -3,6 +3,7 @@ import { Mail, Send, Clock, CheckCircle, XCircle, AlertTriangle, ChevronDown, Ch
 import { EmailMessage, validateEmail } from '../services/emailService';
 import { sendRealEmail, EmailJSConfig } from '../services/realEmailService';
 import { STORAGE_KEYS } from '../constants';
+import { StorageService } from '../services/storageService';
 
 interface EmailConsoleProps {
   emailJSConfig: EmailJSConfig;
@@ -23,11 +24,9 @@ export const EmailConsole: React.FC<EmailConsoleProps> = ({ emailJSConfig, email
 
   // Load initial outbox data
   useEffect(() => {
-    const loadOutbox = () => {
-      const stored = localStorage.getItem(STORAGE_KEYS.EMAIL_OUTBOX);
-      if (stored) {
-        setOutbox(JSON.parse(stored));
-      }
+    const loadOutbox = async () => {
+      const emails = await StorageService.getEmailOutbox();
+      setOutbox(emails as EmailMessage[]);
     };
 
     loadOutbox();

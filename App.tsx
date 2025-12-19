@@ -2,6 +2,7 @@ import {
 	AlertTriangle,
 	Cloud,
 	Copy,
+	Database,
 	Download,
 	Eye,
 	EyeOff,
@@ -24,19 +25,27 @@ import {
 } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { Dashboard } from "./components/Dashboard";
+import { DatabaseMigrationPanel } from "./components/DatabaseMigrationPanel";
 import { DatabaseView } from "./components/DatabaseView";
+import { EmailConsole } from "./components/EmailConsole";
+import { ExternalApiPanel } from "./components/ExternalApiPanel";
 import { LogViewer } from "./components/LogViewer";
 import { MockEditor } from "./components/MockEditor";
 import { Sidebar } from "./components/Sidebar";
-import { TestConsole } from "./components/TestConsole";
-import { ExternalApiPanel } from "./components/ExternalApiPanel";
-import { EmailConsole } from "./components/EmailConsole";
 import { SocketConsole } from "./components/SocketConsole";
+import { TestConsole } from "./components/TestConsole";
 import { ToastContainer, ToastMessage, ToastType } from "./components/Toast";
 import { generateEndpointConfig } from "./services/geminiService";
 import { simulateRequest } from "./services/mockEngine";
 import { generateOpenApiSpec } from "./services/openApiService";
-import { EmailJSConfig, getEmailJSConfig, saveEmailJSConfig, validateEmailJSConfig, initEmailJS } from './services/realEmailService';
+import {
+	EmailJSConfig,
+	getEmailJSConfig,
+	initEmailJS,
+	saveEmailJSConfig,
+	validateEmailJSConfig,
+} from "./services/realEmailService";
+import { StorageService } from "./services/storageService";
 import { EnvironmentVariable, HttpMethod, LogEntry, MockEndpoint, Project, TestConsoleState, ViewState } from "./types";
 
 const STORAGE_KEY_PROJECTS = "api_sim_projects";
@@ -74,8 +83,8 @@ function App() {
 	const [showApiKey, setShowApiKey] = useState(false);
 
 	// EmailJS Config State
-	const [emailJSConfig, setEmailJSConfig] = useState<EmailJSConfig>(() => 
-		getEmailJSConfig() || { serviceId: '', templateId: '', publicKey: '' }
+	const [emailJSConfig, setEmailJSConfig] = useState<EmailJSConfig>(
+		() => getEmailJSConfig() || { serviceId: "", templateId: "", publicKey: "" }
 	);
 	const [emailJSReady, setEmailJSReady] = useState(false);
 	const [showEmailJSKeys, setShowEmailJSKeys] = useState(false);
@@ -101,48 +110,79 @@ function App() {
 
 	// --- INITIAL LOAD ---
 	useEffect(() => {
-		const loadedProjects = JSON.parse(localStorage.getItem(STORAGE_KEY_PROJECTS) || "[]");
-		const loadedMocks = JSON.parse(localStorage.getItem(STORAGE_KEY_MOCKS) || "[]");
-		const loadedEnvVars = JSON.parse(localStorage.getItem(STORAGE_KEY_ENV_VARS) || "[]");
-		const lastProjectId = localStorage.getItem(STORAGE_KEY_ACTIVE_PROJECT);
+		(async () => {
+			await StorageService.initialize();
+			const loadedProjects = await StorageService.getProjects();
+			const loadedMocks = await StorageService.getMocks();
+			const loadedEnvVars = await StorageService.getEnvVars();
+			const lastProjectId = localStorage.getItem(STORAGE_KEY_ACTIVE_PROJECT);
 
-		// Determine projects and the active project ID first
-		let nextProjects: Project[];
-		let nextActiveProjectId: string;
-		if (loadedProjects.length === 0) {
-			nextProjects = [DEFAULT_PROJECT];
-			nextActiveProjectId = DEFAULT_PROJECT.id;
-		} else {
-			nextProjects = loadedProjects;
-			nextActiveProjectId = lastProjectId || loadedProjects[0].id;
-		}
-		setProjects(nextProjects);
-		setActiveProjectId(nextActiveProjectId);
+			let nextProjects: Project[];
+			let nextActiveProjectId: string;
+			if (!loadedProjects || loadedProjects.length === 0) {
+				nextProjects = [DEFAULT_PROJECT];
+				nextActiveProjectId = DEFAULT_PROJECT.id;
+				await StorageService.saveProjects(nextProjects);
+			} else {
+				nextProjects = loadedProjects;
+				nextActiveProjectId = lastProjectId || loadedProjects[0].id;
+			}
+			setProjects(nextProjects);
+			setActiveProjectId(nextActiveProjectId);
 
-		// Initialize mocks; ensure default mock is created under the active project
-		if (!loadedMocks || loadedMocks.length === 0) {
-			const pingMock: MockEndpoint = {
-				id: crypto.randomUUID(),
-				projectId: nextActiveProjectId,
-				name: "Ping",
-				path: "/api/ping",
-				method: HttpMethod.GET,
-				statusCode: 200,
-				delay: 0,
-				responseBody: JSON.stringify({ pong: true }),
-				isActive: true,
-				version: "1.0",
-				createdAt: Date.now(),
-				requestCount: 0,
-				headers: [{ key: "Content-Type", value: "application/json" }],
-				storeName: "",
-				authConfig: { type: "NONE" },
-			};
-			setMocks([pingMock]);
-		} else {
-			setMocks(loadedMocks);
-		}
-		setEnvVars(loadedEnvVars);
+			// Only create a default Ping mock if **both** projects and mocks are empty.
+			// This prevents accidental overwrites of imported mocks during a migration/import flow.
+			if ((!loadedMocks || loadedMocks.length === 0) && (!loadedProjects || loadedProjects.length === 0)) {
+				const pingMock: MockEndpoint = {
+					id: crypto.randomUUID(),
+					projectId: nextActiveProjectId,
+					name: "Ping",
+					path: "/api/ping",
+					method: HttpMethod.GET,
+					statusCode: 200,
+					delay: 0,
+					responseBody: JSON.stringify({ pong: true }),
+					isActive: true,
+					version: "1.0",
+					createdAt: Date.now(),
+					requestCount: 0,
+					headers: [{ key: "Content-Type", value: "application/json" }],
+					storeName: "",
+					authConfig: { type: "NONE" },
+				};
+				setMocks([pingMock]);
+				await StorageService.saveMocks([pingMock]);
+			} else {
+				setMocks(loadedMocks);
+			}
+			setEnvVars(loadedEnvVars);
+		})();
+
+		// Listen for import events so we can refresh state without a full reload
+		const handleImport = async () => {
+			// Small delay to give IndexedDB transactions a chance to fully commit
+			await new Promise(res => setTimeout(res, 100));
+			try {
+				await StorageService.initialize();
+				const reProjects = await StorageService.getProjects();
+				const reMocks = await StorageService.getMocks();
+				const reEnvVars = await StorageService.getEnvVars();
+
+				const preferredProject =
+					localStorage.getItem(STORAGE_KEY_ACTIVE_PROJECT) || (reProjects && reProjects[0]?.id);
+				setProjects(reProjects && reProjects.length > 0 ? reProjects : [DEFAULT_PROJECT]);
+				setActiveProjectId(preferredProject || DEFAULT_PROJECT.id);
+				setMocks(reMocks);
+				setEnvVars(reEnvVars);
+				addToast("Imported data applied", "success");
+			} catch (e) {
+				console.error("Failed to apply imported data:", e);
+				addToast("Imported data applied (partial)", "info");
+			}
+		};
+
+		window.addEventListener("backend-studio-imported", handleImport as EventListener);
+		return () => window.removeEventListener("backend-studio-imported", handleImport as EventListener);
 	}, []);
 
 	// EmailJS configuration effect
@@ -189,15 +229,21 @@ function App() {
 
 	// --- PERSISTENCE ---
 	useEffect(() => {
-		if (projects.length > 0) localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
+		(async () => {
+			if (projects.length > 0) await StorageService.saveProjects(projects);
+		})();
 	}, [projects]);
 
 	useEffect(() => {
-		localStorage.setItem(STORAGE_KEY_MOCKS, JSON.stringify(mocks));
+		(async () => {
+			await StorageService.saveMocks(mocks);
+		})();
 	}, [mocks]);
 
 	useEffect(() => {
-		localStorage.setItem(STORAGE_KEY_ENV_VARS, JSON.stringify(envVars));
+		(async () => {
+			await StorageService.saveEnvVars(envVars);
+		})();
 	}, [envVars]);
 
 	useEffect(() => {
@@ -355,7 +401,7 @@ function App() {
 	const handleSaveEmailJSConfig = () => {
 		const errors = validateEmailJSConfig(emailJSConfig);
 		if (errors.length > 0) {
-			addToast(`Invalid config: ${errors.join(', ')}`, "error");
+			addToast(`Invalid config: ${errors.join(", ")}`, "error");
 			return;
 		}
 		saveEmailJSConfig(emailJSConfig);
@@ -619,15 +665,17 @@ app.listen(PORT, () => {
 
 				{view === "database" && <DatabaseView />}
 
-{view === "externalApi" && (
-<div className="p-6">
-<ExternalApiPanel />
-</div>
-)}
+				{view === "externalApi" && (
+					<div className="p-6">
+						<ExternalApiPanel />
+					</div>
+				)}
 
-{view === "email" && <EmailConsole emailJSConfig={emailJSConfig} emailJSReady={emailJSReady} addToast={addToast} />}
+				{view === "email" && (
+					<EmailConsole emailJSConfig={emailJSConfig} emailJSReady={emailJSReady} addToast={addToast} />
+				)}
 
-{view === "socket" && <SocketConsole addToast={addToast} />}
+				{view === "socket" && <SocketConsole addToast={addToast} />}
 
 				{view === "settings" && (
 					<div className="p-10 max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
@@ -711,7 +759,8 @@ app.listen(PORT, () => {
 								EmailJS Configuration
 							</h3>
 							<p className="text-slate-500 text-sm mb-6 max-w-2xl leading-relaxed">
-								Configure EmailJS to send real emails. Create a free account at emailjs.com and get your service credentials.
+								Configure EmailJS to send real emails. Create a free account at emailjs.com and get your
+								service credentials.
 							</p>
 
 							<div className="max-w-xl space-y-4">
@@ -722,7 +771,9 @@ app.listen(PORT, () => {
 									<input
 										type={showEmailJSKeys ? "text" : "password"}
 										value={emailJSConfig.serviceId}
-										onChange={e => setEmailJSConfig(prev => ({ ...prev, serviceId: e.target.value }))}
+										onChange={e =>
+											setEmailJSConfig(prev => ({ ...prev, serviceId: e.target.value }))
+										}
 										className="block w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm font-mono"
 										placeholder="service_xxxxxx"
 									/>
@@ -734,7 +785,9 @@ app.listen(PORT, () => {
 									<input
 										type={showEmailJSKeys ? "text" : "password"}
 										value={emailJSConfig.templateId}
-										onChange={e => setEmailJSConfig(prev => ({ ...prev, templateId: e.target.value }))}
+										onChange={e =>
+											setEmailJSConfig(prev => ({ ...prev, templateId: e.target.value }))
+										}
 										className="block w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm font-mono"
 										placeholder="template_xxxxxx"
 									/>
@@ -747,7 +800,9 @@ app.listen(PORT, () => {
 										<input
 											type={showEmailJSKeys ? "text" : "password"}
 											value={emailJSConfig.publicKey}
-											onChange={e => setEmailJSConfig(prev => ({ ...prev, publicKey: e.target.value }))}
+											onChange={e =>
+												setEmailJSConfig(prev => ({ ...prev, publicKey: e.target.value }))
+											}
 											className="block w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm font-mono pr-10"
 											placeholder="user_xxxxxxxxxxxxxx"
 										/>
@@ -755,7 +810,11 @@ app.listen(PORT, () => {
 											onClick={() => setShowEmailJSKeys(!showEmailJSKeys)}
 											className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
 										>
-											{showEmailJSKeys ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+											{showEmailJSKeys ? (
+												<EyeOff className="h-4 w-4" />
+											) : (
+												<Eye className="h-4 w-4" />
+											)}
 										</button>
 									</div>
 								</div>
@@ -852,6 +911,19 @@ app.listen(PORT, () => {
 									<span>Open Export Hub</span>
 								</button>
 							</div>
+						</div>
+
+						{/* Database Migration Section */}
+						<div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+							<h3 className="text-xl font-semibold text-slate-800 mb-2 flex items-center">
+								<Database className="w-5 h-5 mr-3 text-amber-600" />
+								Data Storage Migration
+							</h3>
+							<p className="text-slate-500 text-sm mb-6 max-w-2xl leading-relaxed">
+								Migrate your configuration and logs from LocalStorage to fast, durable IndexedDB.
+								Includes backup and restore options.
+							</p>
+							<DatabaseMigrationPanel addToast={addToast} />
 						</div>
 
 						{/* Export Specification Section */}

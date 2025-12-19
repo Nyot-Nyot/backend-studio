@@ -205,10 +205,12 @@ Milestone C: Socket Programming (SSE)
 
 Milestone D: IndexedDB Migration
 
--   [ ] services/idb.ts wrapper
--   [ ] init/migration from LocalStorage
--   [ ] Dual-write for compatibility
--   [ ] Viewer updates for IDB-backed data
+-   [x] services/idb.ts wrapper
+-   [x] init/migration from LocalStorage
+-   [x] Dual-write for compatibility
+-   [x] Viewer updates for IDB-backed data
+
+**Completed:** Implemented IDB wrapper (see `services/indexedDB.ts`), migration flow, dual-write mirrors, and deterministic import handling (dispatching `backend-studio-imported`). Playwright E2E tests for import/export and the delete-then-import flow pass.
 
 Docs
 
