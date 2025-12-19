@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageSquare, Send, Wifi, WifiOff, Users, Clock, Zap, Globe, AlertCircle } from 'lucide-react';
 
+// WebSocket server configuration
+const WEBSOCKET_URL = import.meta.env.VITE_WEBSOCKET_URL || 'ws://localhost:3200';
+
 interface Message {
   id: number;
   type: string;
@@ -79,7 +82,7 @@ export const SocketConsole: React.FC<SocketConsoleProps> = ({ addToast }) => {
     addToast('Connecting to WebSocket server...', 'info');
     
     try {
-      const websocket = new WebSocket('ws://localhost:3200');
+      const websocket = new WebSocket(WEBSOCKET_URL);
       
       websocket.onopen = () => {
         setWs(websocket);
@@ -445,9 +448,12 @@ export const SocketConsole: React.FC<SocketConsoleProps> = ({ addToast }) => {
                 <p>To use WebSocket features:</p>
                 <ol className="list-decimal list-inside space-y-1 text-xs">
                   <li>Open terminal</li>
-                  <li>Run: <code className="bg-amber-100 px-1 rounded">node scripts/ws-server.js</code></li>
+                  <li>Run: <code className="bg-amber-100 px-1 rounded">node scripts/ws-server.cjs</code></li>
                   <li>Click "Connect to WebSocket"</li>
                 </ol>
+                <p className="text-xs mt-2">
+                  Connecting to: <code className="bg-amber-100 px-1 rounded">{WEBSOCKET_URL}</code>
+                </p>
               </div>
             </div>
           )}
