@@ -1,5 +1,5 @@
 import { STORAGE_KEYS } from '../constants';
-import { IndexedDBService, STORES, initIndexedDB, isIndexedDBAvailable } from './indexedDB';
+import { IndexedDBService, STORES, StoreName, initIndexedDB, isIndexedDBAvailable } from './indexedDB';
 
 // Migration flags
 const MIGRATION_FLAGS = {
@@ -39,8 +39,8 @@ export function shouldRunMigration(): boolean {
 
 // Migrate specific store from localStorage to IndexedDB
 async function migrateStore(
-  localStorageKey: string, 
-  indexedDBStore: string,
+  localStorageKey: string,
+  indexedDBStore: StoreName,
   transform?: (data: any) => any[]
 ): Promise<{ success: boolean; count: number; error?: string }> {
   try {
@@ -65,7 +65,7 @@ async function migrateStore(
     const records = transform ? transform(parsedData) : (Array.isArray(parsedData) ? parsedData : [parsedData]);
     
     if (records.length > 0) {
-      await IndexedDBService.putMany(indexedDBStore as any, records);
+      await IndexedDBService.putMany(indexedDBStore, records);
     }
 
     return { success: true, count: records.length };
