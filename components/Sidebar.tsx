@@ -235,7 +235,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             <div onClick={() => onChangeView('email')} className={navItemClass('email')} title="Email Console">
               {activeIndicator('email')}
-              <span className="w-5 h-5 flex items-center justify-center text-lg font-bold text-slate-500 group-hover:text-slate-300" style={{color: currentView === 'email' ? '#0ea5e9' : ''}}>@</span>
+              <span className={`w-5 h-5 flex items-center justify-center text-lg font-bold ${currentView === 'email' ? 'text-brand-400' : 'text-slate-500 group-hover:text-slate-300'}`}>@</span>
               {!isCollapsed && <span className="font-medium">Email Console</span>}
             </div>
           </nav>
