@@ -18,7 +18,7 @@ export const EmailConsole: React.FC<EmailConsoleProps> = ({ emailJSConfig, email
   const [expandedTraces, setExpandedTraces] = useState<Set<string>>(new Set());
   const [emailMode, setEmailMode] = useState<'mock' | 'real'>('mock');
 
-  // Load outbox from localStorage and check EmailJS config
+  // Load initial outbox data
   useEffect(() => {
     const loadOutbox = () => {
       const stored = localStorage.getItem('api_sim_email_outbox');
@@ -28,10 +28,15 @@ export const EmailConsole: React.FC<EmailConsoleProps> = ({ emailJSConfig, email
     };
 
     loadOutbox();
+  }, []);
 
-    // Listen for status updates via custom events
+  // Set up event listener for real-time email status updates
+  useEffect(() => {
     const handleStatusUpdate = (event: CustomEvent) => {
-      loadOutbox(); // Reload from localStorage when status changes
+      const stored = localStorage.getItem('api_sim_email_outbox');
+      if (stored) {
+        setOutbox(JSON.parse(stored));
+      }
     };
 
     window.addEventListener('emailStatusUpdate', handleStatusUpdate as EventListener);
