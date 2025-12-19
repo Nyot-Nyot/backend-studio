@@ -49,6 +49,7 @@ export const SocketConsole: React.FC<SocketConsoleProps> = ({ addToast }) => {
   const [totalClients, setTotalClients] = useState(0);
   const [clientInfo, setClientInfo] = useState<ClientInfo | null>(null);
   const [serverStats, setServerStats] = useState<ServerStats | null>(null);
+  const [isTyping, setIsTyping] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -218,6 +219,7 @@ export const SocketConsole: React.FC<SocketConsoleProps> = ({ addToast }) => {
       clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = null;
     }
+    setIsTyping(false);
     ws.send(JSON.stringify({ type: 'typing_stop' }));
   };
 
@@ -226,8 +228,11 @@ export const SocketConsole: React.FC<SocketConsoleProps> = ({ addToast }) => {
     
     if (!ws || !connected) return;
     
-    // Send typing indicator
-    ws.send(JSON.stringify({ type: 'typing_start' }));
+    // Only send typing_start if not already typing
+    if (!isTyping) {
+      setIsTyping(true);
+      ws.send(JSON.stringify({ type: 'typing_start' }));
+    }
     
     // Clear previous timeout
     if (typingTimeoutRef.current) {
@@ -236,7 +241,10 @@ export const SocketConsole: React.FC<SocketConsoleProps> = ({ addToast }) => {
     
     // Stop typing after 2 seconds of inactivity
     typingTimeoutRef.current = setTimeout(() => {
-      ws.send(JSON.stringify({ type: 'typing_stop' }));
+      setIsTyping(false);
+      if (ws && connected) {
+        ws.send(JSON.stringify({ type: 'typing_stop' }));
+      }
     }, 2000);
   };
 
