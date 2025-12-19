@@ -181,8 +181,8 @@ function App() {
 			}
 		};
 
-		window.addEventListener("backend-studio-imported", handleImport as EventListener);
-		return () => window.removeEventListener("backend-studio-imported", handleImport as EventListener);
+		window.addEventListener("backend-studio-imported", handleImport);
+		return () => window.removeEventListener("backend-studio-imported", handleImport);
 	}, []);
 
 	// EmailJS configuration effect
