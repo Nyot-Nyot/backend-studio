@@ -68,4 +68,4 @@ export interface TestConsoleState {
   body?: string; // NEW: For POST/PUT requests in console
 }
 
-export type ViewState = 'dashboard' | 'editor' | 'logs' | 'settings' | 'test' | 'database' | 'externalApi';
+export type ViewState = 'dashboard' | 'editor' | 'logs' | 'settings' | 'test' | 'database' | 'externalApi' | 'email';

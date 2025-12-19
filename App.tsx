@@ -10,6 +10,7 @@ import {
 	Globe,
 	Info,
 	Key,
+	Mail,
 	Package,
 	Plus,
 	RefreshCw,
@@ -29,10 +30,12 @@ import { MockEditor } from "./components/MockEditor";
 import { Sidebar } from "./components/Sidebar";
 import { TestConsole } from "./components/TestConsole";
 import { ExternalApiPanel } from "./components/ExternalApiPanel";
+import { EmailConsole } from "./components/EmailConsole";
 import { ToastContainer, ToastMessage, ToastType } from "./components/Toast";
 import { generateEndpointConfig } from "./services/geminiService";
 import { simulateRequest } from "./services/mockEngine";
 import { generateOpenApiSpec } from "./services/openApiService";
+import { EmailJSConfig, getEmailJSConfig, saveEmailJSConfig, validateEmailJSConfig, initEmailJS } from './services/realEmailService';
 import { EnvironmentVariable, HttpMethod, LogEntry, MockEndpoint, Project, TestConsoleState, ViewState } from "./types";
 
 const STORAGE_KEY_PROJECTS = "api_sim_projects";
@@ -68,6 +71,13 @@ function App() {
 	// API Key UI State
 	const [userApiKey, setUserApiKey] = useState(() => localStorage.getItem("api_sim_user_gemini_key") || "");
 	const [showApiKey, setShowApiKey] = useState(false);
+
+	// EmailJS Config State
+	const [emailJSConfig, setEmailJSConfig] = useState<EmailJSConfig>(() => 
+		getEmailJSConfig() || { serviceId: '', templateId: '', publicKey: '' }
+	);
+	const [emailJSReady, setEmailJSReady] = useState(false);
+	const [showEmailJSKeys, setShowEmailJSKeys] = useState(false);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 
 	// Test Console State
@@ -133,6 +143,20 @@ function App() {
 		}
 		setEnvVars(loadedEnvVars);
 	}, []);
+
+	// EmailJS configuration effect
+	useEffect(() => {
+		const checkEmailJS = () => {
+			if (emailJSConfig.serviceId && emailJSConfig.templateId && emailJSConfig.publicKey) {
+				const ready = initEmailJS(emailJSConfig);
+				setEmailJSReady(ready);
+			} else {
+				setEmailJSReady(false);
+			}
+		};
+
+		checkEmailJS();
+	}, [emailJSConfig]);
 
 	// Request persistent storage (to reduce chance of data being wiped by the browser)
 	useEffect(() => {
@@ -325,6 +349,16 @@ function App() {
 	const handleSaveApiKey = () => {
 		localStorage.setItem("api_sim_user_gemini_key", userApiKey);
 		addToast("API Key saved securely", "success");
+	};
+
+	const handleSaveEmailJSConfig = () => {
+		const errors = validateEmailJSConfig(emailJSConfig);
+		if (errors.length > 0) {
+			addToast(`Invalid config: ${errors.join(', ')}`, "error");
+			return;
+		}
+		saveEmailJSConfig(emailJSConfig);
+		addToast("EmailJS configuration saved", "success");
 	};
 
 	const handleAddEnvVar = () => {
@@ -590,6 +624,8 @@ app.listen(PORT, () => {
 </div>
 )}
 
+{view === "email" && <EmailConsole emailJSConfig={emailJSConfig} emailJSReady={emailJSReady} addToast={addToast} />}
+
 				{view === "settings" && (
 					<div className="p-10 max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
 						<div className="flex items-center space-x-3 mb-6">
@@ -662,6 +698,80 @@ app.listen(PORT, () => {
 										</div>
 									</div>
 								))}
+							</div>
+						</div>
+
+						{/* EmailJS Configuration Section */}
+						<div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+							<h3 className="text-xl font-semibold text-slate-800 mb-2 flex items-center">
+								<Mail className="w-5 h-5 mr-3 text-blue-600" />
+								EmailJS Configuration
+							</h3>
+							<p className="text-slate-500 text-sm mb-6 max-w-2xl leading-relaxed">
+								Configure EmailJS to send real emails. Create a free account at emailjs.com and get your service credentials.
+							</p>
+
+							<div className="max-w-xl space-y-4">
+								<div>
+									<label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+										Service ID
+									</label>
+									<input
+										type={showEmailJSKeys ? "text" : "password"}
+										value={emailJSConfig.serviceId}
+										onChange={e => setEmailJSConfig(prev => ({ ...prev, serviceId: e.target.value }))}
+										className="block w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm font-mono"
+										placeholder="service_xxxxxx"
+									/>
+								</div>
+								<div>
+									<label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+										Template ID
+									</label>
+									<input
+										type={showEmailJSKeys ? "text" : "password"}
+										value={emailJSConfig.templateId}
+										onChange={e => setEmailJSConfig(prev => ({ ...prev, templateId: e.target.value }))}
+										className="block w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm font-mono"
+										placeholder="template_xxxxxx"
+									/>
+								</div>
+								<div>
+									<label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+										Public Key
+									</label>
+									<div className="relative">
+										<input
+											type={showEmailJSKeys ? "text" : "password"}
+											value={emailJSConfig.publicKey}
+											onChange={e => setEmailJSConfig(prev => ({ ...prev, publicKey: e.target.value }))}
+											className="block w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm font-mono pr-10"
+											placeholder="user_xxxxxxxxxxxxxx"
+										/>
+										<button
+											onClick={() => setShowEmailJSKeys(!showEmailJSKeys)}
+											className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+										>
+											{showEmailJSKeys ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+										</button>
+									</div>
+								</div>
+								<div className="flex items-center justify-between">
+									<a
+										href="https://www.emailjs.com/"
+										target="_blank"
+										rel="noreferrer"
+										className="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline"
+									>
+										Get free EmailJS account
+									</a>
+									<button
+										onClick={handleSaveEmailJSConfig}
+										className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm transition-all shadow-md shadow-blue-200 active:scale-95"
+									>
+										Save Configuration
+									</button>
+								</div>
 							</div>
 						</div>
 
