@@ -1,6 +1,15 @@
 
 import { EnvironmentVariable, HttpMethod, MockEndpoint } from "../types";
 import { dbService } from "./dbService";
+import { 
+  EmailSendRequest, 
+  EmailSendResponse, 
+  EmailStatusResponse, 
+  EmailMessage, 
+  generateSMTPTrace, 
+  validateEmail,
+  scheduleStatusUpdate 
+} from './emailService';
 
 // Helper: Match Route Pattern
 export const matchRoute = (pattern: string, requestPath: string): { matches: boolean, params: any } => {
@@ -181,6 +190,14 @@ export const simulateRequest = (
   const urlObj = new URL(url);
   const pathname = urlObj.pathname;
 
+  // Handle built-in email endpoints
+  if (pathname.startsWith('/api/email/')) {
+    if (import.meta.env?.DEV) {
+      console.log('Email endpoint detected:', method, pathname);
+    }
+    return handleEmailEndpoint(method, pathname, urlObj, headers, body);
+  }
+
   let matchedMock: MockEndpoint | null = null;
   let urlParams: any = {};
 
@@ -343,5 +360,227 @@ export const simulateRequest = (
       delay: matchedMock.delay
     },
     matchedMockId: matchedMock.id
+  };
+}
+
+// Email endpoints handler
+function handleEmailEndpoint(
+  method: string,
+  pathname: string,
+  urlObj: URL,
+  headers: Record<string, string>,
+  body: string | undefined
+): SimulationResult {
+  if (import.meta.env?.DEV) {
+    console.log('handleEmailEndpoint called:', { method, pathname, body });
+  }
+  
+  const OUTBOX_KEY = 'api_sim_email_outbox';
+  const INBOX_KEY = 'api_sim_email_inbox';
+
+  // POST /api/email/send
+  if (method === 'POST' && pathname === '/api/email/send') {
+    let requestData: EmailSendRequest;
+    try {
+      requestData = JSON.parse(body || '{}');
+    } catch (e) {
+      return {
+        response: {
+          status: 400,
+          headers: [
+            { key: 'Content-Type', value: 'application/json' },
+            { key: 'X-Powered-By', value: 'BackendStudio' }
+          ],
+          body: JSON.stringify({ error: 'Invalid JSON body' }),
+          delay: 0
+        }
+      };
+    }
+
+    // Validate required fields
+    if (!requestData.to || !requestData.subject || !requestData.body) {
+      return {
+        response: {
+          status: 400,
+          headers: [
+            { key: 'Content-Type', value: 'application/json' },
+            { key: 'X-Powered-By', value: 'BackendStudio' }
+          ],
+          body: JSON.stringify({ error: 'Missing required fields: to, subject, body' }),
+          delay: 0
+        }
+      };
+    }
+
+    // Validate email format
+    if (!validateEmail(requestData.to)) {
+      return {
+        response: {
+          status: 400,
+          headers: [
+            { key: 'Content-Type', value: 'application/json' },
+            { key: 'X-Powered-By', value: 'BackendStudio' }
+          ],
+          body: JSON.stringify({ error: 'Invalid email address' }),
+          delay: 0
+        }
+      };
+    }
+
+    const messageId = crypto.randomUUID();
+    const now = Date.now();
+    const trace = generateSMTPTrace(requestData.to);
+
+    const message: EmailMessage = {
+      id: messageId,
+      to: requestData.to,
+      subject: requestData.subject,
+      body: requestData.body,
+      status: 'queued',
+      trace,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    // Store in outbox
+    const outbox = JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]');
+    outbox.push(message);
+    localStorage.setItem(OUTBOX_KEY, JSON.stringify(outbox));
+
+    // Schedule status updates
+    scheduleStatusUpdate(messageId, (id, status) => {
+      if (import.meta.env?.DEV) {
+        console.log('Status update callback called:', id, status);
+      }
+      
+      const currentOutbox = JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]');
+      const msgIndex = currentOutbox.findIndex((m: EmailMessage) => m.id === id);
+      
+      if (import.meta.env?.DEV) {
+        console.log('Found message at index:', msgIndex, 'of', currentOutbox.length);
+      }
+      
+      if (msgIndex !== -1) {
+        currentOutbox[msgIndex].status = status;
+        currentOutbox[msgIndex].updatedAt = Date.now();
+        localStorage.setItem(OUTBOX_KEY, JSON.stringify(currentOutbox));
+        
+        if (import.meta.env?.DEV) {
+          console.log('Status updated in localStorage, dispatching event');
+        }
+        
+        // Notify via custom event (for real-time updates later)
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('emailStatusUpdate', { 
+            detail: { messageId: id, status, updatedAt: Date.now() } 
+          }));
+        }
+      } else {
+        if (import.meta.env?.DEV) {
+          console.warn('Message not found for status update:', id);
+        }
+      }
+    });
+
+    const response: EmailSendResponse = {
+      messageId,
+      status: 'queued',
+      trace
+    };
+
+    return {
+      response: {
+        status: 200,
+        headers: [
+          { key: 'Content-Type', value: 'application/json' },
+          { key: 'X-Powered-By', value: 'BackendStudio' }
+        ],
+        body: JSON.stringify(response),
+        delay: 50
+      }
+    };
+  }
+
+  // GET /api/email/status/:id
+  if (method === 'GET' && pathname.startsWith('/api/email/status/')) {
+    const messageId = pathname.split('/').pop();
+    if (!messageId) {
+      return {
+        response: {
+          status: 400,
+          headers: [
+            { key: 'Content-Type', value: 'application/json' },
+            { key: 'X-Powered-By', value: 'BackendStudio' }
+          ],
+          body: JSON.stringify({ error: 'Missing message ID' }),
+          delay: 0
+        }
+      };
+    }
+
+    const outbox = JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]');
+    const message = outbox.find((m: EmailMessage) => m.id === messageId);
+
+    if (!message) {
+      return {
+        response: {
+          status: 404,
+          headers: [
+            { key: 'Content-Type', value: 'application/json' },
+            { key: 'X-Powered-By', value: 'BackendStudio' }
+          ],
+          body: JSON.stringify({ error: 'Message not found' }),
+          delay: 0
+        }
+      };
+    }
+
+    const response: EmailStatusResponse = {
+      messageId: message.id,
+      status: message.status,
+      updatedAt: message.updatedAt,
+      trace: message.trace
+    };
+
+    return {
+      response: {
+        status: 200,
+        headers: [
+          { key: 'Content-Type', value: 'application/json' },
+          { key: 'X-Powered-By', value: 'BackendStudio' }
+        ],
+        body: JSON.stringify(response),
+        delay: 10
+      }
+    };
+  }
+
+  // GET /api/email/inbox
+  if (method === 'GET' && pathname === '/api/email/inbox') {
+    const inbox = JSON.parse(localStorage.getItem(INBOX_KEY) || '[]');
+    return {
+      response: {
+        status: 200,
+        headers: [
+          { key: 'Content-Type', value: 'application/json' },
+          { key: 'X-Powered-By', value: 'BackendStudio' }
+        ],
+        body: JSON.stringify({ messages: inbox }),
+        delay: 20
+      }
+    };
+  }
+
+  // Unknown email endpoint
+  return {
+    response: {
+      status: 404,
+      headers: [
+        { key: 'Content-Type', value: 'application/json' },
+        { key: 'X-Powered-By', value: 'BackendStudio' }
+      ],
+      body: JSON.stringify({ error: 'Email endpoint not found' }),
+      delay: 0
+    }
   };
 }

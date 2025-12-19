@@ -233,6 +233,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <Rocket className={`w-5 h-5 ${currentView === 'externalApi' ? 'text-brand-400' : 'text-slate-500 group-hover:text-slate-300'}`} />
               {!isCollapsed && <span className="font-medium">External API</span>}
             </div>
+            <div onClick={() => onChangeView('email')} className={navItemClass('email')} title="Email Console">
+              {activeIndicator('email')}
+              <span className="w-5 h-5 flex items-center justify-center text-lg font-bold text-slate-500 group-hover:text-slate-300" style={{color: currentView === 'email' ? '#0ea5e9' : ''}}>@</span>
+              {!isCollapsed && <span className="font-medium">Email Console</span>}
+            </div>
           </nav>
         </div>
 

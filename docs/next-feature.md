@@ -168,11 +168,11 @@ Milestone A: External API Panel
 - [x] Cache-busting and offline error handling
 
 Milestone B: Email Protocol Simulation
-- [ ] Email mocks in mockEngine/sw
-- [ ] services/emailService.ts
-- [ ] components/EmailConsole.tsx
-- [ ] Status scheduler (queued→delivered)
-- [ ] Protocol trace rendering
+- [x] Email mocks in mockEngine/sw (POST send, GET status/:id, GET inbox)
+- [x] services/emailService.ts (SMTP trace, validation, scheduler)
+- [x] components/EmailConsole.tsx (form + outbox + trace viewer)
+- [x] Status scheduler (queued→sending→delivered/failed)
+- [x] Protocol trace rendering (expandable SMTP simulation)
 
 Milestone C: Socket Programming (SSE)
 - [ ] /api/email/stream in sw.js
