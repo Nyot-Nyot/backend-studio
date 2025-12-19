@@ -56,6 +56,22 @@ export const SocketConsole: React.FC<SocketConsoleProps> = ({ addToast }) => {
 
   useEffect(scrollToBottom, [messages]);
 
+  // Cleanup effect for component unmount
+  useEffect(() => {
+    return () => {
+      // Clear typing timeout to prevent memory leaks
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+      
+      // Close WebSocket connection to prevent memory leaks
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.close(1000, 'Component unmounting');
+      }
+    };
+  }, [ws]);
+
   const connect = () => {
     if (connected || connecting) return;
     
@@ -115,8 +131,20 @@ export const SocketConsole: React.FC<SocketConsoleProps> = ({ addToast }) => {
               break;
               
             case 'pong':
-              const latency = Date.now() - data.originalTimestamp;
-              addToast(`Ping: ${latency}ms`, 'info');
+              if (import.meta.env?.DEV) {
+                console.log('Pong received:', data);
+              }
+              
+              const now = Date.now();
+              const originalTime = data.originalTimestamp;
+              
+              if (typeof originalTime === 'number' && originalTime > 0) {
+                const latency = now - originalTime;
+                addToast(`Ping: ${latency}ms`, 'info');
+              } else {
+                console.error('Invalid pong data:', data);
+                addToast('Ping failed: invalid response', 'error');
+              }
               break;
               
             case 'server_shutdown':
