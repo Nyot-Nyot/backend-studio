@@ -62,14 +62,47 @@ wss.on('connection', (ws, req) => {
     totalClients: wss.clients.size
   }, ws);
 
+  // Helper function to validate message structure
+  const validateMessage = (message, requiredFields) => {
+    if (!message || typeof message !== 'object') return false;
+    return requiredFields.every(field => {
+      if (field.includes('.')) {
+        // Handle nested properties like 'data.status'
+        const parts = field.split('.');
+        let obj = message;
+        for (const part of parts) {
+          if (!obj || typeof obj !== 'object' || !(part in obj)) return false;
+          obj = obj[part];
+        }
+        return true;
+      }
+      return field in message;
+    });
+  };
+
   // Handle incoming messages
   ws.on('message', (data) => {
     try {
       const message = JSON.parse(data.toString());
+      
+      // Validate basic message structure
+      if (!message || typeof message !== 'object' || !message.type || typeof message.type !== 'string') {
+        throw new Error('Message must have a string type property');
+      }
+
       console.log(`📨 Message from ${clientInfo.name}: ${message.type}`);
 
       switch (message.type) {
         case 'chat_message':
+          if (!validateMessage(message, ['content']) || typeof message.content !== 'string' || !message.content.trim()) {
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: 'Chat message must have non-empty content string',
+              timestamp: Date.now()
+            }));
+            return;
+          }
+          
           broadcast({
             type: 'chat_message',
             user: clientInfo,
@@ -93,7 +126,16 @@ wss.on('connection', (ws, req) => {
           break;
           
         case 'email_status_update':
-          // Relay email status updates to demonstrate real-time integration
+          if (!validateMessage(message, ['data', 'data.status']) || 
+              typeof message.data.status !== 'string') {
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: 'Email status update must have data.status string',
+              timestamp: Date.now()
+            }));
+            return;
+          }
+          
           broadcast({
             type: 'email_notification',
             user: clientInfo,
@@ -103,6 +145,17 @@ wss.on('connection', (ws, req) => {
           break;
           
         case 'ping':
+          if (!validateMessage(message, ['timestamp']) || 
+              typeof message.timestamp !== 'number' || 
+              message.timestamp <= 0) {
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: 'Ping must have valid timestamp number',
+              timestamp: Date.now()
+            }));
+            return;
+          }
+          
           ws.send(JSON.stringify({
             type: 'pong',
             timestamp: Date.now(),
@@ -112,12 +165,17 @@ wss.on('connection', (ws, req) => {
           
         default:
           console.log(`❓ Unknown message type: ${message.type}`);
+          ws.send(JSON.stringify({
+            type: 'error',
+            message: `Unknown message type: ${message.type}`,
+            timestamp: Date.now()
+          }));
       }
     } catch (e) {
-      console.error('❌ Failed to parse message:', e);
+      console.error('❌ Failed to process message:', e.message);
       ws.send(JSON.stringify({
         type: 'error',
-        message: 'Invalid message format',
+        message: `Invalid message format: ${e.message}`,
         timestamp: Date.now()
       }));
     }
