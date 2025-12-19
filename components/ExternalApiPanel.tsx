@@ -2,6 +2,32 @@ import React, { useMemo, useState } from 'react';
 import { fetchRandomUser, RandomUser } from '../services/apiService';
 import { RefreshCcw, AlertCircle } from 'lucide-react';
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    if (error.name === 'AbortError') {
+      return 'Request timeout. Please try again.';
+    }
+    
+    const message = error.message;
+    if (
+      message.includes('Failed to fetch') ||
+      message.includes('NetworkError') ||
+      message.includes('ERR_INTERNET_DISCONNECTED') ||
+      error.name === 'TypeError'
+    ) {
+      return 'Network error: You appear to be offline or the server is unreachable.';
+    }
+    
+    return message;
+  }
+  
+  if (typeof error === 'string') {
+    return error;
+  }
+  
+  return 'Failed to fetch data. You might be offline.';
+}
+
 export const ExternalApiPanel: React.FC = () => {
   const [user, setUser] = useState<RandomUser | null>(null);
   const [loading, setLoading] = useState(false);
@@ -14,29 +40,14 @@ export const ExternalApiPanel: React.FC = () => {
     setUser(null); // clear previous user so error is more visible
     let t: any;
     try {
-      // Force debug logging
-      console.log('Starting fetch, navigator.onLine:', navigator.onLine);
       
       const controller = new AbortController();
       t = setTimeout(() => controller.abort(), 15000); // timeout 15s
       const u = await fetchRandomUser(controller.signal);
       setUser(u);
-    } catch (e: any) {
-      console.log('Fetch error caught:', e);
-      const name = e?.name || '';
-      const msg = e?.message || '';
-      let errorMsg = '';
-      if (name === 'AbortError') {
-        errorMsg = 'Request timeout. Please try again.';
-      } else if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('ERR_INTERNET_DISCONNECTED') || name === 'TypeError') {
-        errorMsg = 'Network error: You appear to be offline or the server is unreachable.';
-      } else if (msg) {
-        errorMsg = msg;
-      } else {
-        errorMsg = 'Failed to fetch data. You might be offline.';
-      }
+    } catch (e: unknown) {
+      const errorMsg = getErrorMessage(e);
       setError(errorMsg);
-      console.log('Error state set to:', errorMsg);
     } finally {
       if (t) clearTimeout(t);
       setLoading(false);
@@ -50,10 +61,7 @@ export const ExternalApiPanel: React.FC = () => {
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-bold">External API: RandomUser</h2>
         <button
-          onClick={() => {
-            console.log('Fetch button clicked!');
-            handleFetch();
-          }}
+          onClick={handleFetch}
           disabled={loading}
           className="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:bg-slate-300 text-white font-bold flex items-center gap-2"
         >
