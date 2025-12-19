@@ -156,10 +156,11 @@ wss.on('connection', (ws, req) => {
             return;
           }
           
+          // Echo back the original client timestamp for proper round-trip calculation
           ws.send(JSON.stringify({
             type: 'pong',
-            timestamp: Date.now(),
-            latency: Date.now() - message.timestamp
+            originalTimestamp: message.timestamp,
+            serverTimestamp: Date.now()
           }));
           break;
           

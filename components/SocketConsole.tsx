@@ -115,7 +115,7 @@ export const SocketConsole: React.FC<SocketConsoleProps> = ({ addToast }) => {
               break;
               
             case 'pong':
-              const latency = Date.now() - data.timestamp;
+              const latency = Date.now() - data.originalTimestamp;
               addToast(`Ping: ${latency}ms`, 'info');
               break;
               
