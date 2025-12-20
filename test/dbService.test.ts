@@ -130,7 +130,7 @@ test("getCollection returns existing data", () => {
 });
 
 test("insert generates numeric ID with empty collection", () => {
-  const item = dbService.insert("products", { name: "Product 1" });
+  const item = dbService.insert("generic", { name: "Product 1" });
   assert(item.id !== undefined, "First insert should generate ID");
   assert(typeof item.id === "number", "Should generate numeric ID by default");
   assertEqual(item.id, 1, "First generated ID should be 1");
