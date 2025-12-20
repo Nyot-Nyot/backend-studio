@@ -200,6 +200,12 @@ export const dbService = {
     collection: string
   ): { count: number; idType: "numeric" | "string" | "mixed" } => {
     const list = dbService.getCollection(collection);
+
+    // Empty collection: indeterminate ID type. Use 'mixed' as a neutral default.
+    if (list.length === 0) {
+      return { count: 0, idType: "mixed" };
+    }
+
     const idTypes = new Set(list.map((item: any) => typeof item.id));
 
     let idType: "numeric" | "string" | "mixed" = "string";

@@ -402,6 +402,7 @@ runner.scenario("Scenario 7: Collection Stats and Diagnostics", async () => {
   // Empty collection
   const emptyStats = dbService.getStats("empty");
   assertEqual(emptyStats.count, 0, "Empty collection should have 0 items");
+  assertEqual(emptyStats.idType, "mixed", "Empty collection id type should be 'mixed'");
 });
 
 // ============================================
