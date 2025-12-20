@@ -39,6 +39,7 @@ import {
   Key,
 } from "lucide-react";
 import { generateMockData } from "../services/geminiService";
+import { formatAuthPreview } from "../services/authUtils";
 import { ToastType } from "./Toast";
 import { MOCK_VARIABLES_HELP } from "../services/mockEngine";
 
@@ -1340,8 +1341,7 @@ export const MockEditor: React.FC<MockEditorProps> = ({
                       📋 <strong>Expected Header:</strong>
                     </div>
                     <div className="font-mono bg-slate-900 text-emerald-400 px-3 py-2 rounded-md overflow-x-auto text-[10px] mt-1">
-                      Authorization: Bearer{" "}
-                      {formData.authConfig?.token || "my-secret-token-12345"}
+                      {formatAuthPreview(formData.authConfig)}
                     </div>
                   </p>
                 </div>
