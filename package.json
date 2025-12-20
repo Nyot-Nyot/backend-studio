@@ -17,20 +17,22 @@
     "test:export": "npx tsx test/task6_2_export_test.ts",
     "test:openapi": "npx tsx test/openApiService.test.ts",
     "test:openapi:validation": "npx tsx test/openApiValidation.test.ts",
-    "test:swagger": "npx tsx test/task6_4_swagger_export.ts"
+    "test:swagger": "npx tsx test/task6_4_swagger_export.ts",
+    "test:e2e": "playwright test --config=playwright.config.ts"
   },
   "dependencies": {
+    "@google/genai": "^1.33.0",
     "lucide-react": "^0.561.0",
-    "recharts": "^3.6.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
-    "@google/genai": "^1.33.0"
+    "recharts": "^3.6.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.57.0",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "tsx": "^4.9.6",
     "typescript": "~5.8.2",
-    "vite": "^6.2.0",
-    "tsx": "^4.9.6"
+    "vite": "^6.2.0"
   }
 }
