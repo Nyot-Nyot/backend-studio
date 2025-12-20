@@ -21,7 +21,7 @@ import {
 	Upload,
 	X,
 } from "lucide-react";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Dashboard } from "./components/Dashboard";
 import { DatabaseView } from "./components/DatabaseView";
 import { LogViewer } from "./components/LogViewer";
@@ -29,6 +29,7 @@ import { MockEditor } from "./components/MockEditor";
 import { Sidebar } from "./components/Sidebar";
 import { TestConsole } from "./components/TestConsole";
 import { ToastContainer, ToastMessage, ToastType } from "./components/Toast";
+import { generateServerCode as buildServerCode } from "./services/exportService";
 import { generateEndpointConfig } from "./services/geminiService";
 import { simulateRequest } from "./services/mockEngine";
 import { generateOpenApiSpec } from "./services/openApiService";
@@ -267,7 +268,14 @@ function App() {
 			if (exists) {
 				return prev.map(m => (m.id === mock.id ? { ...mock, projectId: activeProjectId } : m));
 			}
-			return [...prev, { ...mock, id: mock.id || crypto.randomUUID(), projectId: activeProjectId }];
+			return [
+				...prev,
+				{
+					...mock,
+					id: mock.id || crypto.randomUUID(),
+					projectId: activeProjectId,
+				},
+			];
 		});
 		setEditingMock(null);
 		setView("dashboard");
@@ -339,8 +347,16 @@ function App() {
 	};
 
 	const handleExportData = () => {
-		const data = { version: "1.0", timestamp: Date.now(), projects, mocks, envVars };
-		const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+		const data = {
+			version: "1.0",
+			timestamp: Date.now(),
+			projects,
+			mocks,
+			envVars,
+		};
+		const blob = new Blob([JSON.stringify(data, null, 2)], {
+			type: "application/json",
+		});
 		const url = URL.createObjectURL(blob);
 		const link = document.createElement("a");
 		link.href = url;
@@ -367,7 +383,10 @@ function App() {
 					)
 				) {
 					setProjects(data.projects);
-					const importedMocks = data.mocks.map((m: any) => ({ ...m, headers: m.headers || [] }));
+					const importedMocks = data.mocks.map((m: any) => ({
+						...m,
+						headers: m.headers || [],
+					}));
 					setMocks(importedMocks);
 					if (data.envVars && Array.isArray(data.envVars)) setEnvVars(data.envVars);
 					if (data.projects.length > 0) {
@@ -388,7 +407,9 @@ function App() {
 		const currentProject = projects.find(p => p.id === activeProjectId);
 		if (!currentProject) return;
 		const spec = generateOpenApiSpec(currentProject, mocks);
-		const blob = new Blob([JSON.stringify(spec, null, 2)], { type: "application/json" });
+		const blob = new Blob([JSON.stringify(spec, null, 2)], {
+			type: "application/json",
+		});
 		const url = URL.createObjectURL(blob);
 		const link = document.createElement("a");
 		link.href = url;
@@ -401,53 +422,10 @@ function App() {
 	};
 
 	// --- EXPORT SERVER & PACKAGE.JSON HANDLERS ---
-	const generateServerCode = () => {
+	const generateServerCode = useCallback(() => {
 		const activeMocks = mocks.filter(m => m.projectId === activeProjectId && m.isActive);
-		return `
-const express = require('express');
-const cors = require('cors');
-const app = express();
-const PORT = process.env.PORT || 3000;
-app.use(cors());
-app.use(express.json());
-
-// In-Memory Database (Reset on restart)
-const db = {};
-const getCollection = (name) => { if (!db[name]) db[name] = []; return db[name]; };
-
-// Mock Logic Helper
-const matchesRoute = (routePath, reqPath) => {
-    const routeParts = routePath.split('/').filter(Boolean);
-    const reqParts = reqPath.split('/').filter(Boolean);
-    if (routeParts.length !== reqParts.length) return false;
-    const params = {};
-    const match = routeParts.every((part, i) => {
-        if (part.startsWith(':')) {
-            params[part.substring(1)] = reqParts[i];
-            return true;
-        }
-        return part === reqParts[i];
-    });
-    return match ? params : null;
-};
-
-// Routes
-${activeMocks
-	.map(
-		m => `
-app.${m.method.toLowerCase()}('${m.path}', async (req, res) => {
-  // Logic for ${m.name}
-  // Note: This is a static export. Dynamic simulation logic is simplified.
-  res.status(${m.statusCode}).json(${m.responseBody});
-});`
-	)
-	.join("\n")}
-
-app.listen(PORT, () => {
-    console.log(\`Server running on port \${PORT}\`);
-});
-`;
-	};
+		return buildServerCode(activeMocks);
+	}, [mocks, activeProjectId]);
 
 	const generatePackageJson = () => {
 		const currentProjectName = projects.find(p => p.id === activeProjectId)?.name || "backend-api";
