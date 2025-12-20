@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 test('MockEditor auth: set Bearer token and persist', async ({ page }) => {
   // Open app (webServer will start via playwright.config)

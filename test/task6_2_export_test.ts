@@ -1,9 +1,9 @@
-import { generateServerCode } from "../services/exportService";
-import { MockEndpoint, HttpMethod } from "../types";
-import { writeFileSync, mkdirSync, rmSync } from "fs";
-import { join } from "path";
 import { spawn } from "child_process";
+import { mkdirSync, rmSync, writeFileSync } from "fs";
 import http from "http";
+import { join } from "path";
+import { generateServerCode } from "../services/exportService";
+import { HttpMethod, MockEndpoint } from "../types";
 
 // Sample mocks for testing
 const sampleMocks: MockEndpoint[] = [
