@@ -86,9 +86,14 @@ export const dbService = {
    * @returns Array of collection names
    */
   listCollections: (): string[] => {
-    return Object.keys(localStorage)
-      .filter((k) => k.startsWith(DB_PREFIX))
-      .map((k) => k.replace(DB_PREFIX, ""));
+    const names: string[] = [];
+    for (let i = 0; i < (localStorage.length || 0); i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(DB_PREFIX)) {
+        names.push(key.replace(DB_PREFIX, ""));
+      }
+    }
+    return names;
   },
 
   /**
