@@ -21,7 +21,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Dashboard } from "./components/Dashboard";
 import { DatabaseView } from "./components/DatabaseView";
 import { LogViewer } from "./components/LogViewer";
@@ -460,12 +460,12 @@ function App() {
   };
 
   // --- EXPORT SERVER & PACKAGE.JSON HANDLERS ---
-  const generateServerCode = () => {
+  const generateServerCode = useCallback(() => {
     const activeMocks = mocks.filter(
       (m) => m.projectId === activeProjectId && m.isActive
     );
     return buildServerCode(activeMocks);
-  };
+  }, [mocks, activeProjectId]);
 
   const generatePackageJson = () => {
     const currentProjectName =
