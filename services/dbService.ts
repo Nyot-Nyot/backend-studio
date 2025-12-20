@@ -23,6 +23,9 @@ const isNumericIdStrategy = (ids: any[]): boolean => {
   return ids.length > 0 && ids.every((val: any) => typeof val === "number");
 };
 
+// Collections that should default to UUIDs when empty
+const DEFAULT_UUID_COLLECTIONS = new Set<string>(["products", "items"]);
+
 /**
  * Generates a numeric ID by finding the maximum and incrementing
  */
@@ -122,8 +125,14 @@ export const dbService = {
         .filter((val: any) => val !== undefined && val !== null);
 
       if (existingIds.length === 0) {
-        // Default to numeric auto-increment for a fresh collection (1,2,3...)
-        item.id = 1;
+        // Default behavior for fresh collections:
+        // - some collections (e.g. products/items) prefer UUIDs by convention
+        // - otherwise default to numeric auto-increment
+        if (DEFAULT_UUID_COLLECTIONS.has(collection)) {
+          item.id = generateShortUuid();
+        } else {
+          item.id = 1;
+        }
       } else if (isNumericIdStrategy(existingIds)) {
         // Use numeric auto-increment strategy
         item.id = generateNumericId(existingIds as number[]);
