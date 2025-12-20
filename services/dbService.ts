@@ -121,7 +121,10 @@ export const dbService = {
         .map((i: any) => i.id)
         .filter((val: any) => val !== undefined && val !== null);
 
-      if (isNumericIdStrategy(existingIds)) {
+      if (existingIds.length === 0) {
+        // Default to numeric auto-increment for a fresh collection (1,2,3...)
+        item.id = 1;
+      } else if (isNumericIdStrategy(existingIds)) {
         // Use numeric auto-increment strategy
         item.id = generateNumericId(existingIds as number[]);
       } else {
