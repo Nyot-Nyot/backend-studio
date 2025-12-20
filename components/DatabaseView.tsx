@@ -56,13 +56,30 @@ export const DatabaseView = () => {
   };
 
   const handleDeleteItem = (index: number) => {
-    if (activeCollection && data[index]) {
-      const item = data[index];
-      const itemId = item.id ?? `(index ${index})`;
-      if (window.confirm(`Delete item ${itemId}?`)) {
+    if (!activeCollection || !data[index]) return;
+
+    const item = data[index];
+    const itemId = item.id;
+
+    if (itemId === undefined || itemId === null) {
+      // Fallback to index-based deletion if item has no stable id
+      if (window.confirm(`Delete item (index ${index})?`)) {
         const newData = data.filter((_, i) => i !== index);
         dbService.saveCollection(activeCollection, newData);
         setData(newData);
+      }
+      return;
+    }
+
+    if (window.confirm(`Delete item ${String(itemId)}?`)) {
+      const deleted = dbService.delete(activeCollection, itemId);
+      if (deleted) {
+        // Keep UI in sync by removing the item by id
+        setData((prev) => prev.filter((d) => d.id != itemId));
+      } else {
+        // As a safety fallback, reload collection from storage
+        const reloaded = dbService.getCollection(activeCollection);
+        setData(reloaded);
       }
     }
   };
