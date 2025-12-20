@@ -28,7 +28,7 @@ app.${m.method.toLowerCase()}('${m.path}', async (req, res) => {
   return `const express = require('express');
 const cors = require('cors');
 const app = require('express')();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 
 // Middleware
 app.use(cors());
@@ -45,7 +45,10 @@ app.use((req, res, next) => {
 // Routes
 ${routesCode}
 
-app.listen(PORT, () => {
-  console.log('Server running on port ' + PORT);
+const server = app.listen(PORT, () => {
+  // If PORT was 0 (ephemeral), server.address() contains the real port
+  const addr = server.address();
+  const actualPort = (addr && typeof addr === 'object' && 'port' in addr) ? addr.port : PORT;
+  console.log('Server running on port ' + actualPort);
 });`;
 };

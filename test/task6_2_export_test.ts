@@ -189,10 +189,15 @@ async function runTests() {
 
   // Step 4: Start the server
   console.log("📝 Step 4: Starting server...");
+  // Start server with an ephemeral port (PORT=0) to avoid collisions in CI/dev
   const server = spawn("node", [join(testDir, "server.js")], {
     cwd: testDir,
+    env: { ...process.env, PORT: "0" },
     stdio: ["pipe", "pipe", "pipe"],
   });
+
+  // Track bound port (updated after server logs its actual port)
+  let boundPort = 3000;
 
   let serverStarted = false;
   let serverOutput: string[] = [];
@@ -201,8 +206,10 @@ async function runTests() {
     const msg = data.toString();
     serverOutput.push(msg);
     console.log(`[SERVER] ${msg.trim()}`);
-    if (msg.includes("Server running on port")) {
+    const m = msg.match(/Server running on port\s*(\d+)/i);
+    if (m) {
       serverStarted = true;
+      boundPort = Number(m[1]);
     }
   });
 
@@ -219,7 +226,7 @@ async function runTests() {
     return new Promise((resolve, reject) => {
       const options = {
         hostname: "localhost",
-        port: 3000,
+        port: boundPort,
         path,
         method,
         headers: {} as any,
