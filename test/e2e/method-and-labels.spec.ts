@@ -6,9 +6,9 @@ test('Method badge colors and key labels present', async ({ page }) => {
   // Ensure Overview visible
   await expect(page.locator('h2', { hasText: 'Overview' })).toBeVisible();
 
-  // Find Ping card and check method badge color for GET
-  const card = page.locator('h3:has-text("Ping")').locator('..').locator('..');
-  const methodBadge = card.locator('span', { hasText: 'GET' });
+  // Use stable test-id for Ping card and check method badge color for GET
+  const card = page.getByTestId('mock-card-Ping');
+  const methodBadge = card.getByText('GET');
   await expect(methodBadge).toBeVisible();
   const badgeClass = await methodBadge.getAttribute('class');
   expect(badgeClass).toContain('text-blue-700');
