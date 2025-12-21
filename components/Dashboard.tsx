@@ -154,6 +154,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           return (
             <div 
               key={mock.id}
+              data-testid={`mock-card-${mock.name.replace(/[^a-zA-Z0-9_-]/g, '-')}`}
               onClick={() => onEdit(mock)}
               className={`group relative bg-white rounded-2xl border transition-all duration-300 hover:shadow-xl hover:shadow-slate-200/50 hover:-translate-y-1 cursor-pointer overflow-hidden flex flex-col animate-in fade-in slide-in-from-bottom-4 fill-mode-backwards ${
                 mock.isActive 
