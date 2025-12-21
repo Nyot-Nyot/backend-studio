@@ -121,12 +121,10 @@ test('Array root roundtrip preserved when switching modes', async ({ page }) => 
 
   const formatted = await page.locator('textarea').inputValue();
   const parsed = JSON.parse(formatted);
-  if (!Array.isArray(parsed) || parsed.length !== 2) {
-    throw new Error('Array roundtrip failed');
-  }
-  if (parsed[0].name !== 'A' || parsed[1].name !== 'B') {
-    throw new Error('Array contents changed during roundtrip');
-  }
+  expect(Array.isArray(parsed)).toBe(true);
+  expect(parsed.length).toBe(2);
+  expect(parsed[0].name).toBe('A');
+  expect(parsed[1].name).toBe('B');
 });
 
 
@@ -150,9 +148,7 @@ test('Visual edits reflect into responseBody (two-way sync)', async ({ page }) =
   await page.click('button:has-text("JSON")');
   const formatted = await page.locator('textarea').inputValue();
   const parsed = JSON.parse(formatted);
-  if (parsed[0].name !== 'Z') {
-    throw new Error('Change in visual editor did not reflect in responseBody');
-  }
+  expect(parsed[0].name).toBe('Z');
 });
 
 
@@ -179,7 +175,5 @@ test('Nested object & array conversion preserves structure', async ({ page }) =>
   await page.click('button:has-text("JSON")');
 
   const parsed = JSON.parse(await page.locator('textarea').inputValue());
-  if (parsed.users[0].tags[0] !== 'z') {
-    throw new Error('Nested array element did not update correctly');
-  }
+  expect(parsed.users[0].tags[0]).toBe('z');
 });
