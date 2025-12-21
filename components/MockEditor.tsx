@@ -1590,7 +1590,23 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 								</>
 							)}
 						</span>
-						<span className="font-mono text-slate-400 flex items-center gap-1 opacity-70">
+						<span className="font-mono text-slate-400 flex items-center gap-3 opacity-70">
+							<div className="flex items-center gap-2">
+								<button
+									type="button"
+									onClick={formatJSON}
+									className="text-xs px-2 py-1 rounded bg-white border border-slate-200"
+								>
+									Format
+								</button>
+								<button
+									type="button"
+									onClick={minifyJSON}
+									className="text-xs px-2 py-1 rounded bg-white border border-slate-200"
+								>
+									Minify
+								</button>
+							</div>
 							<FileJson className="w-3.5 h-3.5" />{" "}
 							{editorMode === "visual" ? "Generated JSON" : "Raw JSON"}
 						</span>
