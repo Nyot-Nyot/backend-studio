@@ -97,10 +97,18 @@ test('Import Configuration handles invalid file gracefully', async ({ page }) =>
 test('Factory Reset clears storage and returns to default workspace', async ({ page }) => {
   await page.goto('/');
 
-  // Add a new project to ensure not default state
+  // Create a temporary workspace so the app is not in default state
+  await page.click('text=New Workspace');
+  await page.fill('input[placeholder="Workspace Name"]', 'Temp Project');
+  await page.click('button:has-text("Create")');
+
+  // Ensure the workspace was created and visible in selector
+  await expect(page.locator('text=Workspace "Temp Project" created')).toBeVisible();
+  await expect(page.locator('select')).toContainText('Temp Project');
+
+  // Go to Configuration to trigger factory reset (confirm dialog)
   await page.click('div[title="Configuration"]');
 
-  // Confirm factory reset dialog
   page.on('dialog', async dialog => {
     await dialog.accept();
   });
