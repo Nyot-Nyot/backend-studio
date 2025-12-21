@@ -105,10 +105,22 @@
 ### Cross-sprint notes
 
 -   **Sprint 3 – Epic E7 (MockEditor polishing)**
+
     -   [x] Added Playwright e2e tests for **Route conflict detection** and **JSON validation / Syntax Error** (`test/e2e/mockEditor-validation.spec.ts`).
     -   [x] Verified Save is disabled when `conflictError` or `jsonError` is present and proper toast messages are shown.
     -   [x] Expanded tests to cover: Format button behaviour, error line highlighting, array/object roundtrip, and visual→code two-way sync.
     -   [x] Added Playwright e2e tests for Export/Import/Factory Reset (`test/e2e/export-import.spec.ts`) and verified successful behavior and error handling (tests executed locally and passed).
     -   [x] Added Playwright layout/responsiveness tests for Chromium and verified multiple viewports (1366×768, 1440×900, 768×1024) passed; automated Firefox runs also passed; WebKit blocked due to missing system deps in this environment.
+
+-   **Sprint 3 – Epic E8 (Task 8.1: Testing Checklist additions & execution)**
+    -   [x] Added `Workspace & Project Management` checklist to `docs/testing-checklist.md` (create/delete/switch/rename/import).
+    -   [x] Added `Route Design & Mocking` checklist (methods, dynamic paths, conflict detection, save blocking).
+    -   [x] Added `Response Body & Generators` checklist (placeholders, `{{@param}}`, `{{$faker*}}`, pretty/minified output).
+    -   [x] Added `Stateful Mocking (DatabaseView)` checklist (insert/update/delete, persistence, factory reset).
+    -   [x] Added `Authentication` checklist (`NONE`, `BEARER_TOKEN`, `API_KEY`, Test Console integration).
+    -   [x] Added `Testing & Monitoring` checklist (Test Console and LogViewer verification).
+    -   [x] Added `Export/Deployment` checklist (OpenAPI export validation, server bundle export & run).
+    -   [x] Executed checklist items and recorded results in `docs/testing-checklist.md`.
+        -   Tests executed: `npm run test:e2e` (Chromium + Firefox), `npm run test:openapi`, `npm run test:scenarios`, `npm run test:simulateRequest`, `npm run test:export`, `npm run test:swagger` — all passing except WebKit runs blocked due to missing system dependencies (see test log).
 
 (Tasks related to Mode sync, Format JSON button & nested conversion still ongoing in Sprint 3.)
