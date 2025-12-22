@@ -19,6 +19,13 @@ export interface AuthConfig {
   headerKey?: string;  // Custom header key for API_KEY type (e.g. 'x-api-key')
 }
 
+export interface ProxyConfig {
+  enabled: boolean;
+  target?: string; // full URL to forward requests to (e.g., https://api.example.com)
+  timeout?: number; // in ms
+  fallbackToMock?: boolean; // if true, fall back to local mock on proxy failure
+}
+
 export interface EnvironmentVariable {
   id: string;
   key: string;
@@ -41,6 +48,7 @@ export interface MockEndpoint {
   headers: { key: string; value: string }[];
   storeName?: string; // NEW: If set, this endpoint interacts with a data bucket
   authConfig?: AuthConfig; // NEW: Built-in auth validation
+  proxy?: ProxyConfig; // Optional per-route proxy passthrough configuration
 }
 
 export interface LogEntry {

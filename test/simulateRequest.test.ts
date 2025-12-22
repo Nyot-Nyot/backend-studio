@@ -11,9 +11,9 @@
  * All methods return correct status codes & bodies
  */
 
-import { simulateRequest } from "../services/mockEngine";
 import { dbService } from "../services/dbService";
-import { MockEndpoint, HttpMethod } from "../types";
+import { simulateRequest } from "../services/mockEngine";
+import { HttpMethod, MockEndpoint } from "../types";
 
 // Mock localStorage
 const mockLocalStorage = (() => {
@@ -55,16 +55,26 @@ if (!global.crypto.randomUUID) {
 let passCount = 0;
 let failCount = 0;
 
-function test(name: string, fn: () => void) {
-  try {
-    mockLocalStorage.clear();
-    fn();
-    console.log(`✅ PASS: ${name}`);
-    passCount++;
-  } catch (error: any) {
-    console.error(`❌ FAIL: ${name}`);
-    console.error(`   ${error.message}`);
-    failCount++;
+const testFns: Array<() => Promise<void>> = [];
+
+function test(name: string, fn: () => void | Promise<void>) {
+  testFns.push(async () => {
+    try {
+      mockLocalStorage.clear();
+      await fn();
+      console.log(`✅ PASS: ${name}`);
+      passCount++;
+    } catch (error: any) {
+      console.error(`❌ FAIL: ${name}`);
+      console.error(`   ${error.message}`);
+      failCount++;
+    }
+  });
+}
+
+async function finalizeTests() {
+  for (const run of testFns) {
+    await run();
   }
 }
 
@@ -117,11 +127,12 @@ function createMockEndpoint(
 
 console.log("🧪 Starting Stateful simulateRequest Tests\n");
 
+
 // ============================================
 // GET TESTS
 // ============================================
 
-test("GET without params: return entire collection", () => {
+test("GET without params: return entire collection", async () => {
   // Setup: Insert test data
   dbService.insert("users", { id: 1, name: "Alice" });
   dbService.insert("users", { id: 2, name: "Bob" });
@@ -132,7 +143,7 @@ test("GET without params: return entire collection", () => {
     storeName: "users",
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/api/users",
     {},
@@ -146,7 +157,7 @@ test("GET without params: return entire collection", () => {
   assertEqual(items.length, 2, "Should return 2 items");
 });
 
-test("GET with params: return item by id", () => {
+test("GET with params: return item by id", async () => {
   // Setup
   dbService.insert("users", { id: 1, name: "Alice" });
   dbService.insert("users", { id: 2, name: "Bob" });
@@ -157,7 +168,7 @@ test("GET with params: return item by id", () => {
     storeName: "users",
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/api/users/1",
     {},
@@ -172,7 +183,7 @@ test("GET with params: return item by id", () => {
   assertEqual(item.name, "Alice", "Should return correct name");
 });
 
-test("GET with params: return 404 if item not found", () => {
+test("GET with params: return 404 if item not found", async () => {
   // No data inserted
 
   const mock = createMockEndpoint({
@@ -181,7 +192,7 @@ test("GET with params: return 404 if item not found", () => {
     storeName: "users",
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/api/users/999",
     {},
@@ -195,7 +206,7 @@ test("GET with params: return 404 if item not found", () => {
   assert(response.error, "Should include error message");
 });
 
-test("GET with string ID in URL, numeric ID in DB", () => {
+test("GET with string ID in URL, numeric ID in DB", async () => {
   // Setup with numeric ID
   dbService.insert("users", { id: 42, name: "Charlie" });
 
@@ -206,7 +217,7 @@ test("GET with string ID in URL, numeric ID in DB", () => {
   });
 
   // Request with string "42" in URL
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/api/users/42",
     {},
@@ -228,7 +239,7 @@ test("GET with string ID in URL, numeric ID in DB", () => {
 // POST TESTS
 // ============================================
 
-test("POST: parse JSON body, insert, return new item", () => {
+test("POST: parse JSON body, insert, return new item", async () => {
   const mock = createMockEndpoint({
     method: HttpMethod.POST,
     path: "/api/users",
@@ -240,7 +251,7 @@ test("POST: parse JSON body, insert, return new item", () => {
     email: "david@example.com",
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.POST,
     "http://api.example.com/api/users",
     { "Content-Type": "application/json" },
@@ -264,7 +275,7 @@ test("POST: parse JSON body, insert, return new item", () => {
   assert(stored !== undefined, "Item should be stored in collection");
 });
 
-test("POST: validate JSON body, return 400 if invalid", () => {
+test("POST: validate JSON body, return 400 if invalid", async () => {
   const mock = createMockEndpoint({
     method: HttpMethod.POST,
     path: "/api/users",
@@ -273,7 +284,7 @@ test("POST: validate JSON body, return 400 if invalid", () => {
 
   const invalidJson = "not valid json {]";
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.POST,
     "http://api.example.com/api/users",
     { "Content-Type": "application/json" },
@@ -287,14 +298,14 @@ test("POST: validate JSON body, return 400 if invalid", () => {
   assert(response.error, "Should include error message");
 });
 
-test("POST: handle empty body (empty JSON)", () => {
+test("POST: handle empty body (empty JSON)", async () => {
   const mock = createMockEndpoint({
     method: HttpMethod.POST,
     path: "/api/users",
     storeName: "users",
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.POST,
     "http://api.example.com/api/users",
     { "Content-Type": "application/json" },
@@ -308,7 +319,7 @@ test("POST: handle empty body (empty JSON)", () => {
   assert(item.id !== undefined, "Should have generated ID");
 });
 
-test("POST: multiple items maintain unique IDs", () => {
+test("POST: multiple items maintain unique IDs", async () => {
   const mock = createMockEndpoint({
     method: HttpMethod.POST,
     path: "/api/users",
@@ -316,7 +327,7 @@ test("POST: multiple items maintain unique IDs", () => {
   });
 
   // Create first item
-  const result1 = simulateRequest(
+  const result1 = await simulateRequest(
     HttpMethod.POST,
     "http://api.example.com/api/users",
     {},
@@ -325,9 +336,10 @@ test("POST: multiple items maintain unique IDs", () => {
     []
   );
   const item1 = JSON.parse(result1.response.body);
+  console.log('DEBUG item1 id:', item1.id);
 
   // Create second item
-  const result2 = simulateRequest(
+  const result2 = await simulateRequest(
     HttpMethod.POST,
     "http://api.example.com/api/users",
     {},
@@ -336,6 +348,7 @@ test("POST: multiple items maintain unique IDs", () => {
     []
   );
   const item2 = JSON.parse(result2.response.body);
+  console.log('DEBUG item2 id:', item2.id);
 
   assert(item1.id !== item2.id, "IDs should be unique");
   assertEqual(item1.name, "User1", "First item name");
@@ -346,7 +359,7 @@ test("POST: multiple items maintain unique IDs", () => {
 // PUT/PATCH TESTS
 // ============================================
 
-test("PUT: update existing item by id", () => {
+test("PUT: update existing item by id", async () => {
   // Setup
   const created = dbService.insert("users", { name: "Eve" });
 
@@ -361,7 +374,7 @@ test("PUT: update existing item by id", () => {
     email: "eve@example.com",
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.PUT,
     `http://api.example.com/api/users/${created.id}`,
     { "Content-Type": "application/json" },
@@ -377,7 +390,7 @@ test("PUT: update existing item by id", () => {
   assertEqual(updated.email, "eve@example.com", "Email should be added");
 });
 
-test("PATCH: update existing item by id", () => {
+test("PATCH: update existing item by id", async () => {
   // Setup
   const created = dbService.insert("users", {
     name: "Frank",
@@ -392,7 +405,7 @@ test("PATCH: update existing item by id", () => {
 
   const updateBody = JSON.stringify({ name: "Frank Updated" });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.PATCH,
     `http://api.example.com/api/users/${created.id}`,
     { "Content-Type": "application/json" },
@@ -407,7 +420,7 @@ test("PATCH: update existing item by id", () => {
   assertEqual(updated.email, "frank@example.com", "Email should persist");
 });
 
-test("PUT: return 404 if item not found", () => {
+test("PUT: return 404 if item not found", async () => {
   const mock = createMockEndpoint({
     method: HttpMethod.PUT,
     path: "/api/users/:id",
@@ -416,7 +429,7 @@ test("PUT: return 404 if item not found", () => {
 
   const updateBody = JSON.stringify({ name: "Nobody" });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.PUT,
     "http://api.example.com/api/users/999",
     { "Content-Type": "application/json" },
@@ -430,7 +443,7 @@ test("PUT: return 404 if item not found", () => {
   assert(response.error, "Should include error message");
 });
 
-test("PUT: return 400 if JSON invalid", () => {
+test("PUT: return 400 if JSON invalid", async () => {
   // Setup
   const created = dbService.insert("users", { name: "Grace" });
 
@@ -442,7 +455,7 @@ test("PUT: return 400 if JSON invalid", () => {
 
   const invalidJson = "{invalid json}";
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.PUT,
     `http://api.example.com/api/users/${created.id}`,
     { "Content-Type": "application/json" },
@@ -456,7 +469,7 @@ test("PUT: return 400 if JSON invalid", () => {
   assert(response.error, "Should include error message");
 });
 
-test("PUT: return 404 if route doesn't match (missing ID segment)", () => {
+test("PUT: return 404 if route doesn't match (missing ID segment)", async () => {
   // Route requires :id parameter, so /api/users without ID won't match
   const mock = createMockEndpoint({
     method: HttpMethod.PUT,
@@ -466,7 +479,7 @@ test("PUT: return 404 if route doesn't match (missing ID segment)", () => {
 
   const updateBody = JSON.stringify({ name: "Someone" });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.PUT,
     "http://api.example.com/api/users", // Missing ID segment
     { "Content-Type": "application/json" },
@@ -484,7 +497,7 @@ test("PUT: return 404 if route doesn't match (missing ID segment)", () => {
   assert(response.error, "Should include error message");
 });
 
-test("PUT: update with string ID, numeric ID in DB", () => {
+test("PUT: update with string ID, numeric ID in DB", async () => {
   // Setup with numeric ID
   const created = dbService.insert("users", { id: 99, name: "Helen" });
 
@@ -496,7 +509,7 @@ test("PUT: update with string ID, numeric ID in DB", () => {
 
   const updateBody = JSON.stringify({ name: "Helen Updated" });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.PUT,
     "http://api.example.com/api/users/99", // String "99" in URL
     { "Content-Type": "application/json" },
@@ -522,7 +535,7 @@ test("PUT: update with string ID, numeric ID in DB", () => {
 // DELETE TESTS
 // ============================================
 
-test("DELETE: remove item by id, return 200 on success", () => {
+test("DELETE: remove item by id, return 200 on success", async () => {
   // Setup
   const created = dbService.insert("users", { name: "Ivan" });
 
@@ -532,7 +545,7 @@ test("DELETE: remove item by id, return 200 on success", () => {
     storeName: "users",
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.DELETE,
     `http://api.example.com/api/users/${created.id}`,
     {},
@@ -550,14 +563,14 @@ test("DELETE: remove item by id, return 200 on success", () => {
   assert(notFound === undefined, "Item should be deleted from collection");
 });
 
-test("DELETE: return 404 if item not found", () => {
+test("DELETE: return 404 if item not found", async () => {
   const mock = createMockEndpoint({
     method: HttpMethod.DELETE,
     path: "/api/users/:id",
     storeName: "users",
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.DELETE,
     "http://api.example.com/api/users/999",
     {},
@@ -571,7 +584,7 @@ test("DELETE: return 404 if item not found", () => {
   assert(response.error, "Should include error message");
 });
 
-test("DELETE: return 404 if route doesn't match (missing ID segment)", () => {
+test("DELETE: return 404 if route doesn't match (missing ID segment)", async () => {
   // Route requires :id parameter, so /api/users without ID won't match
   const mock = createMockEndpoint({
     method: HttpMethod.DELETE,
@@ -579,7 +592,7 @@ test("DELETE: return 404 if route doesn't match (missing ID segment)", () => {
     storeName: "users",
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.DELETE,
     "http://api.example.com/api/users", // Missing ID segment
     {},
@@ -597,7 +610,7 @@ test("DELETE: return 404 if route doesn't match (missing ID segment)", () => {
   assert(response.error, "Should include error message");
 });
 
-test("DELETE: with string ID, numeric ID in DB", () => {
+test("DELETE: with string ID, numeric ID in DB", async () => {
   // Setup
   const created = dbService.insert("users", { id: 88, name: "Jack" });
 
@@ -607,7 +620,7 @@ test("DELETE: with string ID, numeric ID in DB", () => {
     storeName: "users",
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.DELETE,
     "http://api.example.com/api/users/88", // String "88" in URL
     {},
@@ -633,7 +646,7 @@ test("DELETE: with string ID, numeric ID in DB", () => {
 // COMPLEX SCENARIOS
 // ============================================
 
-test("Full CRUD workflow: POST → GET → PUT → DELETE", () => {
+test("Full CRUD workflow: POST → GET → PUT → DELETE", async () => {
   const postMock = createMockEndpoint({
     method: HttpMethod.POST,
     path: "/api/items",
@@ -659,7 +672,7 @@ test("Full CRUD workflow: POST → GET → PUT → DELETE", () => {
   });
 
   // POST: Create item
-  const createRes = simulateRequest(
+  const createRes = await simulateRequest(
     HttpMethod.POST,
     "http://api.example.com/api/items",
     {},
@@ -672,7 +685,7 @@ test("Full CRUD workflow: POST → GET → PUT → DELETE", () => {
   const itemId = created.id;
 
   // GET: Retrieve item
-  const getRes = simulateRequest(
+  const getRes = await simulateRequest(
     HttpMethod.GET,
     `http://api.example.com/api/items/${itemId}`,
     {},
@@ -685,7 +698,7 @@ test("Full CRUD workflow: POST → GET → PUT → DELETE", () => {
   assertEqual(retrieved.name, "Test Item", "Should retrieve same item");
 
   // PUT: Update item
-  const updateRes = simulateRequest(
+  const updateRes = await simulateRequest(
     HttpMethod.PUT,
     `http://api.example.com/api/items/${itemId}`,
     {},
@@ -698,7 +711,7 @@ test("Full CRUD workflow: POST → GET → PUT → DELETE", () => {
   assertEqual(updated.name, "Updated Item", "Should update item");
 
   // DELETE: Remove item
-  const deleteRes = simulateRequest(
+  const deleteRes = await simulateRequest(
     HttpMethod.DELETE,
     `http://api.example.com/api/items/${itemId}`,
     {},
@@ -709,7 +722,7 @@ test("Full CRUD workflow: POST → GET → PUT → DELETE", () => {
   assertEqual(deleteRes.response.status, 200, "Delete should return 200");
 
   // Verify deleted
-  const notFoundRes = simulateRequest(
+  const notFoundRes = await simulateRequest(
     HttpMethod.GET,
     `http://api.example.com/api/items/${itemId}`,
     {},
@@ -724,7 +737,7 @@ test("Full CRUD workflow: POST → GET → PUT → DELETE", () => {
   );
 });
 
-test("Multiple simultaneous operations on different collections", () => {
+test("Multiple simultaneous operations on different collections", async () => {
   const userPostMock = createMockEndpoint({
     method: HttpMethod.POST,
     path: "/api/users",
@@ -738,7 +751,7 @@ test("Multiple simultaneous operations on different collections", () => {
   });
 
   // Create user
-  const userRes = simulateRequest(
+  const userRes = await simulateRequest(
     HttpMethod.POST,
     "http://api.example.com/api/users",
     {},
@@ -749,7 +762,7 @@ test("Multiple simultaneous operations on different collections", () => {
   const user = JSON.parse(userRes.response.body);
 
   // Create product
-  const productRes = simulateRequest(
+  const productRes = await simulateRequest(
     HttpMethod.POST,
     "http://api.example.com/api/products",
     {},
@@ -767,14 +780,14 @@ test("Multiple simultaneous operations on different collections", () => {
   assertEqual(productCount, 1, "Should have 1 product");
 });
 
-test("Status codes and response structure are correct", () => {
+test("Status codes and response structure are correct", async () => {
   const mock = createMockEndpoint({
     method: HttpMethod.GET,
     path: "/api/test",
     storeName: "test",
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/api/test",
     {},
@@ -797,12 +810,12 @@ test("Status codes and response structure are correct", () => {
   );
 });
 
-// ============================================
-// Run All Tests
-// ============================================
+(async () => {
+  await finalizeTests();
 
-console.log("\n" + "=".repeat(60));
-console.log(`📊 Test Results: ${passCount} passed, ${failCount} failed`);
-console.log("=".repeat(60) + "\n");
+  console.log("\n" + "=".repeat(60));
+  console.log(`📊 Test Results: ${passCount} passed, ${failCount} failed`);
+  console.log("=".repeat(60) + "\n");
 
-process.exit(failCount === 0 ? 0 : 1);
+  process.exit(failCount === 0 ? 0 : 1);
+})();

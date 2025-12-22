@@ -179,9 +179,70 @@ function App() {
 		if (activeProjectId) localStorage.setItem(STORAGE_KEY_ACTIVE_PROJECT, activeProjectId);
 	}, [activeProjectId]);
 
+	// Expose a test-only helper to inject fixture data during e2e tests (DEV-only)
+	if (import.meta.env?.DEV) {
+		// Attach a helper to the window that tests can call to set projects/mocks
+		// Usage (page.evaluate): window.__applyTestFixtures(projects, mocks, activeProjectId)
+		(window as any).__applyTestFixtures = (
+			projectsValue: any[],
+			mocksValue: any[],
+			activeProjectIdValue?: string
+		) => {
+			try {
+				setProjects(projectsValue);
+				setMocks(mocksValue);
+				if (activeProjectIdValue) setActiveProjectId(activeProjectIdValue);
+				// Persist to localStorage as well
+				localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projectsValue));
+				localStorage.setItem(STORAGE_KEY_MOCKS, JSON.stringify(mocksValue));
+				if (activeProjectIdValue) localStorage.setItem(STORAGE_KEY_ACTIVE_PROJECT, activeProjectIdValue);
+				return true;
+			} catch (err) {
+				console.error("applyTestFixtures failed", err);
+				return false;
+			}
+		};
+
+		// Also expose a test helper to directly call simulateRequest with the current in-memory mocks
+		(window as any).__simulateRequest = async (
+			method: string,
+			url: string,
+			headersObj: Record<string, string> = {},
+			body: string = ""
+		) => {
+			try {
+				const res = await simulateRequest(
+					method as any,
+					url,
+					headersObj,
+					body,
+					mocksRef.current,
+					envVarsRef.current
+				);
+				return res;
+			} catch (err) {
+				console.error("simulateRequest helper error", err);
+				throw err;
+			}
+		};
+
+		// Test helper to set mocks directly into the runtime (bypass storage races)
+		(window as any).__setMocksDirect = (mocksValue: any[]) => {
+			try {
+				mocksRef.current = mocksValue;
+				setMocks(mocksValue);
+				localStorage.setItem(STORAGE_KEY_MOCKS, JSON.stringify(mocksValue));
+				return true;
+			} catch (e) {
+				console.error("setMocksDirect failed", e);
+				return false;
+			}
+		};
+	}
+
 	// --- SERVICE WORKER LISTENER ---
 	useEffect(() => {
-		const handleMessage = (event: MessageEvent) => {
+		const handleMessage = async (event: MessageEvent) => {
 			if (event.data && event.data.type === "INTERCEPT_REQUEST") {
 				const { payload } = event.data;
 				const port = event.ports[0];
@@ -196,7 +257,7 @@ function App() {
 					});
 				}
 
-				const result = simulateRequest(
+				const result = await simulateRequest(
 					payload.method,
 					payload.url,
 					payload.headers,

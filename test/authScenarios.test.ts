@@ -24,7 +24,7 @@
  */
 
 import { simulateRequest } from "../services/mockEngine";
-import { MockEndpoint, HttpMethod } from "../types";
+import { HttpMethod, MockEndpoint } from "../types";
 
 // Mock localStorage
 const mockLocalStorage = (() => {
@@ -65,17 +65,26 @@ if (!global.crypto.randomUUID) {
 // Test utilities
 let passCount = 0;
 let failCount = 0;
+const testFns: Array<() => Promise<void>> = [];
 
-function test(name: string, fn: () => void) {
-  try {
-    mockLocalStorage.clear();
-    fn();
-    console.log(`✅ PASS: ${name}`);
-    passCount++;
-  } catch (error: any) {
-    console.error(`❌ FAIL: ${name}`);
-    console.error(`   ${error.message}`);
-    failCount++;
+function test(name: string, fn: () => void | Promise<void>) {
+  testFns.push(async () => {
+    try {
+      mockLocalStorage.clear();
+      await fn();
+      console.log(`✅ PASS: ${name}`);
+      passCount++;
+    } catch (error: any) {
+      console.error(`❌ FAIL: ${name}`);
+      console.error(`   ${error.message}`);
+      failCount++;
+    }
+  });
+}
+
+async function finalizeTests() {
+  for (const run of testFns) {
+    await run();
   }
 }
 
@@ -232,7 +241,7 @@ test("NONE: Status 204 - No Content response", () => {
 console.log("📊 SCENARIO 2: Bearer Token Authentication\n");
 
 // 2.1: No auth header
-test("BEARER_TOKEN: Status 401 - No auth header provided", () => {
+test("BEARER_TOKEN: Status 401 - No auth header provided", async () => {
   const mock = createMockEndpoint({
     path: "/api/secure",
     statusCode: 200,
@@ -242,7 +251,7 @@ test("BEARER_TOKEN: Status 401 - No auth header provided", () => {
     },
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/api/secure",
     {},
@@ -280,7 +289,7 @@ test("BEARER_TOKEN: Status 401 - Wrong token provided", () => {
 });
 
 // 2.3: Correct token with various status codes
-test("BEARER_TOKEN: Status 200 - Correct token, 200 OK", () => {
+test("BEARER_TOKEN: Status 200 - Correct token returns status code", async () => {
   const mock = createMockEndpoint({
     path: "/api/secure",
     statusCode: 200,
@@ -290,7 +299,7 @@ test("BEARER_TOKEN: Status 200 - Correct token, 200 OK", () => {
     },
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/api/secure",
     { Authorization: "Bearer valid-token-123" },

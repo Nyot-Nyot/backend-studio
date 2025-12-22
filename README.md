@@ -10,6 +10,23 @@ Backend Studio adalah single-page application untuk mensimulasikan REST API back
 
 Persyaratan singkat: Node.js (LTS) dan npm. Untuk menjalankan: jalankan `npm install` lalu `npm run dev`, kemudian buka alamat yang tampil di terminal (biasanya `http://localhost:5173`).
 
+## Continuous Integration (CI)
+
+A GitHub Actions workflow is included at `.github/workflows/ci.yml` that runs unit tests and Playwright E2E on pushes and pull requests to `main`/`master`.
+
+Run the same checks locally:
+
+-   Unit tests: `npm run test:unit`
+-   Playwright E2E: `npm run test:e2e`
+
+To add a badge to the repository README use the following template (replace `OWNER` and `REPO`):
+
+```
+![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)
+```
+
+The workflow will upload Playwright report artifacts on every run for debugging when tests fail.
+
 ## Ringkasan Proyek
 
 Aplikasi ini bertujuan menyediakan lingkungan kerja lokal yang dapat memalsukan (mock) endpoint API sehingga pengembangan frontend dapat berjalan beriringan tanpa backend ready. Komponen pentingnya meliputi `sw.js` untuk intercept request, `mockEngine` untuk membangkitkan response, dan panel Test Console untuk mengirim/mengecek request.

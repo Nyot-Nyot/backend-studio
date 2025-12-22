@@ -18,7 +18,9 @@
 		"test:openapi": "npx tsx test/openApiService.test.ts",
 		"test:openapi:validation": "npx tsx test/openApiValidation.test.ts",
 		"test:swagger": "npx tsx test/task6_4_swagger_export.ts",
-		"test:e2e": "playwright test --config=playwright.config.ts"
+		"test:e2e": "playwright test --config=playwright.config.ts",
+		"test:unit": "npx tsx test/*.test.ts",
+		"ci": "npm run test:unit && npm run test:e2e"
 	},
 	"dependencies": {
 		"@google/genai": "^1.33.0",
