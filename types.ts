@@ -77,3 +77,102 @@ export interface TestConsoleState {
 }
 
 export type ViewState = 'dashboard' | 'editor' | 'logs' | 'settings' | 'test' | 'database';
+
+// Scenario types
+export interface CallApiPayload {
+  url: string;
+  method: HttpMethod;
+  headers?: Record<string, string>;
+  body?: unknown;
+}
+
+export interface SendEmailPayload {
+  to: string;
+  subject: string;
+  body: string;
+}
+
+export interface EmitSocketPayload {
+  event: string;
+  data?: unknown;
+}
+
+export interface WaitPayload {
+  duration: number; // in ms
+}
+output ?: unknown;
+interface BaseScenarioStep {
+  id: string;
+  delay?: number;
+}
+
+export interface CallApiStep extends BaseScenarioStep {
+  type: 'callApi';
+  payload: CallApiPayload;
+}
+
+export interface SendEmailStep extends BaseScenarioStep {
+  type: 'sendEmail';
+export interface ConnectorConfig {
+  [key: string]: unknown;
+}
+
+export interface Connector {
+  id: string;
+  name: string;
+  type: string;
+  config: ConnectorConfig;
+  payload: EmitSocketPayload;
+}
+
+export interface WaitStep extends BaseScenarioStep {
+  type: 'wait';
+  payload: WaitPayload;
+}
+
+export interface NoopStep extends BaseScenarioStep {
+  type: 'noop';
+  payload?: undefined;
+}
+
+export type ScenarioStep =
+  | CallApiStep
+  | SendEmailStep
+  | EmitSocketStep
+  | WaitStep
+  | NoopStep;
+export interface Scenario {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt: number;
+  updatedAt?: number;
+  steps: ScenarioStep[];
+}
+
+export interface ScenarioStepLog {
+  stepId: string;
+  startedAt: number;
+  endedAt?: number;
+  status: 'running' | 'success' | 'failed';
+  output?: any;
+  error?: string;
+}
+
+export interface ScenarioRun {
+  id: string;
+  scenarioId: string;
+  startedAt: number;
+  endedAt?: number;
+  status: 'running' | 'completed' | 'failed';
+  stepLogs: ScenarioStepLog[];
+}
+
+export interface Connector {
+  id: string;
+  name: string;
+  type: string;
+  config: any;
+  createdAt: number;
+}
+

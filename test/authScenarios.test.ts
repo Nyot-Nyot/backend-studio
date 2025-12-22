@@ -139,14 +139,14 @@ console.log(
 
 console.log("📊 SCENARIO 1: Public Endpoint (NONE)\n");
 
-test("NONE: Status 200 - No auth required, no headers", () => {
+test("NONE: Status 200 - No auth required, no headers", async () => {
   const mock = createMockEndpoint({
     path: "/api/public",
     statusCode: 200,
     authConfig: { type: "NONE" },
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/api/public",
     {},
@@ -160,14 +160,14 @@ test("NONE: Status 200 - No auth required, no headers", () => {
   assertEqual(response.success, true, "Should have success=true");
 });
 
-test("NONE: Status 200 - With random headers (should be ignored)", () => {
+test("NONE: Status 200 - With random headers (should be ignored)", async () => {
   const mock = createMockEndpoint({
     path: "/api/public",
     statusCode: 200,
     authConfig: { type: "NONE" },
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/api/public",
     {
@@ -187,7 +187,7 @@ test("NONE: Status 200 - With random headers (should be ignored)", () => {
   );
 });
 
-test("NONE: Status 201 - Created response", () => {
+test("NONE: Status 201 - Created response", async () => {
   const mock = createMockEndpoint({
     method: HttpMethod.POST,
     path: "/api/items",
@@ -199,7 +199,7 @@ test("NONE: Status 201 - Created response", () => {
     authConfig: { type: "NONE" },
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.POST,
     "http://api.example.com/api/items",
     { "Content-Type": "application/json" },
@@ -213,7 +213,7 @@ test("NONE: Status 201 - Created response", () => {
   assertEqual(response.created, true, "Should have created=true");
 });
 
-test("NONE: Status 204 - No Content response", () => {
+test("NONE: Status 204 - No Content response", async () => {
   const mock = createMockEndpoint({
     method: HttpMethod.DELETE,
     path: "/api/items/:id",
@@ -222,7 +222,7 @@ test("NONE: Status 204 - No Content response", () => {
     authConfig: { type: "NONE" },
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.DELETE,
     "http://api.example.com/api/items/123",
     {},
@@ -266,7 +266,7 @@ test("BEARER_TOKEN: Status 401 - No auth header provided", async () => {
 });
 
 // 2.2: Wrong token
-test("BEARER_TOKEN: Status 401 - Wrong token provided", () => {
+test("BEARER_TOKEN: Status 401 - Wrong token provided", async () => {
   const mock = createMockEndpoint({
     path: "/api/secure",
     statusCode: 200,
@@ -276,7 +276,7 @@ test("BEARER_TOKEN: Status 401 - Wrong token provided", () => {
     },
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/api/secure",
     { Authorization: "Bearer wrong-token" },
@@ -313,7 +313,7 @@ test("BEARER_TOKEN: Status 200 - Correct token returns status code", async () =>
   assertEqual(response.success, true, "Should have success=true");
 });
 
-test("BEARER_TOKEN: Status 201 - Correct token, 201 Created", () => {
+test("BEARER_TOKEN: Status 201 - Correct token, 201 Created", async () => {
   const mock = createMockEndpoint({
     method: HttpMethod.POST,
     path: "/api/secure/items",
@@ -328,7 +328,7 @@ test("BEARER_TOKEN: Status 201 - Correct token, 201 Created", () => {
     },
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.POST,
     "http://api.example.com/api/secure/items",
     { Authorization: "Bearer valid-token-123" },
@@ -340,7 +340,7 @@ test("BEARER_TOKEN: Status 201 - Correct token, 201 Created", () => {
   assertEqual(result.response.status, 201, "Should return 201");
 });
 
-test("BEARER_TOKEN: Status 204 - Correct token, 204 No Content", () => {
+test("BEARER_TOKEN: Status 204 - Correct token, 204 No Content", async () => {
   const mock = createMockEndpoint({
     method: HttpMethod.DELETE,
     path: "/api/secure/:id",
@@ -352,7 +352,7 @@ test("BEARER_TOKEN: Status 204 - Correct token, 204 No Content", () => {
     },
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.DELETE,
     "http://api.example.com/api/secure/123",
     { Authorization: "Bearer valid-token-123" },
@@ -364,7 +364,7 @@ test("BEARER_TOKEN: Status 204 - Correct token, 204 No Content", () => {
   assertEqual(result.response.status, 204, "Should return 204");
 });
 
-test("BEARER_TOKEN: Status 400 - Correct token, 400 Bad Request", () => {
+test("BEARER_TOKEN: Status 400 - Correct token, 400 Bad Request", async () => {
   const mock = createMockEndpoint({
     path: "/api/secure",
     statusCode: 400,
@@ -378,7 +378,7 @@ test("BEARER_TOKEN: Status 400 - Correct token, 400 Bad Request", () => {
     },
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/api/secure",
     { Authorization: "Bearer valid-token-123" },
@@ -392,7 +392,7 @@ test("BEARER_TOKEN: Status 400 - Correct token, 400 Bad Request", () => {
   assertEqual(response.error, "Bad Request", "Should have error field");
 });
 
-test("BEARER_TOKEN: Status 500 - Correct token, 500 Server Error", () => {
+test("BEARER_TOKEN: Status 500 - Correct token, 500 Server Error", async () => {
   const mock = createMockEndpoint({
     path: "/api/secure",
     statusCode: 500,
@@ -406,7 +406,7 @@ test("BEARER_TOKEN: Status 500 - Correct token, 500 Server Error", () => {
     },
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/api/secure",
     { Authorization: "Bearer valid-token-123" },
@@ -425,7 +425,7 @@ test("BEARER_TOKEN: Status 500 - Correct token, 500 Server Error", () => {
 console.log("📊 SCENARIO 3: API Key Authentication\n");
 
 // 3.1: No auth header
-test("API_KEY: Status 401 - No API key header", () => {
+test("API_KEY: Status 401 - No API key header", async () => {
   const mock = createMockEndpoint({
     path: "/api/secure",
     statusCode: 200,
@@ -435,7 +435,7 @@ test("API_KEY: Status 401 - No API key header", () => {
     },
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/api/secure",
     {},
@@ -448,7 +448,7 @@ test("API_KEY: Status 401 - No API key header", () => {
 });
 
 // 3.2: Wrong API key
-test("API_KEY: Status 401 - Wrong API key value", () => {
+test("API_KEY: Status 401 - Wrong API key value", async () => {
   const mock = createMockEndpoint({
     path: "/api/secure",
     statusCode: 200,
@@ -458,7 +458,7 @@ test("API_KEY: Status 401 - Wrong API key value", () => {
     },
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/api/secure",
     { "x-api-key": "wrong-key" },
@@ -471,7 +471,7 @@ test("API_KEY: Status 401 - Wrong API key value", () => {
 });
 
 // 3.3: Correct API key with various status codes
-test("API_KEY: Status 200 - Correct key, 200 OK", () => {
+test("API_KEY: Status 200 - Correct key, 200 OK", async () => {
   const mock = createMockEndpoint({
     path: "/api/secure",
     statusCode: 200,
@@ -481,7 +481,7 @@ test("API_KEY: Status 200 - Correct key, 200 OK", () => {
     },
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/api/secure",
     { "x-api-key": "api-key-456" },
@@ -495,7 +495,7 @@ test("API_KEY: Status 200 - Correct key, 200 OK", () => {
   assertEqual(response.success, true, "Should have success=true");
 });
 
-test("API_KEY: Status 201 - Correct key, 201 Created", () => {
+test("API_KEY: Status 201 - Correct key, 201 Created", async () => {
   const mock = createMockEndpoint({
     method: HttpMethod.POST,
     path: "/api/secure/items",
@@ -510,7 +510,7 @@ test("API_KEY: Status 201 - Correct key, 201 Created", () => {
     },
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.POST,
     "http://api.example.com/api/secure/items",
     { "x-api-key": "api-key-456" },
@@ -522,7 +522,7 @@ test("API_KEY: Status 201 - Correct key, 201 Created", () => {
   assertEqual(result.response.status, 201, "Should return 201");
 });
 
-test("API_KEY: Status 204 - Correct key, 204 No Content", () => {
+test("API_KEY: Status 204 - Correct key, 204 No Content", async () => {
   const mock = createMockEndpoint({
     method: HttpMethod.DELETE,
     path: "/api/secure/:id",
@@ -534,7 +534,7 @@ test("API_KEY: Status 204 - Correct key, 204 No Content", () => {
     },
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.DELETE,
     "http://api.example.com/api/secure/123",
     { "x-api-key": "api-key-456" },
@@ -546,7 +546,7 @@ test("API_KEY: Status 204 - Correct key, 204 No Content", () => {
   assertEqual(result.response.status, 204, "Should return 204");
 });
 
-test("API_KEY: Status 400 - Correct key, 400 Bad Request", () => {
+test("API_KEY: Status 400 - Correct key, 400 Bad Request", async () => {
   const mock = createMockEndpoint({
     path: "/api/secure",
     statusCode: 400,
@@ -560,7 +560,7 @@ test("API_KEY: Status 400 - Correct key, 400 Bad Request", () => {
     },
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/api/secure",
     { "x-api-key": "api-key-456" },
@@ -572,7 +572,7 @@ test("API_KEY: Status 400 - Correct key, 400 Bad Request", () => {
   assertEqual(result.response.status, 400, "Should return 400");
 });
 
-test("API_KEY: Status 500 - Correct key, 500 Server Error", () => {
+test("API_KEY: Status 500 - Correct key, 500 Server Error", async () => {
   const mock = createMockEndpoint({
     path: "/api/secure",
     statusCode: 500,
@@ -586,7 +586,7 @@ test("API_KEY: Status 500 - Correct key, 500 Server Error", () => {
     },
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/api/secure",
     { "x-api-key": "api-key-456" },
@@ -604,7 +604,7 @@ test("API_KEY: Status 500 - Correct key, 500 Server Error", () => {
 
 console.log("📊 REGRESSION TESTS: Other Features\n");
 
-test("REGRESSION: Custom headers work with auth", () => {
+test("REGRESSION: Custom headers work with auth", async () => {
   const mock = createMockEndpoint({
     path: "/api/secure",
     headers: [
@@ -617,7 +617,7 @@ test("REGRESSION: Custom headers work with auth", () => {
     },
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/api/secure",
     { Authorization: "Bearer valid-token" },
@@ -632,7 +632,7 @@ test("REGRESSION: Custom headers work with auth", () => {
   assert(customHeader !== undefined, "Custom headers should be included");
 });
 
-test("REGRESSION: Response body preserved with auth", () => {
+test("REGRESSION: Response body preserved with auth", async () => {
   const customBody = JSON.stringify({
     data: [1, 2, 3],
     nested: { key: "value" },
@@ -648,7 +648,7 @@ test("REGRESSION: Response body preserved with auth", () => {
     },
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/api/secure",
     { "x-api-key": "api-key" },
@@ -665,7 +665,7 @@ test("REGRESSION: Response body preserved with auth", () => {
   );
 });
 
-test("REGRESSION: Simulated delay works with auth", () => {
+test("REGRESSION: Simulated delay works with auth", async () => {
   const mock = createMockEndpoint({
     path: "/api/secure",
     delay: 150,
@@ -676,7 +676,7 @@ test("REGRESSION: Simulated delay works with auth", () => {
   });
 
   const start = Date.now();
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/api/secure",
     { Authorization: "Bearer valid-token" },
@@ -690,7 +690,7 @@ test("REGRESSION: Simulated delay works with auth", () => {
   assertEqual(result.response.delay, 150, "Delay should be 150ms");
 });
 
-test("REGRESSION: Multiple endpoints with different auth", () => {
+test("REGRESSION: Multiple endpoints with different auth", async () => {
   const publicMock = createMockEndpoint({
     id: "public-1",
     path: "/api/public",
@@ -716,7 +716,7 @@ test("REGRESSION: Multiple endpoints with different auth", () => {
   });
 
   // Public request
-  const publicResult = simulateRequest(
+  const publicResult = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/api/public",
     {},
@@ -727,7 +727,7 @@ test("REGRESSION: Multiple endpoints with different auth", () => {
   assertEqual(publicResult.response.status, 200, "Public should return 200");
 
   // Bearer request
-  const bearerResult = simulateRequest(
+  const bearerResult = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/api/bearer",
     { Authorization: "Bearer bearer-token" },
@@ -738,7 +738,7 @@ test("REGRESSION: Multiple endpoints with different auth", () => {
   assertEqual(bearerResult.response.status, 200, "Bearer should return 200");
 
   // Key request
-  const keyResult = simulateRequest(
+  const keyResult = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/api/key",
     { "x-api-key": "api-key" },
@@ -749,7 +749,7 @@ test("REGRESSION: Multiple endpoints with different auth", () => {
   assertEqual(keyResult.response.status, 200, "Key should return 200");
 });
 
-test("REGRESSION: HTTP methods work with auth", () => {
+test("REGRESSION: HTTP methods work with auth", async () => {
   const mock = createMockEndpoint({
     method: HttpMethod.PUT,
     path: "/api/items/:id",
@@ -760,7 +760,7 @@ test("REGRESSION: HTTP methods work with auth", () => {
     },
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.PUT,
     "http://api.example.com/api/items/123",
     { Authorization: "Bearer valid-token" },
@@ -772,7 +772,7 @@ test("REGRESSION: HTTP methods work with auth", () => {
   assertEqual(result.response.status, 200, "PUT with auth should work");
 });
 
-test("REGRESSION: Custom API key header with auth", () => {
+test("REGRESSION: Custom API key header with auth", async () => {
   const mock = createMockEndpoint({
     path: "/api/secure",
     authConfig: {
@@ -782,7 +782,7 @@ test("REGRESSION: Custom API key header with auth", () => {
     },
   });
 
-  const result = simulateRequest(
+  const result = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/api/secure",
     { "x-custom-auth": "secret-key-123" },
@@ -800,7 +800,7 @@ test("REGRESSION: Custom API key header with auth", () => {
 
 console.log("📊 COMPREHENSIVE COMBINATION TESTS\n");
 
-test("COMBINATION: All auth types with GET requests", () => {
+test("COMBINATION: All auth types with GET requests", async () => {
   const mocks = [
     createMockEndpoint({
       path: "/public",
@@ -819,7 +819,7 @@ test("COMBINATION: All auth types with GET requests", () => {
     }),
   ];
 
-  const publicResult = simulateRequest(
+  const publicResult = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/public",
     {},
@@ -829,7 +829,7 @@ test("COMBINATION: All auth types with GET requests", () => {
   );
   assertEqual(publicResult.response.status, 200, "Public GET");
 
-  const bearerResult = simulateRequest(
+  const bearerResult = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/bearer",
     { Authorization: "Bearer token" },
@@ -839,7 +839,7 @@ test("COMBINATION: All auth types with GET requests", () => {
   );
   assertEqual(bearerResult.response.status, 200, "Bearer GET");
 
-  const keyResult = simulateRequest(
+  const keyResult = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/key",
     { "x-api-key": "key" },
@@ -850,7 +850,7 @@ test("COMBINATION: All auth types with GET requests", () => {
   assertEqual(keyResult.response.status, 200, "Key GET");
 });
 
-test("COMBINATION: All auth types with POST requests", () => {
+test("COMBINATION: All auth types with POST requests", async () => {
   const mocks = [
     createMockEndpoint({
       path: "/public",
@@ -872,7 +872,7 @@ test("COMBINATION: All auth types with POST requests", () => {
     }),
   ];
 
-  const publicResult = simulateRequest(
+  const publicResult = await simulateRequest(
     HttpMethod.POST,
     "http://api.example.com/public",
     {},
@@ -882,7 +882,7 @@ test("COMBINATION: All auth types with POST requests", () => {
   );
   assertEqual(publicResult.response.status, 201, "Public POST");
 
-  const bearerResult = simulateRequest(
+  const bearerResult = await simulateRequest(
     HttpMethod.POST,
     "http://api.example.com/bearer",
     { Authorization: "Bearer token" },
@@ -892,7 +892,7 @@ test("COMBINATION: All auth types with POST requests", () => {
   );
   assertEqual(bearerResult.response.status, 201, "Bearer POST");
 
-  const keyResult = simulateRequest(
+  const keyResult = await simulateRequest(
     HttpMethod.POST,
     "http://api.example.com/key",
     { "x-api-key": "key" },
@@ -903,7 +903,7 @@ test("COMBINATION: All auth types with POST requests", () => {
   assertEqual(keyResult.response.status, 201, "Key POST");
 });
 
-test("COMBINATION: 401 response for all auth types when credentials fail", () => {
+test("COMBINATION: 401 response for all auth types when credentials fail", async () => {
   const mocks = [
     createMockEndpoint({
       path: "/bearer",
@@ -916,7 +916,7 @@ test("COMBINATION: 401 response for all auth types when credentials fail", () =>
   ];
 
   // Wrong bearer token
-  const bearerResult = simulateRequest(
+  const bearerResult = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/bearer",
     { Authorization: "Bearer wrong-token" },
@@ -927,7 +927,7 @@ test("COMBINATION: 401 response for all auth types when credentials fail", () =>
   assertEqual(bearerResult.response.status, 401, "Bearer with wrong token");
 
   // Wrong API key
-  const keyResult = simulateRequest(
+  const keyResult = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/key",
     { "x-api-key": "wrong-key" },
@@ -938,7 +938,7 @@ test("COMBINATION: 401 response for all auth types when credentials fail", () =>
   assertEqual(keyResult.response.status, 401, "Key with wrong key");
 
   // Missing bearer token
-  const noTokenResult = simulateRequest(
+  const noTokenResult = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/bearer",
     {},
@@ -949,7 +949,7 @@ test("COMBINATION: 401 response for all auth types when credentials fail", () =>
   assertEqual(noTokenResult.response.status, 401, "Bearer without token");
 
   // Missing API key
-  const noKeyResult = simulateRequest(
+  const noKeyResult = await simulateRequest(
     HttpMethod.GET,
     "http://api.example.com/key",
     {},

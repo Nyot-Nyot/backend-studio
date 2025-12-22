@@ -26,8 +26,13 @@
     -   Implementasi di modul seperti `mockEngine.ts`, `dbService.ts`, dan komponen React.
     -   Mencocokkan request dengan konfigurasi endpoint, menjalankan logika delay, auth, CRUD, dan variable injection.
 -   **Penyimpanan Data Lokal**:
+
     -   Menggunakan `localStorage` (dan bisa diperluas ke IndexedDB jika dibutuhkan).
+
+    -   Note: Mulai menambahkan dukungan **IndexedDB** sebagai backend persistence yang lebih andal (file baru `services/indexedDbService.ts`). Untuk sekarang migrasi dapat dijalankan lewat `dbService.init({ backend: 'indexeddb' })` dan ada tes integrasi baru di `test/dbService.indexedDb.integration.test.ts`.
+
     -   Menyimpan: proyek, daftar endpoint, environment variables, dan state database mock.
+
 -   **Export Node.js Server (Optional)**:
     -   Aplikasi dapat menghasilkan file `server.js` + `package.json` berbasis **Express.js**.
     -   Server ini adalah artefak edukasi/praktikum: dijalankan secara lokal atau di platform gratis (Vercel/Render/Railway) bila diinginkan.

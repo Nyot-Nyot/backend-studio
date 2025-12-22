@@ -10,6 +10,11 @@ Backend Studio adalah single-page application untuk mensimulasikan REST API back
 
 Persyaratan singkat: Node.js (LTS) dan npm. Untuk menjalankan: jalankan `npm install` lalu `npm run dev`, kemudian buka alamat yang tampil di terminal (biasanya `http://localhost:5173`).
 
+Catatan penyimpanan: aplikasi sekarang mendukung **IndexedDB** sebagai backend persistence yang lebih andal. Startup akan memanggil `dbService.init({ backend: 'auto' })` (di `index.tsx`) dan akan otomatis memigrasi data `localStorage` bila diperlukan. Untuk menjalankan tes terkait IndexedDB secara lokal gunakan:
+
+-   `npx tsx test/indexedDbService.test.ts`
+-   `npx tsx test/dbService.indexedDb.integration.test.ts`
+
 ## Continuous Integration (CI)
 
 A GitHub Actions workflow is included at `.github/workflows/ci.yml` that runs unit tests and Playwright E2E on pushes and pull requests to `main`/`master`.
