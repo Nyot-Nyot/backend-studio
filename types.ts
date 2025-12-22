@@ -100,8 +100,8 @@ export interface EmitSocketPayload {
 export interface WaitPayload {
   duration: number; // in ms
 }
-output ?: unknown;
-interface BaseScenarioStep {
+
+export interface BaseScenarioStep {
   id: string;
   delay?: number;
 }
@@ -113,15 +113,11 @@ export interface CallApiStep extends BaseScenarioStep {
 
 export interface SendEmailStep extends BaseScenarioStep {
   type: 'sendEmail';
-export interface ConnectorConfig {
-  [key: string]: unknown;
+  payload: SendEmailPayload;
 }
 
-export interface Connector {
-  id: string;
-  name: string;
-  type: string;
-  config: ConnectorConfig;
+export interface EmitSocketStep extends BaseScenarioStep {
+  type: 'emitSocket';
   payload: EmitSocketPayload;
 }
 
