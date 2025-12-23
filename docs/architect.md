@@ -25,11 +25,12 @@
 -   **Mock Engine di Frontend**:
     -   Implementasi di modul seperti `mockEngine.ts`, `dbService.ts`, dan komponen React.
     -   Mencocokkan request dengan konfigurasi endpoint, menjalankan logika delay, auth, CRUD, dan variable injection.
+    -   **Catatan:** ada opsi integrasi _generator_ berbasis AI (misal: Google Gemini) yang bersifat **opsional/eksperimental** dan membutuhkan API key yang disediakan pengguna; fitur ini harus dianggap fragile tanpa pengujian/validasi output tambahan.
 -   **Penyimpanan Data Lokal**:
 
     -   Menggunakan `localStorage` (dan bisa diperluas ke IndexedDB jika dibutuhkan).
 
-    -   Note: Mulai menambahkan dukungan **IndexedDB** sebagai backend persistence yang lebih andal (file baru `services/indexedDbService.ts`). Untuk sekarang migrasi dapat dijalankan lewat `dbService.init({ backend: 'indexeddb' })` dan ada tes integrasi baru di `test/dbService.indexedDb.integration.test.ts`.
+    -   Note: Dukungan **IndexedDB** sudah diimplementasikan (`services/indexedDbService.ts`) termasuk logic inisialisasi dan migrasi dari `localStorage`; ada tes integrasi terkait (`test/dbService.indexedDb.integration.test.ts`).
 
     -   Menyimpan: proyek, daftar endpoint, environment variables, dan state database mock.
 
@@ -118,8 +119,7 @@
         -   `server.js` hasil export berisi:
             -   Definisi route (method, path).
             -   Handler asinkron yang mengimplementasikan logika delay, auth check, dan response body.
-        -   `package.json` hasil export menyertakan dependensi standar (express, cors, dsb.).
-    -   Free tier deployment:
+        -   `package.json` hasil export menyertakan dependensi standar (express, cors, dsb.). - **Catatan implementasi:** Pada versi saat ini, export yang dihasilkan adalah **minimal** dan biasanya menginline response sebagai handler statis. Export tidak selalu menerapkan pengecekan autentikasi per-route, delay simulasi, atau store DB stateful secara otomatis; jika diperlukan, ekspor perlu diperluas secara manual atau sebagai PR fitur parity di roadmap. - Free tier deployment:
         -   Dapat di-_deploy_ ke platform gratis (Vercel/Render/Railway) bila ingin demo online.
         -   Misalnya: hanya gunakan `free instance` dan batasi jumlah request selama demo.
 
