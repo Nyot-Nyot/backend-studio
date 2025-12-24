@@ -2,8 +2,10 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 
-// Register Service Worker for Network Simulation
-if ("serviceWorker" in navigator) {
+import { FEATURES } from "./config/featureFlags";
+
+// Register Service Worker for Network Simulation (guarded by feature flag)
+if ("serviceWorker" in navigator && FEATURES.SERVICE_WORKER()) {
 	window.addEventListener("load", () => {
 		navigator.serviceWorker
 			.register("/sw.js")

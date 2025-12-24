@@ -29,8 +29,8 @@ import { MockEditor } from "./components/MockEditor";
 import { Sidebar } from "./components/Sidebar";
 import { TestConsole } from "./components/TestConsole";
 import { ToastContainer, ToastMessage, ToastType } from "./components/Toast";
+import { FEATURES } from "./config/featureFlags";
 import { generateServerCode as buildServerCode } from "./services/exportService";
-import { generateEndpointConfig } from "./services/geminiService";
 import { simulateRequest } from "./services/mockEngine";
 import { generateOpenApiSpec } from "./services/openApiService";
 import { EnvironmentVariable, HttpMethod, LogEntry, MockEndpoint, Project, TestConsoleState, ViewState } from "./types";
@@ -68,6 +68,8 @@ function App() {
 	// API Key UI State
 	const [userApiKey, setUserApiKey] = useState(() => localStorage.getItem("api_sim_user_gemini_key") || "");
 	const [showApiKey, setShowApiKey] = useState(false);
+	// Used to force re-render when feature flags are toggled in localStorage
+	const [featureClock, setFeatureClock] = useState(0);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 
 	// Test Console State
@@ -354,6 +356,11 @@ function App() {
 
 	// --- HANDLERS: AI & GENERATION ---
 	const handleMagicCreate = async () => {
+		if (!FEATURES.GEMINI()) {
+			addToast("AI features are disabled. Enable via Settings or feature flags.", "info");
+			return;
+		}
+
 		const prompt = window.prompt(
 			"Describe the endpoint you want to create (e.g. 'A GET users list with pagination')"
 		);
@@ -361,6 +368,7 @@ function App() {
 
 		try {
 			addToast("Generating configuration...", "info");
+			const { generateEndpointConfig } = await import("./services/geminiService");
 			const config = await generateEndpointConfig(prompt);
 
 			const newMock: MockEndpoint = {
@@ -618,7 +626,7 @@ function App() {
 					<TestConsole mocks={projectMocks} state={testConsoleState} setState={setTestConsoleState} />
 				)}
 
-				{view === "logs" && <LogViewer logs={logs} onClearLogs={() => setLogs([])} />}
+				{view === "logs" && FEATURES.LOG_VIEWER() && <LogViewer logs={logs} onClearLogs={() => setLogs([])} />}
 
 				{view === "database" && <DatabaseView />}
 
@@ -698,80 +706,88 @@ function App() {
 						</div>
 
 						{/* AI Configuration Section */}
-						<div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-							<h3 className="text-xl font-semibold text-slate-800 mb-2 flex items-center">
-								<Key className="w-5 h-5 mr-3 text-violet-600" />
-								AI Configuration
-							</h3>
-							<p className="text-slate-500 text-sm mb-6 max-w-2xl leading-relaxed">
-								Enter your Google Gemini API Key to enable Magic Create and Auto-Generate features. The
-								key is stored securely in your browser's local storage.
-							</p>
+						{FEATURES.GEMINI() && (
+							<div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+								<h3 className="text-xl font-semibold text-slate-800 mb-2 flex items-center">
+									<Key className="w-5 h-5 mr-3 text-violet-600" />
+									AI Configuration
+								</h3>
+								<p className="text-slate-500 text-sm mb-6 max-w-2xl leading-relaxed">
+									Enter your Google Gemini API Key to enable Magic Create and Auto-Generate features.
+									The key is stored securely in your browser's local storage.
+								</p>
 
-							<div className="max-w-xl space-y-4">
-								<div>
-									<label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-										Google Gemini API Key
-									</label>
-									<div className="relative">
-										<div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-											<ShieldCheck className="h-5 w-5 text-slate-400" />
+								<div className="max-w-xl space-y-4">
+									<div>
+										<label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+											Google Gemini API Key
+										</label>
+										<div className="relative">
+											<div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+												<ShieldCheck className="h-5 w-5 text-slate-400" />
+											</div>
+											<input
+												type={showApiKey ? "text" : "password"}
+												value={userApiKey}
+												onChange={e => setUserApiKey(e.target.value)}
+												className="block w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none transition-all text-sm font-mono"
+												placeholder="AIzaSy..."
+											/>
+											<button
+												onClick={() => setShowApiKey(!showApiKey)}
+												className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+											>
+												{showApiKey ? (
+													<EyeOff className="h-4 w-4" />
+												) : (
+													<Eye className="h-4 w-4" />
+												)}
+											</button>
 										</div>
-										<input
-											type={showApiKey ? "text" : "password"}
-											value={userApiKey}
-											onChange={e => setUserApiKey(e.target.value)}
-											className="block w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none transition-all text-sm font-mono"
-											placeholder="AIzaSy..."
-										/>
-										<button
-											onClick={() => setShowApiKey(!showApiKey)}
-											className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+									</div>
+									<div className="flex items-center justify-between">
+										<a
+											href="https://aistudio.google.com/app/apikey"
+											target="_blank"
+											rel="noreferrer"
+											className="text-xs font-medium text-violet-600 hover:text-violet-700 hover:underline"
 										>
-											{showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+											Get a free API Key
+										</a>
+										<button
+											onClick={handleSaveApiKey}
+											className="px-6 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-bold text-sm transition-all shadow-md shadow-violet-200 active:scale-95"
+										>
+											Save Key
 										</button>
 									</div>
 								</div>
-								<div className="flex items-center justify-between">
-									<a
-										href="https://aistudio.google.com/app/apikey"
-										target="_blank"
-										rel="noreferrer"
-										className="text-xs font-medium text-violet-600 hover:text-violet-700 hover:underline"
-									>
-										Get a free API Key
-									</a>
+							</div>
+						)}
+
+						{FEATURES.EXPORT_SERVER() && (
+							<div className="bg-slate-900 p-8 rounded-2xl shadow-xl border border-slate-700 text-white relative overflow-hidden group">
+								{/* Export Runtime Section */}
+								<div className="relative z-10">
+									<h3 className="text-xl font-bold mb-2 flex items-center">
+										<Server className="w-5 h-5 mr-3 text-brand-400" />
+										Server Runtime
+									</h3>
+									<p className="text-slate-400 text-sm mb-6 max-w-2xl leading-relaxed">
+										Export your endpoints as a standalone Node.js server. Useful for local
+										development or deploying to cloud providers.
+									</p>
+
 									<button
-										onClick={handleSaveApiKey}
-										className="px-6 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-bold text-sm transition-all shadow-md shadow-violet-200 active:scale-95"
+										onClick={() => setIsDeployModalOpen(true)}
+										className="flex items-center justify-center space-x-2 px-6 py-3 bg-brand-600 hover:bg-brand-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-brand-900/50 active:scale-95"
 									>
-										Save Key
+										<Rocket className="w-4 h-4" />
+										<span>Open Export Hub</span>
 									</button>
 								</div>
 							</div>
-						</div>
-
-						{/* Export Runtime Section */}
-						<div className="bg-slate-900 p-8 rounded-2xl shadow-xl border border-slate-700 text-white relative overflow-hidden group">
-							<div className="relative z-10">
-								<h3 className="text-xl font-bold mb-2 flex items-center">
-									<Server className="w-5 h-5 mr-3 text-brand-400" />
-									Server Runtime
-								</h3>
-								<p className="text-slate-400 text-sm mb-6 max-w-2xl leading-relaxed">
-									Export your endpoints as a standalone Node.js server. Useful for local development
-									or deploying to cloud providers.
-								</p>
-
-								<button
-									onClick={() => setIsDeployModalOpen(true)}
-									className="flex items-center justify-center space-x-2 px-6 py-3 bg-brand-600 hover:bg-brand-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-brand-900/50 active:scale-95"
-								>
-									<Rocket className="w-4 h-4" />
-									<span>Open Export Hub</span>
-								</button>
-							</div>
-						</div>
+						)}
 
 						{/* Export Specification Section */}
 						<div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">

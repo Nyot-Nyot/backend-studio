@@ -51,6 +51,20 @@ export interface MockEndpoint {
   proxy?: ProxyConfig; // Optional per-route proxy passthrough configuration
 }
 
+// Resource Schema types for schema-driven data generation
+export interface ResourceField {
+  name: string;
+  type: 'string' | 'number' | 'boolean' | 'date' | 'object' | 'array';
+  generator?: string; // e.g. 'uuid', 'randomName', 'email', 'number'
+  nestedSchemaId?: string; // reference to another ResourceSchema for nested objects/arrays
+}
+
+export interface ResourceSchema {
+  id: string;
+  name: string; // e.g. 'users'
+  fields: ResourceField[];
+}
+
 export interface LogEntry {
   id: string;
   timestamp: number;

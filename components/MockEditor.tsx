@@ -27,8 +27,8 @@ import {
 	X,
 } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
+import { FEATURES } from "../config/featureFlags";
 import { formatAuthPreview } from "../services/authUtils";
-import { generateMockData } from "../services/geminiService";
 import { MOCK_VARIABLES_HELP, patternsConflict } from "../services/mockEngine";
 import { HttpMethod, MockEndpoint } from "../types";
 import { ToastType } from "./Toast";
@@ -850,6 +850,12 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 		setIsGenerating(true);
 		try {
 			const context = `Name: ${formData.name}, Method: ${formData.method}, Path: ${formData.path}`;
+			if (!FEATURES.GEMINI()) {
+				addToast("AI features are disabled. Enable via Settings or feature flags.", "info");
+				setIsGenerating(false);
+				return;
+			}
+			const { generateMockData } = await import("../services/geminiService");
 			const json = await generateMockData(formData.path, context);
 			handleChange("responseBody", json);
 
@@ -1313,94 +1319,95 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 							</div>
 						)}
 
-						{/* Proxy / Passthrough */}
-						<div className="bg-white p-4 rounded-lg border border-slate-200">
-							<Label>Proxy / Passthrough</Label>
-							<div className="flex items-center gap-3 mb-2">
-								<button
-									onClick={() =>
-										setFormData(prev => ({
-											...prev,
-											proxy: { ...(prev.proxy || {}), enabled: !prev.proxy?.enabled },
-										}))
-									}
-									className={`w-9 h-5 flex items-center rounded-full transition-colors duration-200 ease-in-out px-0.5 ${
-										formData.proxy?.enabled ? "bg-emerald-500" : "bg-slate-300"
-									}`}
-								>
-									<div
-										className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform duration-200 ${
-											formData.proxy?.enabled ? "translate-x-4" : "translate-x-0"
+						{FEATURES.PROXY() && (
+							<div className="bg-white p-4 rounded-lg border border-slate-200">
+								<Label>Proxy / Passthrough</Label>
+								<div className="flex items-center gap-3 mb-2">
+									<button
+										onClick={() =>
+											setFormData(prev => ({
+												...prev,
+												proxy: { ...(prev.proxy || {}), enabled: !prev.proxy?.enabled },
+											}))
+										}
+										className={`w-9 h-5 flex items-center rounded-full transition-colors duration-200 ease-in-out px-0.5 ${
+											formData.proxy?.enabled ? "bg-emerald-500" : "bg-slate-300"
 										}`}
-									/>
-								</button>
-								<div className="text-sm text-slate-700 font-medium">Enable Proxy</div>
-							</div>
-
-							{formData.proxy?.enabled && (
-								<div className="space-y-3 p-2 border border-slate-100 rounded-md bg-emerald-50">
-									<div>
-										<Label>Proxy Target (Base URL)</Label>
-										<input
-											type="text"
-											value={formData.proxy?.target || ""}
-											onChange={e =>
-												setFormData(prev => ({
-													...prev,
-													proxy: { ...(prev.proxy || {}), target: e.target.value },
-												}))
-											}
-											placeholder="https://api.example.com"
-											className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-sm font-mono focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+									>
+										<div
+											className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform duration-200 ${
+												formData.proxy?.enabled ? "translate-x-4" : "translate-x-0"
+											}`}
 										/>
-										<p className="text-[10px] text-slate-500 mt-1">
-											Requests to this route will be forwarded to the configured target base URL
-											(path preserved).
-										</p>
-									</div>
-
-									<div className="grid grid-cols-2 gap-3">
-										<div>
-											<Label>Timeout (ms)</Label>
-											<input
-												type="number"
-												value={formData.proxy?.timeout ?? 5000}
-												onChange={e =>
-													setFormData(prev => ({
-														...prev,
-														proxy: {
-															...(prev.proxy || {}),
-															timeout: Number(e.target.value),
-														},
-													}))
-												}
-												className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none"
-											/>
-										</div>
-
-										<div>
-											<Label>Fallback to Mock</Label>
-											<select
-												value={String(formData.proxy?.fallbackToMock || false)}
-												onChange={e =>
-													setFormData(prev => ({
-														...prev,
-														proxy: {
-															...(prev.proxy || {}),
-															fallbackToMock: e.target.value === "true",
-														},
-													}))
-												}
-												className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none"
-											>
-												<option value="false">Disabled</option>
-												<option value="true">Enabled</option>
-											</select>
-										</div>
-									</div>
+									</button>
+									<div className="text-sm text-slate-700 font-medium">Enable Proxy</div>
 								</div>
-							)}
-						</div>
+
+								{formData.proxy?.enabled && (
+									<div className="space-y-3 p-2 border border-slate-100 rounded-md bg-emerald-50">
+										<div>
+											<Label>Proxy Target (Base URL)</Label>
+											<input
+												type="text"
+												value={formData.proxy?.target || ""}
+												onChange={e =>
+													setFormData(prev => ({
+														...prev,
+														proxy: { ...(prev.proxy || {}), target: e.target.value },
+													}))
+												}
+												placeholder="https://api.example.com"
+												className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-sm font-mono focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+											/>
+											<p className="text-[10px] text-slate-500 mt-1">
+												Requests to this route will be forwarded to the configured target base
+												URL (path preserved).
+											</p>
+										</div>
+
+										<div className="grid grid-cols-2 gap-3">
+											<div>
+												<Label>Timeout (ms)</Label>
+												<input
+													type="number"
+													value={formData.proxy?.timeout ?? 5000}
+													onChange={e =>
+														setFormData(prev => ({
+															...prev,
+															proxy: {
+																...(prev.proxy || {}),
+																timeout: Number(e.target.value),
+															},
+														}))
+													}
+													className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none"
+												/>
+											</div>
+
+											<div>
+												<Label>Fallback to Mock</Label>
+												<select
+													value={String(formData.proxy?.fallbackToMock || false)}
+													onChange={e =>
+														setFormData(prev => ({
+															...prev,
+															proxy: {
+																...(prev.proxy || {}),
+																fallbackToMock: e.target.value === "true",
+															},
+														}))
+													}
+													className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none"
+												>
+													<option value="false">Disabled</option>
+													<option value="true">Enabled</option>
+												</select>
+											</div>
+										</div>
+									</div>
+								)}
+							</div>
+						)}
 
 						<div>
 							<Label>Collection Name</Label>
