@@ -1,7 +1,5 @@
 import { generateOpenApiSpec } from "../services/openApiService";
-import { MockEndpoint, HttpMethod, Project } from "../types";
-import { writeFileSync } from "fs";
-import { join } from "path";
+import { HttpMethod, MockEndpoint, Project } from "../types";
 
 /**
  * Task 6.3 – OpenAPI Export Demonstration
@@ -103,8 +101,7 @@ Object.keys(spec.paths).forEach((path) => {
     Object.keys(operation.responses).forEach((statusCode) => {
       const response = operation.responses[statusCode];
       console.log(
-        `   - ${method.toUpperCase()} ${path} → ${statusCode}: ${
-          response.description
+        `   - ${method.toUpperCase()} ${path} → ${statusCode}: ${response.description
         }`
       );
       if (response.content?.["application/json"]) {
@@ -125,8 +122,7 @@ Object.keys(spec.paths).forEach((path) => {
       const schema = response.content?.["application/json"]?.schema;
       if (schema) {
         console.log(
-          `   - ${method.toUpperCase()} ${path} response schema: type=${
-            schema.type
+          `   - ${method.toUpperCase()} ${path} response schema: type=${schema.type
           }`
         );
         if (schema.properties) {

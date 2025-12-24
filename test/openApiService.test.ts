@@ -1,5 +1,5 @@
 import { generateOpenApiSpec } from "../services/openApiService";
-import { MockEndpoint, HttpMethod, Project } from "../types";
+import { HttpMethod, MockEndpoint, Project } from "../types";
 
 function test(name: string, fn: () => void) {
   try {

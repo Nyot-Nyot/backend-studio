@@ -1,5 +1,5 @@
 import { generateOpenApiSpec } from "../services/openApiService";
-import { MockEndpoint, HttpMethod, Project } from "../types";
+import { HttpMethod, MockEndpoint, Project } from "../types";
 
 /**
  * Validation test for OpenAPI 3.0 spec generation.
@@ -277,7 +277,7 @@ test("OpenAPI 3.0.0 - Responses with content have valid media types", () => {
             ];
             assert(
               validTypes.includes(mediaType) ||
-                mediaType.includes("application"),
+              mediaType.includes("application"),
               `Invalid media type '${mediaType}' at ${method} ${path} response ${statusCode}`
             );
           });

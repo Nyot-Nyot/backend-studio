@@ -124,7 +124,7 @@ export type ScenarioStep =
   | CallApiStep
   | EmitSocketStep
   | WaitStep
-  | NoopStep; 
+  | NoopStep;
 export interface Scenario {
   id: string;
   name: string;
