@@ -247,8 +247,7 @@ test("POST: parse JSON body, insert, return new item", async () => {
   });
 
   const requestBody = JSON.stringify({
-    name: "David",
-    email: "david@example.com",
+    name: "David"
   });
 
   const result = await simulateRequest(
@@ -264,11 +263,6 @@ test("POST: parse JSON body, insert, return new item", async () => {
   const item = JSON.parse(result.response.body);
   assert(item.id !== undefined, "Should have generated ID");
   assertEqual(item.name, "David", "Should have name from request");
-  assertEqual(
-    item.email,
-    "david@example.com",
-    "Should have email from request"
-  );
 
   // Verify it's in the collection
   const stored = dbService.find("users", item.id);
@@ -370,8 +364,7 @@ test("PUT: update existing item by id", async () => {
   });
 
   const updateBody = JSON.stringify({
-    name: "Eve Updated",
-    email: "eve@example.com",
+    name: "Eve Updated"
   });
 
   const result = await simulateRequest(
@@ -387,14 +380,12 @@ test("PUT: update existing item by id", async () => {
   const updated = JSON.parse(result.response.body);
   assertEqual(updated.id, created.id, "ID should not change");
   assertEqual(updated.name, "Eve Updated", "Name should be updated");
-  assertEqual(updated.email, "eve@example.com", "Email should be added");
 });
 
 test("PATCH: update existing item by id", async () => {
   // Setup
   const created = dbService.insert("users", {
-    name: "Frank",
-    email: "frank@example.com",
+    name: "Frank"
   });
 
   const mock = createMockEndpoint({
@@ -417,7 +408,6 @@ test("PATCH: update existing item by id", async () => {
   assertEqual(result.response.status, 200, "Status should be 200");
   const updated = JSON.parse(result.response.body);
   assertEqual(updated.name, "Frank Updated", "Name should be updated");
-  assertEqual(updated.email, "frank@example.com", "Email should persist");
 });
 
 test("PUT: return 404 if item not found", async () => {

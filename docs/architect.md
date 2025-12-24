@@ -142,10 +142,8 @@
 -   **MongoDB & NoSQL**:
     -   Konsep koleksi dan dokumen di-_mapping_ ke penyimpanan JSON di LocalStorage/IndexedDB.
     -   Jika perlu, adaptor tambahan dapat dibuat untuk menulis ke MongoDB Atlas menggunakan connection string free tier.
--   **Protokol Email & Socket Programming (opsional / future work)**:
-    -   Dapat ditambahkan modul contoh:
-        -   Endpoint mock `POST /send-email` yang secara internal memanggil SMTP server dummy atau hanya mencatat log.
-        -   WebSocket server sederhana di Node (mis. dengan `ws` atau `socket.io`) untuk broadcast log request ke beberapa client secara real‑time.
+-   **Socket Programming (opsional / future work)**:
+    -   WebSocket server sederhana di Node (mis. dengan `ws` atau `socket.io`) untuk broadcast log request ke beberapa client secara real‑time.
     -   Fitur ini bersifat tambahan untuk memperkaya presentasi tugas, tidak wajib untuk versi minimum.
 
 ---
@@ -168,4 +166,4 @@ Arsitektur Backend Studio sengaja didesain **client‑side first** dengan Servic
 
 -   Memenuhi kebutuhan tugas Pemrograman Jaringan (HTTP, async, Node, API design, NoSQL).
 -   Menghindari biaya infrastruktur dengan memaksimalkan browser dan free tier layanan eksternal.
--   Memberikan jalur jelas bagi pengembangan lanjutan (export Node/Express, integrasi MongoDB, email/socket module) tanpa perlu mengubah fondasi utama aplikasi.
+-   Memberikan jalur jelas bagi pengembangan lanjutan (export Node/Express, integrasi MongoDB, socket module) tanpa perlu mengubah fondasi utama aplikasi.

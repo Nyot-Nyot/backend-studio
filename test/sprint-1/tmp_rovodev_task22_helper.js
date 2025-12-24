@@ -13,7 +13,6 @@
 //        "active": "{{@query.active}}",
 //        "generated": {
 //          "uuid": "{{$uuid}}",
-//          "email": "{{$randomEmail}}",
 //          "iso": "{{$isoDate}}",
 //          "fakerName": "{{$fakerName}}",
 //          "fakerEmail": "{{$fakerEmail}}",
@@ -54,7 +53,7 @@ async function testGetUsers() {
     json.page === '2' &&
     json.active === 'true' &&
     json.generated && typeof json.generated.uuid === 'string' &&
-    json.generated.email && typeof json.generated.email === 'string' &&
+
     json.generated.iso && typeof json.generated.iso === 'string' &&
     json.generated.fakerName &&
     json.generated.fakerEmail &&

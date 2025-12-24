@@ -113,9 +113,9 @@ test("Table display: Show collection contents as items", () => {
   localStorage.clear();
 
   const items = [
-    { id: 1, name: "Alice", email: "alice@example.com" },
-    { id: 2, name: "Bob", email: "bob@example.com" },
-    { id: 3, name: "Charlie", email: "charlie@example.com" },
+    { id: 1, name: "Alice" },
+    { id: 2, name: "Bob" },
+    { id: 3, name: "Charlie" },
   ];
 
   items.forEach((item) => dbService.insert("users", item));
@@ -468,14 +468,12 @@ test("Acceptance: Full CRUD cycle with DatabaseView operations", () => {
   // Create
   dbService.insert("users", {
     id: 1,
-    name: "Alice",
-    email: "alice@example.com",
+    name: "Alice"
   });
-  dbService.insert("users", { id: 2, name: "Bob", email: "bob@example.com" });
+  dbService.insert("users", { id: 2, name: "Bob" });
   dbService.insert("users", {
     id: 3,
-    name: "Charlie",
-    email: "charlie@example.com",
+    name: "Charlie"
   });
 
   let users = dbService.getCollection("users");

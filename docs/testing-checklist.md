@@ -45,7 +45,7 @@
 
 ## Response Body & Generators
 
--   [x] Test built-in placeholders: `{{$uuid}}`, `{{$randomEmail}}`, `{{$isoDate}}`, `{{$randomName}}`, `{{$randomInt}}` — verify format and uniqueness as expected. (verified in unit tests)
+-   [x] Test built-in placeholders: `{{$uuid}}`, `{{$isoDate}}`, `{{$randomName}}`, `{{$randomInt}}` — verify format and uniqueness as expected. (verified in unit tests)
 -   [x] Test `{{@param.*}}` and `{{@query.*}}` placeholder substitution in responses with dynamic path and query examples. (verified in unit/e2e tests)
 -   [x] Test `{{$faker*}}` patterns (if implemented) and ensure expected output shape. (faker aliases implemented and verified)
 -   [x] Test nested objects/arrays in responses with placeholder expansion. (verified in e2e)

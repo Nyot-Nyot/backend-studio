@@ -177,7 +177,7 @@ Inti dari aplikasi ini adalah `sw.js`.
 -   **HTTP Protocol & Web Server:** Seluruh desain endpoint mengikuti pola REST HTTP (method, status code, headers, body).
 -   **API Architecture Pattern:** Mendukung perancangan resource‑oriented API dengan path dinamis dan simulasi autentikasi.
 -   **NoSQL / MongoDB:** Disimulasikan dengan koleksi berbasis key‑value di LocalStorage/IndexedDB; pada export Node nantinya dapat diperluas untuk menggunakan MongoDB Atlas (free tier) bila diperlukan.
--   **Email Protocol & Socket Programming:** Tidak menjadi bagian fitur inti, namun dapat dipertimbangkan sebagai **ekstensi** (misal: mock endpoint yang mensimulasikan pengiriman email, atau penggunaan WebSocket untuk live log update) tanpa menambah dependensi berbayar.
+-   **Socket Programming:** Tidak menjadi bagian fitur inti, namun dapat dipertimbangkan sebagai **ekstensi** (misal: WebSocket untuk live log update) tanpa menambah dependensi berbayar.
 
 ---
 

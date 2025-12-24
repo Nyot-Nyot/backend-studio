@@ -1,12 +1,10 @@
 import { Connector, Scenario, ScenarioRun, ScenarioStepLog } from '../types';
 import { fetchRandomUser } from './apiService';
-import { generateSMTPTrace, scheduleStatusUpdate } from './emailService';
 import { indexedDbService } from './indexedDbService';
 
 const SCENARIO_STORE = 'scenarios';
 const RUNS_STORE = 'runs';
 const CONNECTOR_STORE = 'connectors';
-const EMAIL_OUTBOX = 'email_outbox';
 
 // Simple internal event bus for UI subscriptions
 export const ScenarioBus = new EventTarget();
@@ -110,41 +108,7 @@ export class ScenarioService {
             stepLog.output = output;
             stepLog.status = 'success';
             lastOutput = stepLog.output;
-          } else if (step.type === 'sendEmail') {
-            const to = (payload as any).to || 'test@example.com';
-            const subject = (payload as any).subject || 'Scenario Email';
-            const body = (payload as any).body || JSON.stringify({ runId: run.id }, null, 2);
-            const messageId = crypto.randomUUID();
-            const trace = generateSMTPTrace(to);
 
-            // Save email to outbox store for visibility
-            await indexedDbService.insert(EMAIL_OUTBOX, {
-              id: messageId,
-              to,
-              subject,
-              body,
-              status: 'queued',
-              trace,
-              createdAt: now()
-            });
-
-            // Simulate status updates
-            scheduleStatusUpdate(messageId, async (id: string, status: string) => {
-              // update record in IndexedDB
-              const msgList = await indexedDbService.getCollection(EMAIL_OUTBOX) as any[];
-              const msg = msgList.find((m) => m.id === id);
-              if (msg) {
-                msg.status = status;
-                msg.updatedAt = Date.now();
-                msg.trace = (msg.trace || []).concat([`status:${status}@${Date.now()}`]);
-                await indexedDbService.update(EMAIL_OUTBOX, id, msg as any);
-                ScenarioBus.dispatchEvent(new CustomEvent('email:update', { detail: { message: msg } }));
-              }
-            });
-
-            stepLog.output = { messageId, to, subject };
-            stepLog.status = 'success';
-            lastOutput = stepLog.output;
           } else if (step.type === 'emitSocket') {
             const payloadData: any = payload || {};
             // Emit a custom DOM event that UI SocketConsole can listen for

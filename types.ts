@@ -86,12 +86,6 @@ export interface CallApiPayload {
   body?: unknown;
 }
 
-export interface SendEmailPayload {
-  to: string;
-  subject: string;
-  body: string;
-}
-
 export interface EmitSocketPayload {
   event: string;
   data?: unknown;
@@ -111,11 +105,6 @@ export interface CallApiStep extends BaseScenarioStep {
   payload: CallApiPayload;
 }
 
-export interface SendEmailStep extends BaseScenarioStep {
-  type: 'sendEmail';
-  payload: SendEmailPayload;
-}
-
 export interface EmitSocketStep extends BaseScenarioStep {
   type: 'emitSocket';
   payload: EmitSocketPayload;
@@ -133,10 +122,9 @@ export interface NoopStep extends BaseScenarioStep {
 
 export type ScenarioStep =
   | CallApiStep
-  | SendEmailStep
   | EmitSocketStep
   | WaitStep
-  | NoopStep;
+  | NoopStep; 
 export interface Scenario {
   id: string;
   name: string;

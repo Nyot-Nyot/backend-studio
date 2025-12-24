@@ -254,12 +254,6 @@ export const processMockResponse = (
       const names = ['Alice', 'Bob', 'Charlie', 'David', 'Eve', 'Frank', 'Grace', 'Heidi', 'Ivan'];
       return names[Math.floor(Math.random() * names.length)];
     },
-    '{{$randomEmail}}': () => {
-      const domains = ['example.com', 'test.io', 'demo.net', 'acme.org'];
-      const user = Math.random().toString(36).substring(7);
-      const domain = domains[Math.floor(Math.random() * domains.length)];
-      return `${user}@${domain}`;
-    },
     '{{$randomCity}}': () => {
       const cities = ['New York', 'London', 'Tokyo', 'Jakarta', 'Berlin', 'Paris', 'Sydney'];
       return cities[Math.floor(Math.random() * cities.length)];
@@ -268,7 +262,6 @@ export const processMockResponse = (
 
     // Faker-like aliases (no external dep): map to existing generators
     '{{$fakerName}}': () => replacements['{{$randomName}}'](),
-    '{{$fakerEmail}}': () => replacements['{{$randomEmail}}'](),
     '{{$fakerCity}}': () => replacements['{{$randomCity}}']()
   };
 
@@ -285,11 +278,9 @@ export const MOCK_VARIABLES_HELP = [
   { label: '{{$uuid}}', desc: 'Random UUID v4' },
   { label: '{{$randomInt}}', desc: 'Random number (0-1000)' },
   { label: '{{$randomName}}', desc: 'Random first name' },
-  { label: '{{$randomEmail}}', desc: 'Random email address' },
   { label: '{{$randomCity}}', desc: 'Random city' },
   { label: '{{$isoDate}}', desc: 'Current ISO 8601 Date' },
   { label: '{{$fakerName}}', desc: 'Faker-like alias for random name' },
-  { label: '{{$fakerEmail}}', desc: 'Faker-like alias for random email' },
   { label: '{{$fakerCity}}', desc: 'Faker-like alias for random city' },
   { label: '{{@param.id}}', desc: 'Value from URL path /:id' },
   { label: '{{@query.page}}', desc: 'Value from query string e.g. ?page=2' },

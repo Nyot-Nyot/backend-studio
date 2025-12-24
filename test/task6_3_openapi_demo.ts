@@ -24,8 +24,8 @@ const demoMocks: MockEndpoint[] = [
     statusCode: 200,
     delay: 0,
     responseBody: JSON.stringify([
-      { id: 1, name: "Alice", email: "alice@example.com", role: "admin" },
-      { id: 2, name: "Bob", email: "bob@example.com", role: "user" },
+      { id: 1, name: "Alice", role: "admin" },
+      { id: 2, name: "Bob", role: "user" },
     ]),
     isActive: true,
     version: "1.0.0",
@@ -44,7 +44,6 @@ const demoMocks: MockEndpoint[] = [
     responseBody: JSON.stringify({
       id: 1,
       name: "Alice",
-      email: "alice@example.com",
       role: "admin",
     }),
     isActive: true,
@@ -64,7 +63,6 @@ const demoMocks: MockEndpoint[] = [
     responseBody: JSON.stringify({
       id: 3,
       name: "Charlie",
-      email: "charlie@example.com",
       role: "user",
     }),
     isActive: true,
