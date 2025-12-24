@@ -10,14 +10,14 @@ export default defineConfig({
     headless: true,
     viewport: { width: 1280, height: 800 },
     actionTimeout: 5000,
-    baseURL: 'http://localhost:5173',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000',
     trace: 'on-first-retry',
   },
   webServer: {
     command: 'npm run dev',
-    url: 'http://localhost:5173',
+    url: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000',
     timeout: 60 * 1000,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: true,
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
