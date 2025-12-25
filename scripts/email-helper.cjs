@@ -34,13 +34,40 @@ app.use(express.json());
 // serve files with simple static middleware
 app.use("/files", express.static(UPLOAD_DIR, { index: false }));
 
-app.post("/upload-temp", upload.single("file"), (req, res) => {
+const USE_0X0 = process.env.EMAIL_HELPER_UPLOAD_TO_0X0 === 'true' || process.env.EMAIL_HELPER_PUBLIC_HOST === '0x0.st';
+
+app.post("/upload-temp", upload.single("file"), async (req, res) => {
 	if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-	const fileUrl = `${req.protocol}://${req.get("host")}/files/${req.file.filename}`;
 	const expiresAt = Date.now() + TTL_HOURS * 60 * 60 * 1000;
 	// store metadata small JSON beside file
 	const meta = { originalName: req.file.originalname, filename: req.file.filename, size: req.file.size, expiresAt };
 	fs.writeFileSync(path.join(UPLOAD_DIR, `${req.file.filename}.json`), JSON.stringify(meta));
+
+	if (USE_0X0) {
+		try {
+			const FormData = require('form-data');
+			const form = new FormData();
+			const filePath = path.join(UPLOAD_DIR, req.file.filename);
+			form.append('file', fs.createReadStream(filePath), { filename: req.file.originalname });
+			const fetchRes = await fetch('https://0x0.st', { method: 'POST', body: form, headers: form.getHeaders() });
+			const text = (await fetchRes.text()).trim();
+			if (fetchRes.ok && text && text.startsWith('http')) {
+				const url = text;
+				meta.remoteUrl = url;
+				fs.writeFileSync(path.join(UPLOAD_DIR, `${req.file.filename}.json`), JSON.stringify(meta));
+				// remove local file to save disk space
+				try { fs.unlinkSync(filePath); } catch (e) {}
+				return res.json({ url, expiresAt });
+			} else {
+				console.warn('0x0.st upload failed', fetchRes.status, text);
+			}
+		} catch (e) {
+			console.error('Public upload error', e);
+		}
+	}
+
+	// fallback to local url
+	const fileUrl = `${req.protocol}://${req.get("host")}/files/${req.file.filename}`;
 	res.json({ url: fileUrl, expiresAt });
 });
 
@@ -80,4 +107,5 @@ app.get("/health", (req, res) => res.json({ ok: true }));
 app.listen(PORT, () => {
 	console.log(`Email helper server running on port ${PORT}`);
 	console.log(`Upload endpoint: POST http://localhost:${PORT}/upload-temp (form field name 'file')`);
+	console.log(`Public uploads to 0x0.st enabled: ${USE_0X0 ? 'yes' : 'no'}`);
 });

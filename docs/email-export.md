@@ -17,7 +17,7 @@ This documents the Email Export feature (client-side EmailJS MVP).
 
 -   Demo/testing: set `VITE_EMAILJS_DEMO=true` to simulate sends locally without configuring EmailJS (safe for development).
 
--   For attachments: EmailJS client attachment support is unreliable. Backend helper approach is used: selected files are bundled into a ZIP, uploaded to a temporary server (`/upload-temp`), and a short-lived download link is included in the email body.
+-   For attachments: EmailJS client attachment support is unreliable. Backend helper approach is used: selected files are bundled into a ZIP, uploaded to a temporary server (`/upload-temp`), and a short-lived download link is included in the email body. For quick public sharing during development we support uploading to 0x0.st — enable by setting `EMAIL_HELPER_UPLOAD_TO_0X0=true` in `.env` (this uploads files to 0x0.st and returns a public URL).
 
 > Note: Public keys are exposed to clients. For production, prefer a server-side relay to keep secrets private.
 
