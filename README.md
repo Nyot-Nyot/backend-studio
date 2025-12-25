@@ -72,6 +72,17 @@ Sebelum mulai mengerjakan task, pastikan untuk membaca `docs/sprint-planning.md`
 
 Jadi intinya `sprint-1/todo.md`, `sprint-2/todo.md`, dan `sprint-3/todo.md` itu pecahan rinci untuk setiap sprint berdasarkan task di `sprint-planning.md`.
 
+## Email Export (flag & env vars)
+
+This project includes an optional Email Export feature (client-side EmailJS MVP). Enable with env var or localStorage feature flag:
+
+-   `VITE_ENABLE_EMAIL` — set to `'true'` to enable the Email Export UI by default.
+-   `VITE_EMAILJS_SERVICE_ID` — EmailJS service id (client-only public service identifier).
+-   `VITE_EMAILJS_TEMPLATE_ID` — EmailJS template id for composing the message.
+-   `VITE_EMAILJS_PUBLIC_KEY` — EmailJS public key.
+
+For production use we recommend using a server-side mail relay (SendGrid/SES) to keep secrets server-side and enforce rate-limits.
+
 ## Dokumen Pendukung
 
 -   [docs/prd.md](docs/prd.md) — Dokumen kebutuhan produk (Product Requirements Document).

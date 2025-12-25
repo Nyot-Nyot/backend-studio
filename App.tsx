@@ -10,6 +10,7 @@ import {
 	Globe,
 	Info,
 	Key,
+	Mail,
 	Package,
 	Plus,
 	RefreshCw,
@@ -24,12 +25,14 @@ import {
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Dashboard } from "./components/Dashboard";
 import { DatabaseView } from "./components/DatabaseView";
+import EmailExportModal, { EmailExportParams } from "./components/EmailExportModal";
 import { LogViewer } from "./components/LogViewer";
 import { MockEditor } from "./components/MockEditor";
 import { Sidebar } from "./components/Sidebar";
 import { TestConsole } from "./components/TestConsole";
 import { ToastContainer, ToastMessage, ToastType } from "./components/Toast";
 import { FEATURES } from "./config/featureFlags";
+import { sendEmailViaEmailJS } from "./services/emailService";
 import { generateServerCode as buildServerCode } from "./services/exportService";
 import { simulateRequest } from "./services/mockEngine";
 import { generateOpenApiSpec } from "./services/openApiService";
@@ -64,12 +67,25 @@ function App() {
 
 	// Modals State
 	const [isDeployModalOpen, setIsDeployModalOpen] = useState(false);
+	// Email Export Modal State
+	const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+	const [sendingEmail, setSendingEmail] = useState(false);
 
 	// API Key UI State
 	const [userApiKey, setUserApiKey] = useState(() => localStorage.getItem("api_sim_user_gemini_key") || "");
 	const [showApiKey, setShowApiKey] = useState(false);
 	// Used to force re-render when feature flags are toggled in localStorage
 	const [featureClock, setFeatureClock] = useState(0);
+
+	// DEV: if env enables email export, ensure the localStorage flag is set so UI appears immediately
+	React.useEffect(() => {
+		if (typeof window !== "undefined" && (import.meta.env as any).VITE_ENABLE_EMAIL === "true") {
+			if (window.localStorage.getItem("feature_email_export") !== "true") {
+				window.localStorage.setItem("feature_email_export", "true");
+				setFeatureClock(c => c + 1);
+			}
+		}
+	}, []);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 
 	// Test Console State
@@ -556,6 +572,148 @@ function App() {
 		addToast("Server code copied to clipboard", "info");
 	};
 
+	const getAttachmentPreview = async ({
+		includeWorkspace,
+		includeOpenApi,
+		includeServer,
+	}: {
+		includeWorkspace: boolean;
+		includeOpenApi: boolean;
+		includeServer: boolean;
+	}) => {
+		const files: { name: string; blob: Blob }[] = [];
+		if (includeWorkspace) {
+			files.push({
+				name: `backend-studio-backup-${new Date().toISOString().slice(0, 10)}.json`,
+				blob: new Blob(
+					[JSON.stringify({ version: "1.0", timestamp: Date.now(), projects, mocks, envVars }, null, 2)],
+					{ type: "application/json" }
+				),
+			});
+		}
+		if (includeOpenApi) {
+			const currentProject = projects.find(p => p.id === activeProjectId);
+			if (currentProject) {
+				const spec = generateOpenApiSpec(currentProject, mocks);
+				files.push({
+					name: `openapi-${currentProject.name.toLowerCase().replace(/\s+/g, "-")}.json`,
+					blob: new Blob([JSON.stringify(spec, null, 2)], { type: "application/json" }),
+				});
+			}
+		}
+		if (includeServer) {
+			const code = generateServerCode();
+			files.push({ name: "server.js", blob: new Blob([code], { type: "text/javascript" }) });
+		}
+		if (files.length === 0) return [];
+		if (files.length > 1) {
+			const zipBlob = await (await import("./services/zipService")).createZipBlob(files);
+			return [{ name: `backend-studio-export-${new Date().toISOString().slice(0, 10)}.zip`, size: zipBlob.size }];
+		}
+		return files.map(f => ({ name: f.name, size: f.blob.size || 0 }));
+	};
+
+	const sendEmail = async (params: EmailExportParams) => {
+		setSendingEmail(true);
+		try {
+			const {
+				recipients,
+				subject,
+				message: originalMessage,
+				includeWorkspace,
+				includeOpenApi,
+				includeServer,
+			} = params;
+			let messageToSend = originalMessage;
+			const files: { name: string; blob: Blob }[] = [];
+
+			if (includeWorkspace) {
+				const data = {
+					version: "1.0",
+					timestamp: Date.now(),
+					projects,
+					mocks,
+					envVars,
+				};
+				files.push({
+					name: `backend-studio-backup-${new Date().toISOString().slice(0, 10)}.json`,
+					blob: new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
+				});
+			}
+
+			if (includeOpenApi) {
+				const currentProject = projects.find(p => p.id === activeProjectId);
+				if (currentProject) {
+					const spec = generateOpenApiSpec(currentProject, mocks);
+					files.push({
+						name: `openapi-${currentProject.name.toLowerCase().replace(/\s+/g, "-")}.json`,
+						blob: new Blob([JSON.stringify(spec, null, 2)], { type: "application/json" }),
+					});
+				}
+			}
+
+			if (includeServer) {
+				const code = generateServerCode();
+				files.push({ name: "server.js", blob: new Blob([code], { type: "text/javascript" }) });
+			}
+
+			// If multiple files are selected, bundle into a ZIP (keeps a single attachment)
+			let filesToSend = files;
+			if (files.length > 1) {
+				const zipBlob = await (await import("./services/zipService")).createZipBlob(files);
+				filesToSend = [
+					{ name: `backend-studio-export-${new Date().toISOString().slice(0, 10)}.zip`, blob: zipBlob },
+				];
+			}
+
+			// Size check: fail early if larger than 20MB
+			const totalBytes = filesToSend.reduce((s, f) => s + (f.blob.size || 0), 0);
+			if (totalBytes > 20 * 1024 * 1024)
+				throw new Error("Attachments exceed 20 MB limit. Reduce attachment size.");
+
+			// Upload the single file to the helper and include a download link in the message
+			let downloadUrl: string | null = null;
+			if (filesToSend.length > 0) {
+				try {
+					const uploadService = await import("./services/uploadService");
+					const res = await uploadService.uploadTempFile(filesToSend[0].blob, filesToSend[0].name);
+					downloadUrl = res.url;
+					messageToSend = `${messageToSend}\n\nDownload exported files: ${downloadUrl} (expires ${new Date(
+						res.expiresAt
+					).toLocaleString()})`;
+				} catch (e: any) {
+					addToast("Upload failed: " + (e?.message || "unknown error"), "error");
+					throw e;
+				}
+			}
+
+			const serviceId = (import.meta.env as any).VITE_EMAILJS_SERVICE_ID;
+			const templateId = (import.meta.env as any).VITE_EMAILJS_TEMPLATE_ID;
+			const publicKey = (import.meta.env as any).VITE_EMAILJS_PUBLIC_KEY;
+			const demoMode =
+				(typeof (import.meta as any).env !== "undefined" &&
+					(import.meta as any).env.VITE_EMAILJS_DEMO === "true") ||
+				process.env.VITE_EMAILJS_DEMO === "true";
+			if (!serviceId || !templateId || !publicKey) {
+				if (!demoMode) {
+					throw new Error(
+						"EmailJS not configured. Set VITE_EMAILJS_SERVICE_ID, VITE_EMAILJS_TEMPLATE_ID, VITE_EMAILJS_PUBLIC_KEY."
+					);
+				}
+			}
+
+			// Send without attachments (we included a link instead)
+			await sendEmailViaEmailJS(serviceId, templateId, publicKey, recipients, subject, messageToSend, []);
+			addToast("Email sent!", "success");
+			setIsEmailModalOpen(false);
+		} catch (err: any) {
+			addToast(err?.message || "Email send failed", "error");
+			throw err;
+		} finally {
+			setSendingEmail(false);
+		}
+	};
+
 	const handleFactoryReset = () => {
 		if (confirm("Are you sure you want to reset everything? This cannot be undone.")) {
 			localStorage.clear();
@@ -827,6 +985,16 @@ function App() {
 									<span>Export Configuration</span>
 								</button>
 
+								{FEATURES.EMAIL_EXPORT() && (
+									<button
+										onClick={() => setIsEmailModalOpen(true)}
+										className="flex items-center justify-center space-x-2 px-6 py-3 bg-sky-700 hover:bg-sky-600 text-white rounded-xl border border-sky-800 transition-all font-medium active:scale-95 w-full sm:w-auto"
+									>
+										<Mail className="w-4 h-4 text-white" />
+										<span>Send via Email</span>
+									</button>
+								)}
+
 								<div className="relative">
 									<input
 										type="file"
@@ -957,9 +1125,18 @@ function App() {
 											</span>
 											<Download className="w-4 h-4 opacity-50 group-hover:opacity-100" />
 										</button>
+										{FEATURES.EMAIL_EXPORT() && (
+											<button
+												onClick={() => setIsEmailModalOpen(true)}
+												className="px-4 py-2.5 rounded-lg bg-sky-700 hover:bg-sky-600 text-white font-medium transition-all flex items-center justify-between group border border-sky-800"
+											>
+												<span className="flex items-center gap-2">
+													<Mail className="w-4 h-4 text-white" /> Send via Email
+												</span>
+											</button>
+										)}
 									</div>
 								</div>
-
 								{/* Cloud Setup */}
 								<div>
 									<label className="block text-xs font-bold text-sky-400 uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -1012,6 +1189,13 @@ function App() {
 				</div>
 			)}
 
+			<EmailExportModal
+				isOpen={isEmailModalOpen}
+				onClose={() => setIsEmailModalOpen(false)}
+				onSend={sendEmail}
+				sending={sendingEmail}
+				getAttachmentPreview={getAttachmentPreview}
+			/>
 			<ToastContainer toasts={toasts} removeToast={removeToast} />
 		</div>
 	);

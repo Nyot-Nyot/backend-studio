@@ -24,6 +24,7 @@ export const FEATURES = {
   },
   PROXY: () => (import.meta.env.VITE_ENABLE_PROXY === 'true') || (typeof window !== 'undefined' && window.localStorage?.getItem('feature_proxy') === 'true'),
   EXPORT_SERVER: () => (import.meta.env.VITE_ENABLE_EXPORT === 'true') || (typeof window !== 'undefined' && window.localStorage?.getItem('feature_export') === 'true'),
+  EMAIL_EXPORT: () => (import.meta.env.VITE_ENABLE_EMAIL === 'true') || (typeof window !== 'undefined' && window.localStorage?.getItem('feature_email_export') === 'true'),
 };
 
 export function enableFeatureInLocalStorage(featureKey: string) {
