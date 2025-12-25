@@ -1,4 +1,8 @@
 export const FEATURES = {
+  // Generic AI flag (can be used to gate AI features broadly)
+  AI: () => ((typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined' && ((import.meta as any).env.VITE_ENABLE_AI === 'true' || (import.meta as any).env.VITE_ENABLE_OPENROUTER === 'true' || (import.meta as any).env.VITE_AI_PROVIDER === 'openrouter')) || (typeof window !== 'undefined' && window.localStorage?.getItem('feature_ai') === 'true')),
+  // Provider-specific flag for OpenRouter (backwards compat with VITE_ENABLE_OPENROUTER)
+  OPENROUTER: () => ((typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined' && (import.meta as any).env.VITE_ENABLE_OPENROUTER === 'true') || (typeof window !== 'undefined' && window.localStorage?.getItem('feature_openrouter') === 'true')),
   GEMINI: () => (import.meta.env.VITE_ENABLE_GEMINI === 'true') || (typeof window !== 'undefined' && window.localStorage?.getItem('feature_gemini') === 'true'),
   SERVICE_WORKER: () => {
     // Allow explicit control via localStorage: 'true'/'false' takes precedence

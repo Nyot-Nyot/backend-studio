@@ -71,11 +71,35 @@ function App() {
 	const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
 	const [sendingEmail, setSendingEmail] = useState(false);
 
-	// API Key UI State
-	const [userApiKey, setUserApiKey] = useState(() => localStorage.getItem("api_sim_user_gemini_key") || "");
+	// API Key UI State (OpenRouter key if user opts to provide one)
+	const [userApiKey, setUserApiKey] = useState(() => localStorage.getItem("api_sim_user_openrouter_key") || "");
 	const [showApiKey, setShowApiKey] = useState(false);
 	// Used to force re-render when feature flags are toggled in localStorage
 	const [featureClock, setFeatureClock] = useState(0);
+	// Proxy health status: null = unknown/checking, true = healthy, false = unreachable
+	const [proxyHealthy, setProxyHealthy] = useState<boolean | null>(null);
+
+	// Poll proxy health while in dev / when AI feature is visible
+	React.useEffect(() => {
+		let mounted = true;
+		if (!FEATURES.AI()) return;
+		const check = async () => {
+			try {
+				const res = await fetch("/openrouter/health");
+				if (!mounted) return;
+				setProxyHealthy(res.ok);
+			} catch (e) {
+				if (!mounted) return;
+				setProxyHealthy(false);
+			}
+		};
+		check();
+		const id = setInterval(check, 10000);
+		return () => {
+			mounted = false;
+			clearInterval(id);
+		};
+	}, [featureClock]);
 
 	// DEV: if env enables email export, ensure the localStorage flag is set so UI appears immediately
 	React.useEffect(() => {
@@ -372,7 +396,7 @@ function App() {
 
 	// --- HANDLERS: AI & GENERATION ---
 	const handleMagicCreate = async () => {
-		if (!FEATURES.GEMINI()) {
+		if (!FEATURES.AI()) {
 			addToast("AI features are disabled. Enable via Settings or feature flags.", "info");
 			return;
 		}
@@ -384,7 +408,7 @@ function App() {
 
 		try {
 			addToast("Generating configuration...", "info");
-			const { generateEndpointConfig } = await import("./services/geminiService");
+			const { generateEndpointConfig } = await import("./services/aiService");
 			const config = await generateEndpointConfig(prompt);
 
 			const newMock: MockEndpoint = {
@@ -392,7 +416,7 @@ function App() {
 				projectId: activeProjectId,
 				name: config.name,
 				path: config.path,
-				method: config.method,
+				method: (config.method as any) || HttpMethod.GET,
 				statusCode: config.statusCode,
 				delay: 50,
 				responseBody: config.responseBody,
@@ -409,13 +433,16 @@ function App() {
 			setView("editor");
 			addToast("Draft generated from AI", "success");
 		} catch (e) {
-			addToast("Failed to generate endpoint. Check API Key.", "error");
+			const msg = (e as Error).message || "";
+			if (msg.includes("OPENROUTER_DISABLED"))
+				addToast("OpenRouter provider disabled. Enable in Settings.", "error");
+			else addToast("Failed to generate endpoint. Check API Key or proxy.", "error");
 		}
 	};
 
 	// --- HANDLERS: SETTINGS & DATA ---
 	const handleSaveApiKey = () => {
-		localStorage.setItem("api_sim_user_gemini_key", userApiKey);
+		localStorage.setItem("api_sim_user_openrouter_key", userApiKey);
 		addToast("API Key saved securely", "success");
 	};
 
@@ -864,21 +891,33 @@ function App() {
 						</div>
 
 						{/* AI Configuration Section */}
-						{FEATURES.GEMINI() && (
+						{FEATURES.AI() && (
 							<div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-								<h3 className="text-xl font-semibold text-slate-800 mb-2 flex items-center">
-									<Key className="w-5 h-5 mr-3 text-violet-600" />
-									AI Configuration
+								<h3 className="text-xl font-semibold text-slate-800 mb-2 flex items-center justify-between">
+									<div className="flex items-center">
+										<Key className="w-5 h-5 mr-3 text-violet-600" />
+										AI Configuration
+									</div>
+									<div className="text-sm">
+										{proxyHealthy === null ? (
+											<span className="text-slate-400">Checking proxy…</span>
+										) : proxyHealthy ? (
+											<span className="text-emerald-600">Proxy: running</span>
+										) : (
+											<span className="text-rose-500">Proxy: unavailable</span>
+										)}
+									</div>
 								</h3>
 								<p className="text-slate-500 text-sm mb-6 max-w-2xl leading-relaxed">
-									Enter your Google Gemini API Key to enable Magic Create and Auto-Generate features.
-									The key is stored securely in your browser's local storage.
+									Optionally provide an OpenRouter API key for direct calls (recommended: run the
+									local proxy and set a server-side key instead). Store keys only if you understand
+									they are visible to your browser localStorage.
 								</p>
 
 								<div className="max-w-xl space-y-4">
 									<div>
 										<label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-											Google Gemini API Key
+											OpenRouter API Key (optional)
 										</label>
 										<div className="relative">
 											<div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -889,7 +928,7 @@ function App() {
 												value={userApiKey}
 												onChange={e => setUserApiKey(e.target.value)}
 												className="block w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none transition-all text-sm font-mono"
-												placeholder="AIzaSy..."
+												placeholder="sk-or-..."
 											/>
 											<button
 												onClick={() => setShowApiKey(!showApiKey)}
@@ -905,7 +944,7 @@ function App() {
 									</div>
 									<div className="flex items-center justify-between">
 										<a
-											href="https://aistudio.google.com/app/apikey"
+											href="https://openrouter.ai/docs"
 											target="_blank"
 											rel="noreferrer"
 											className="text-xs font-medium text-violet-600 hover:text-violet-700 hover:underline"

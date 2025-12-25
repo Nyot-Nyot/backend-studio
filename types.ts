@@ -51,6 +51,14 @@ export interface MockEndpoint {
   proxy?: ProxyConfig; // Optional per-route proxy passthrough configuration
 }
 
+export interface GeneratedEndpointConfig {
+  name: string;
+  path: string;
+  method: HttpMethod | string;
+  statusCode: number;
+  responseBody: string; // stringified JSON
+}
+
 // Resource Schema types for schema-driven data generation
 export interface ResourceField {
   name: string;

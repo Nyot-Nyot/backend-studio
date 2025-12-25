@@ -1,3 +1,4 @@
+// Deprecated: This adapter targets Google Gemini. New implementations should use OpenRouter via `services/aiService.ts`.
 import { GoogleGenAI } from "@google/genai";
 import { HttpMethod } from "../types";
 
@@ -24,10 +25,10 @@ export const generateMockData = async (path: string, context: string): Promise<s
   const prompt = `
     You are a backend developer helper.
     Generate a realistic JSON response body for a REST API endpoint.
-    
+
     Endpoint Path: "${path}"
     Context/Description: "${context}"
-    
+
     Requirements:
     1. Output ONLY valid JSON.
     2. Do not include markdown formatting (like \`\`\`json).
@@ -41,7 +42,7 @@ export const generateMockData = async (path: string, context: string): Promise<s
       model: 'gemini-2.5-flash',
       contents: prompt,
     });
-    
+
     let text = response.text || "{}";
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
     return text;
@@ -75,7 +76,7 @@ export const generateEndpointConfig = async (userPrompt: string): Promise<Genera
       "statusCode": 200 or 201 or 400 etc,
       "responseBody": "The JSON string of the response data (stringified)"
     }
-    
+
     Ensure the path uses best practices (kebab-case).
     Ensure the responseBody is a valid stringified JSON.
   `;

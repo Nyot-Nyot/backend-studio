@@ -19,6 +19,7 @@
 	"scripts": {
 		"dev": "vite",
 		"dev:helper": "node scripts/email-helper.cjs",
+		"dev:openrouter-proxy": "node scripts/openrouter-proxy.cjs",
 		"dev:with-email": "concurrently \"npm:dev\" \"npm:dev:helper\"",
 		"build": "vite build",
 		"preview": "vite preview",

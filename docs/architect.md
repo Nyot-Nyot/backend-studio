@@ -25,7 +25,7 @@
 -   **Mock Engine di Frontend**:
     -   Implementasi di modul seperti `mockEngine.ts`, `dbService.ts`, dan komponen React.
     -   Mencocokkan request dengan konfigurasi endpoint, menjalankan logika delay, auth, CRUD, dan variable injection.
-    -   **Catatan:** ada opsi integrasi _generator_ berbasis AI (misal: Google Gemini) yang bersifat **opsional/eksperimental** dan membutuhkan API key yang disediakan pengguna; fitur ini harus dianggap fragile tanpa pengujian/validasi output tambahan.
+    -   **Catatan:** ada opsi integrasi _generator_ berbasis AI (misal: OpenRouter deepseek) yang bersifat **opsional/eksperimental** dan membutuhkan API key atau proxy yang disediakan/pasang pengguna; fitur ini harus dianggap fragile tanpa pengujian/validasi output tambahan.
 -   **Penyimpanan Data Lokal**:
 
     -   Menggunakan `localStorage` (dan bisa diperluas ke IndexedDB jika dibutuhkan).

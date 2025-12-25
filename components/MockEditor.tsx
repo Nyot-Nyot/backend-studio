@@ -850,12 +850,12 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 		setIsGenerating(true);
 		try {
 			const context = `Name: ${formData.name}, Method: ${formData.method}, Path: ${formData.path}`;
-			if (!FEATURES.GEMINI()) {
+			if (!FEATURES.AI()) {
 				addToast("AI features are disabled. Enable via Settings or feature flags.", "info");
 				setIsGenerating(false);
 				return;
 			}
-			const { generateMockData } = await import("../services/geminiService");
+			const { generateMockData } = await import("../services/aiService");
 			const json = await generateMockData(formData.path, context);
 			handleChange("responseBody", json);
 
@@ -871,8 +871,11 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 			}
 			addToast("Generated response body", "success");
 		} catch (e) {
-			if ((e as Error).message.includes("MISSING_API_KEY")) {
-				addToast("Gemini API Key missing. Configure in Settings.", "error");
+			const msg = (e as Error).message || "";
+			if (msg.includes("OPENROUTER_DISABLED")) {
+				addToast("OpenRouter provider disabled. Enable in Settings.", "error");
+			} else if (msg.includes("OPENROUTER_API_KEY not configured") || msg.includes("401")) {
+				addToast("OpenRouter API Key missing or proxy not running. Configure or start proxy.", "error");
 			} else {
 				addToast("Failed to generate", "error");
 			}

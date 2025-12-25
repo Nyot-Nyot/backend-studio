@@ -51,7 +51,7 @@
 -   [x] Test nested objects/arrays in responses with placeholder expansion. (verified in e2e)
 -   [x] Test pretty-printed responses and minified options from MockEditor. (verified in UI tests)
 -   [x] Test generators interacting with stateful DB (e.g., POST creates resource, subsequent GET returns it). (verified in simulateRequest tests)
--   [ ] Gemini/AI generation: Verify that AI-based generation (Magic Create / generateEndpointConfig) handles missing/invalid API keys gracefully and surfaces a clear, actionable error message to the user. (TODO: add unit + integration tests)
+-   [ ] AI generation (OpenRouter): Verify that AI-based generation (Magic Create / generateEndpointConfig) handles missing/invalid API keys and proxy errors gracefully and surfaces a clear, actionable error message to the user. (TODO: add unit + integration tests)
 
 ## Stateful Mocking (DatabaseView)
 

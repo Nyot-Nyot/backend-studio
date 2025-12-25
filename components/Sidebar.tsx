@@ -226,7 +226,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 						{!isCollapsed && <span className="font-medium text-sm">Design Route</span>}
 					</button>
 
-					{FEATURES.GEMINI() && (
+					{FEATURES.AI() && (
 						<button
 							onClick={onMagicCreate}
 							title={isCollapsed ? "AI Architect" : ""}

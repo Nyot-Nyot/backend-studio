@@ -24,7 +24,17 @@ Run the same checks locally:
 -   Unit tests: `npm run test:unit`
 -   Playwright E2E: `npm run test:e2e`
 
+**Security: API Keys**
+
+-   Do not commit real API keys to the repository. If a key is accidentally committed, rotate/revoke it immediately and replace it with a placeholder in `.env`.
+-   For OpenRouter or other AI providers, prefer running a local server-side proxy that reads a non-VITE env var like `OPENROUTER_API_KEY` instead of exposing a `VITE_` key to the browser.
+
 To add a badge to the repository README use the following template (replace `OWNER` and `REPO`):
+
+Optional: running the OpenRouter proxy locally
+
+-   Start dev proxy that forwards requests to OpenRouter (reads `OPENROUTER_API_KEY`): `OPENROUTER_API_KEY=<your_key> npm run dev:openrouter-proxy` (runs on port 3002 by default). This keeps your API key server-side and out of the browser.
+-   For convenience during development only, you can allow client-provided keys by setting `DEV_ALLOW_CLIENT_KEY=1` when starting the proxy. This lets the UI send an `X-OpenRouter-Key` header for ad-hoc testing (NOT recommended for production): `DEV_ALLOW_CLIENT_KEY=1 npm run dev:openrouter-proxy`.
 
 ```
 ![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)
