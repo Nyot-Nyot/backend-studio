@@ -1353,7 +1353,11 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 												onChange={e =>
 													setFormData(prev => ({
 														...prev,
-														proxy: { ...(prev.proxy || {}), target: e.target.value },
+														proxy: {
+															...(prev.proxy || {}),
+															enabled: prev.proxy?.enabled ?? false,
+															target: e.target.value,
+														},
 													}))
 												}
 												placeholder="https://api.example.com"
@@ -1376,6 +1380,7 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 															...prev,
 															proxy: {
 																...(prev.proxy || {}),
+																enabled: prev.proxy?.enabled ?? false,
 																timeout: Number(e.target.value),
 															},
 														}))
@@ -1393,6 +1398,7 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 															...prev,
 															proxy: {
 																...(prev.proxy || {}),
+																enabled: prev.proxy?.enabled ?? false,
 																fallbackToMock: e.target.value === "true",
 															},
 														}))
