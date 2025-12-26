@@ -82,16 +82,16 @@ const tombolKirim = "Kirim";
 
 ## Phase 1 — P1 (High priority)
 
--   [ ] Replace critical `any` usage with explicit types in `types.ts`, `dbService`, and `mockEngine`
--   [ ] Add tests to validate typed contracts (dbService, mockEngine)
--   [ ] Add a logger abstraction and integrate across services; support env-driven verbosity
--   [ ] Create `env.example` and document required VITE env variables; add runtime checks
--   [ ] Run automated a11y scan (axe) and fix the top accessibility issues; add CI a11y guard
--   [ ] Restrict CORS in `scripts/socket-server.cjs` for production and add payload validation + rate-limiting
--   [ ] Mask tokens in UI and provide copy-to-clipboard with confirmation
--   [ ] Add CSP recommendations and sample meta tag; document production hosting guidance
--   [ ] Improve `openrouterClient.postJson` to opt-in header injection and add tests
--   [ ] Add timeouts & backoff for key network calls (proxy, uploads, socket fallback)
+-   [x] Replace critical `any` usage with explicit types in `types.ts`, `dbService`, and `mockEngine`
+-   [x] Add tests to validate typed contracts (dbService, mockEngine)
+-   [x] Add a logger abstraction and integrate across services; support env-driven verbosity
+-   [x] Create `env.example` and document required VITE env variables; add runtime checks
+-   [x] Run automated a11y scan (axe) and fix the top accessibility issues; add CI a11y guard
+-   [x] Restrict CORS in `scripts/socket-server.cjs` for production and add payload validation + rate-limiting
+-   [x] Mask tokens in MockEditor and provide copy-to-clipboard with confirmation (added e2e test)
+-   [x] Add CSP recommendations and sample meta tag; document production hosting guidance
+-   [x] Improve `openrouterClient.postJson` to opt-in header injection and add tests
+-   [x] Add timeouts & backoff for key network calls (proxy, uploads, socket fallback)
 
 ---
 

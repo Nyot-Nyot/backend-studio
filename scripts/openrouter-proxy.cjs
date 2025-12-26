@@ -66,19 +66,40 @@ function createApp(opts = {}) {
 
 	// Helper to call OpenRouter Chat Completions
 	async function callOpenRouter(messages, model = "deepseek/deepseek-r1-0528:free", apiKey) {
+		// Expose a testing hook so tests can call the internal function directly
+		if (!app._isTest_callOpenRouter) app._isTest_callOpenRouter = msgs => callOpenRouter(msgs, model, apiKey);
 		const keyToUse = apiKey || (hasOverride ? OPENROUTER_API_KEY_OVERRIDE : process.env.OPENROUTER_API_KEY);
-		const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-			method: "POST",
-			headers: {
-				Authorization: `Bearer ${keyToUse}`,
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({ model, messages }),
-		});
+		const retryUtil = require("../services/retry.cjs");
 
-		const json = await response.json();
-		return { status: response.status, body: json };
+		const doFetch = async () => {
+			const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${keyToUse}`,
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({ model, messages }),
+			});
+
+			if (!response) throw new Error("no response from fetch");
+			if (response.status >= 500) throw new Error("server_error:" + response.status);
+			const json = await response.json();
+			return { status: response.status, body: json };
+		};
+
+		// Use retry with reasonable defaults and per-attempt timeout
+		const result = await retryUtil.retry(doFetch, {
+			retries: 3,
+			baseDelayMs: 200,
+			factor: 2,
+			maxDelayMs: 1500,
+			timeoutMs: 8000,
+		});
+		return result;
 	}
+
+	// Expose internal call helper for tests (call directly to avoid HTTP layer)
+	app._isTest_callOpenRouter = (msgs, model, apiKey) => callOpenRouter(msgs, model, apiKey);
 
 	app.post("/openrouter/generate-mock", async (req, res) => {
 		const { path, context } = req.body || {};

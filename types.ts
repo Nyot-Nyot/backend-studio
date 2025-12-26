@@ -161,7 +161,9 @@ export interface ScenarioStepLog {
   startedAt: number;
   endedAt?: number;
   status: 'running' | 'success' | 'failed';
-  output?: any;
+  // Output can be any serializable value produced by the step; use `unknown` to force callers
+  // to assert the concrete type before using it.
+  output?: unknown;
   error?: string;
 }
 
@@ -178,7 +180,8 @@ export interface Connector {
   id: string;
   name: string;
   type: string;
-  config: any;
+  // Connector configuration is connector-specific; prefer an object with unknown values
+  config?: Record<string, unknown>;
   createdAt: number;
 }
 

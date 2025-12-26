@@ -10,8 +10,8 @@ const DB_PREFIX = "api_sim_db_";
 /**
  * Detects if all IDs in a collection are numeric
  */
-const isNumericIdStrategy = (ids: any[]): boolean => {
-  return ids.length > 0 && ids.every((val: any) => typeof val === "number");
+const isNumericIdStrategy = (ids: unknown[]): boolean => {
+  return ids.length > 0 && ids.every((val) => typeof val === "number");
 };
 
 // Collections that should default to UUIDs when empty
@@ -36,15 +36,18 @@ const generateShortUuid = (): string => {
 };
 
 // In-memory cache to keep synchronous API stable while persistence may be async
-const cache: Record<string, any[]> = {};
+const cache: Record<string, Record<string, unknown>[]> = {};
 let _backend: 'localStorage' | 'indexeddb' | 'memory' = 'localStorage';
 
-const persistCollection = async (name: string, data: any[]) => {
+import { logger } from './logger';
+const log = logger('dbService');
+
+const persistCollection = async (name: string, data: Record<string, unknown>[]) => {
   if (_backend === 'localStorage') {
     try {
       localStorage.setItem(DB_PREFIX + name, JSON.stringify(data));
     } catch (e) {
-      console.error(`Error saving collection "${name}" to localStorage:`, e);
+      log.error(`Error saving collection "${name}" to localStorage:`, e);
     }
     return;
   }
@@ -54,7 +57,7 @@ const persistCollection = async (name: string, data: any[]) => {
       const mod = await import('./indexedDbService');
       await mod.indexedDbService.saveCollection(name, data);
     } catch (e) {
-      console.warn(`Error saving collection "${name}" to IndexedDB:`, e);
+      log.warn(`Error saving collection "${name}" to IndexedDB:`, e);
     }
     return;
   }
@@ -81,7 +84,7 @@ export const dbService = {
    * Get entire collection (synchronous API preserved)
    * Uses in-memory cache if available, otherwise falls back to localStorage.
    */
-  getCollection: (name: string): any[] => {
+  getCollection: (name: string): Record<string, unknown>[] => {
     // If running in indexeddb mode and cache populated, prefer that for sync reads.
     if (_backend === 'indexeddb' && cache[name]) return cache[name];
 
@@ -94,7 +97,7 @@ export const dbService = {
       cache[name] = parsed;
       return parsed;
     } catch (error) {
-      console.warn(`Error reading collection "${name}":`, error);
+      log.warn(`Error reading collection "${name}":`, error);
       cache[name] = [];
       return [];
     }
@@ -105,7 +108,7 @@ export const dbService = {
    * - Default: synchronous signature (fire-and-forget background persistence) to preserve existing behavior.
    * - If `opts.await` is true, returns a Promise that resolves when persistence completes.
    */
-  saveCollection: (name: string, data: any[], opts?: { await?: boolean }): void | Promise<void> => {
+  saveCollection: (name: string, data: Record<string, unknown>[], opts?: { await?: boolean }): void | Promise<void> => {
     cache[name] = data;
 
     if (opts && opts.await) {
@@ -114,7 +117,7 @@ export const dbService = {
         try {
           await persistCollection(name, data);
         } catch (err) {
-          console.warn('Persist failed:', err);
+          log.warn('Persist failed:', err);
         }
       })();
     }
@@ -130,7 +133,7 @@ export const dbService = {
 
   },
 
-  persistCollectionAsync: async (name: string, data: any[]): Promise<void> => {
+  persistCollectionAsync: async (name: string, data: Record<string, unknown>[]): Promise<void> => {
     cache[name] = data;
     await persistCollection(name, data);
   },
@@ -151,7 +154,7 @@ export const dbService = {
           const mod = await import('./indexedDbService');
           await mod.indexedDbService.clearCollection(name);
         } catch (e) {
-          console.warn('Error clearing collection in indexedDB:', e);
+          log.warn('Error clearing collection in indexedDB:', e);
         }
       }
     })();
@@ -171,29 +174,29 @@ export const dbService = {
     return Array.from(names);
   },
 
-  find: (collection: string, id: string | number): any => {
+  find: (collection: string, id: string | number): Record<string, unknown> | undefined => {
     const list = dbService.getCollection(collection);
-    return list.find((item: any) => item.id == id);
+    return list.find((item) => (item as { id?: unknown }).id == id) as Record<string, unknown> | undefined;
   },
 
-  insert: (collection: string, item: any): any => {
+  insert: (collection: string, item: Record<string, unknown>): Record<string, unknown> => {
     const list = dbService.getCollection(collection);
 
-    if (item.id === undefined || item.id === null) {
+    if ((item as { id?: unknown }).id === undefined || (item as { id?: unknown }).id === null) {
       const existingIds = list
-        .map((i: any) => i.id)
-        .filter((val: any) => val !== undefined && val !== null);
+        .map((i) => (i as { id?: unknown }).id)
+        .filter((val) => val !== undefined && val !== null) as unknown[];
 
       if (existingIds.length === 0) {
         if (DEFAULT_UUID_COLLECTIONS.has(collection)) {
-          item.id = generateShortUuid();
+          (item as { id?: unknown }).id = generateShortUuid();
         } else {
-          item.id = 1;
+          (item as { id?: unknown }).id = 1 as unknown;
         }
       } else if (isNumericIdStrategy(existingIds)) {
-        item.id = generateNumericId(existingIds as number[]);
+        (item as { id?: unknown }).id = generateNumericId(existingIds as number[]);
       } else {
-        item.id = generateShortUuid();
+        (item as { id?: unknown }).id = generateShortUuid();
       }
     }
 
@@ -202,14 +205,14 @@ export const dbService = {
     return item;
   },
 
-  update: (collection: string, id: string | number, updates: any): any => {
+  update: (collection: string, id: string | number, updates: Partial<Record<string, unknown>>): Record<string, unknown> | null => {
     const list = dbService.getCollection(collection);
-    const index = list.findIndex((item: any) => item.id == id);
+    const index = list.findIndex((item) => (item as { id?: unknown }).id == id);
 
     if (index !== -1) {
-      list[index] = { ...list[index], ...updates };
+      list[index] = { ...list[index], ...updates } as Record<string, unknown>;
       dbService.saveCollection(collection, list);
-      return list[index];
+      return list[index] as Record<string, unknown>;
     }
     return null;
   },
@@ -218,7 +221,7 @@ export const dbService = {
     let list = dbService.getCollection(collection);
     const initialLen = list.length;
 
-    list = list.filter((item: any) => item.id != id);
+    list = list.filter((item) => (item as { id?: unknown }).id != id);
 
     if (list.length !== initialLen) {
       dbService.saveCollection(collection, list);
@@ -234,7 +237,7 @@ export const dbService = {
       return { count: 0, idType: 'mixed' };
     }
 
-    const idTypes = new Set(list.map((item: any) => typeof item.id));
+    const idTypes = new Set(list.map((item) => typeof (item as { id?: unknown }).id));
     let idType: 'numeric' | 'string' | 'mixed' = 'string';
     if (idTypes.size === 1) {
       idType = idTypes.has('number') ? 'numeric' : 'string';
@@ -313,7 +316,7 @@ export const dbService = {
 
         return { migrated };
       } catch (error) {
-        console.warn('IndexedDB init/migration failed:', error);
+        log.warn('IndexedDB init/migration failed:', error);
         // fallback to localStorage mode
         _backend = 'localStorage';
         loadAllFromLocalStorage();
@@ -336,7 +339,7 @@ export const dbService = {
         cache[name] = data;
         return data;
       } catch (e) {
-        console.warn('getCollectionAsync (indexeddb) failed:', e);
+        log.warn('getCollectionAsync (indexeddb) failed:', e);
       }
     }
     // fallback to sync version

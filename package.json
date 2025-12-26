@@ -39,8 +39,9 @@
 		"test:swagger": "npx tsx test/task6_4_swagger_export.ts",
 		"test:e2e": "playwright test --config=playwright.config.ts",
 		"test:unit": "npx tsx test/*.test.ts",
-		"ci": "npm run test:unit && npm run test:e2e",
-		"ci-local": "npx tsc --noEmit && npm run test:unit"
+		"ci": "npm run test:unit && npm run test:e2e && npm run test:a11y",
+		"ci-local": "npx tsc --noEmit && npm run test:unit",
+		"test:a11y": "npx playwright test test/e2e/a11y.spec.ts"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.57.0",
@@ -52,6 +53,7 @@
 		"fake-indexeddb": "^3.1.6",
 		"@types/react": "^18.2.0",
 		"@types/react-dom": "^18.2.0",
-		"concurrently": "^8.2.0"
+		"concurrently": "^8.2.0",
+		"@axe-core/playwright": "^4.7.2"
 	}
 }

@@ -24,7 +24,21 @@ test('MockEditor auth: set Bearer token and persist', async ({ page }) => {
 
   // Verify preview updated
   await expect(page.locator('text=Expected Header')).toBeVisible();
-  await expect(page.locator('text=Authorization: Bearer secret-xyz')).toBeVisible();
+  await expect(page.locator('text=Authorization: Bearer')).toBeVisible();
+  await expect(page.locator('text=secret-xyz')).not.toBeVisible();
+
+  // Mock clipboard and click copy button, then assert clipboard & toast
+  await page.evaluate(() => {
+    (navigator as any).clipboard = {
+      _data: '',
+      writeText: (text: string) => { (navigator as any).clipboard._data = text; return Promise.resolve(); },
+      readText: () => Promise.resolve((navigator as any).clipboard._data),
+    } as any;
+  });
+  await page.click('button[aria-label="Salin token ke clipboard"]');
+  const clipboardText = await page.evaluate(() => (navigator as any).clipboard._data);
+  await expect(clipboardText).toBe('secret-xyz');
+  await expect(page.locator('text=Token disalin ke clipboard')).toBeVisible();
 
   // Save the route
   await page.click('text=Save Route');
@@ -34,5 +48,6 @@ test('MockEditor auth: set Bearer token and persist', async ({ page }) => {
   await page.click('h3:has-text("Ping")');
 
   await expect(page.locator('text=Authentication & Security')).toBeVisible();
-  await expect(page.locator('text=Authorization: Bearer secret-xyz')).toBeVisible();
+  await expect(page.locator('text=Authorization: Bearer')).toBeVisible();
+  await expect(page.locator('text=secret-xyz')).not.toBeVisible();
 });

@@ -6,6 +6,7 @@ import {
 	ChevronDown,
 	ChevronRight,
 	Code2,
+	Copy,
 	Database,
 	FileJson,
 	FolderOpen,
@@ -1245,7 +1246,25 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 											📋 <strong>Expected Header:</strong>
 										</div>
 										<div className="font-mono bg-slate-900 text-emerald-400 px-3 py-2 rounded-md overflow-x-auto text-[10px] mt-1">
-											{formatAuthPreview(formData.authConfig)}
+											<div className="flex items-center justify-between w-full">
+												<div className="truncate">{formatAuthPreview(formData.authConfig)}</div>
+												<button
+													onClick={() => {
+														const token = formData.authConfig?.token || "";
+														if (token && (navigator as any).clipboard) {
+															navigator.clipboard.writeText(token);
+															addToast("Token disalin ke clipboard", "info");
+														} else {
+															addToast("Token tidak tersedia untuk disalin", "error");
+														}
+													}}
+													className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-slate-800 text-white text-xs"
+													aria-label="Salin token ke clipboard"
+												>
+													<Copy className="w-3.5 h-3.5" />
+													<span>Salin</span>
+												</button>
+											</div>
 										</div>
 									</p>
 								</div>
@@ -1303,8 +1322,25 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 											📋 <strong>Expected Header:</strong>
 										</div>
 										<div className="font-mono bg-slate-900 text-emerald-400 px-3 py-2 rounded-md overflow-x-auto text-[10px] mt-1">
-											{formData.authConfig?.headerKey || "x-api-key"}:{" "}
-											{formData.authConfig?.token || "sk-api-1234567890abcdef"}
+											<div className="flex items-center justify-between w-full">
+												<div className="truncate">{formatAuthPreview(formData.authConfig)}</div>
+												<button
+													onClick={() => {
+														const token = formData.authConfig?.token || "";
+														if (token && (navigator as any).clipboard) {
+															navigator.clipboard.writeText(token);
+															addToast("Token disalin ke clipboard", "info");
+														} else {
+															addToast("Token tidak tersedia untuk disalin", "error");
+														}
+													}}
+													className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-slate-800 text-white text-xs"
+													aria-label="Salin token ke clipboard"
+												>
+													<Copy className="w-3.5 h-3.5" />
+													<span>Salin</span>
+												</button>
+											</div>
 										</div>
 									</p>
 								</div>

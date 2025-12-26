@@ -1,16 +1,17 @@
 
 import { EnvironmentVariable, HttpMethod, MockEndpoint } from "../types";
 import { dbService } from "./dbService";
+import { logger } from "./logger";
 
 // Helper: Match Route Pattern
-export const matchRoute = (pattern: string, requestPath: string): { matches: boolean, params: any } => {
+export const matchRoute = (pattern: string, requestPath: string): { matches: boolean; params: Record<string, string | undefined> } => {
   // Normalize paths (remove trailing slash, ensure leading slash)
   const cleanReqPath = requestPath.split('?')[0].replace(/\/+$/, '');
   const cleanPattern = pattern.replace(/\/+$/, '');
 
   const patternSegments = cleanPattern.split('/').filter(Boolean);
   const pathSegments = cleanReqPath.split('/').filter(Boolean);
-  const params: any = {};
+  const params: Record<string, string | undefined> = {};
 
   // Two-pointer approach to allow optional params (:id?), single '*' wildcard (matches one segment)
   // and trailing '*' wildcard that matches the rest of the path.
@@ -173,10 +174,10 @@ export const processMockResponse = (
   let processedBody = bodyTemplate;
 
   // Try to parse request body JSON if present
-  let parsedBody: any = null;
+  let parsedBody: unknown = null;
   if (requestBody) {
     try {
-      parsedBody = JSON.parse(requestBody);
+      parsedBody = JSON.parse(requestBody) as unknown;
     } catch (e) {
       parsedBody = null;
     }
@@ -184,11 +185,11 @@ export const processMockResponse = (
 
   // Debug helper: if parsedBody is null but requestBody exists, log a warning so we can see malformed JSON (dev only)
   if (requestBody && parsedBody === null) {
-    try {
-      if (import.meta.env?.DEV) {
-        console.warn('mockEngine: failed to parse requestBody as JSON', requestBody.slice(0, 200));
-      }
-    } catch (e) { }
+    if (import.meta.env?.DEV) {
+      try {
+        logger('mockEngine').warn('mockEngine: failed to parse requestBody as JSON', String(requestBody).slice(0, 200));
+      } catch (e) { }
+    }
   }
 
   // 0. Environment Variables Injection (User Defined)
@@ -228,7 +229,7 @@ export const processMockResponse = (
   // 3. Request Body Injection
   // Allows placeholders like {{@body.name}} to be replaced with values from JSON body
   if (parsedBody && typeof parsedBody === 'object') {
-    const walk = (obj: any, prefix = '') => {
+    const walk = (obj: Record<string, unknown>, prefix = '') => {
       Object.keys(obj).forEach(k => {
         const val = obj[k];
         const placeholder = `{{@body${prefix}.${k}}}`;
@@ -237,11 +238,11 @@ export const processMockResponse = (
         processedBody = processedBody.replace(regex, replacement);
 
         if (typeof val === 'object' && val !== null) {
-          walk(val, `${prefix}.${k}`);
+          walk(val as Record<string, unknown>, `${prefix}.${k}`);
         }
       });
     };
-    walk(parsedBody, '');
+    walk(parsedBody as Record<string, unknown>, '');
   }
 
   // 4. Dynamic Variables Replacement (System)
@@ -311,7 +312,7 @@ export const simulateRequest = async (
   const pathname = urlObj.pathname;
 
   let matchedMock: MockEndpoint | null = null;
-  let urlParams: any = {};
+  let urlParams: Record<string, string | undefined> = {};
 
   // Find matching route
   for (const m of mocks) {
