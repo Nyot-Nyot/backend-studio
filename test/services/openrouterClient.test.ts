@@ -44,3 +44,19 @@ test('generate endpoint returns expected shape', async () => {
   assert(res.path === '/users', 'path ok');
   assert(res.statusCode === 200, 'status code ok');
 });
+
+// New test: ensure clientKey opt-in is respected
+
+test('generate mock forwards X-OpenRouter-Key when clientKey option provided', async () => {
+  let sawHeader = false;
+  (globalThis as any).fetch = async (url: string, opts: any) => {
+    if (url.endsWith('/openrouter/generate-mock')) {
+      sawHeader = !!(opts && opts.headers && opts.headers['X-OpenRouter-Key']);
+      return { ok: true, json: async () => ({ json: '{}' }) } as any;
+    }
+    return { ok: false, status: 404, text: async () => 'not found' } as any;
+  };
+
+  const res = await openrouterGenerateMock({ path: '/users', context: 'list' } as any, { clientKey: 'abc' } as any);
+  assert(sawHeader, 'expected X-OpenRouter-Key header to be forwarded when clientKey provided');
+});

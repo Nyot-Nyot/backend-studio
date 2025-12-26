@@ -101,11 +101,25 @@ export const dbService = {
   },
 
   /**
-   * Save entire collection (synchronous signature retained)
-   * Persistence to backend is performed asynchronously in background.
+   * Save entire collection.
+   * - Default: synchronous signature (fire-and-forget background persistence) to preserve existing behavior.
+   * - If `opts.await` is true, returns a Promise that resolves when persistence completes.
    */
-  saveCollection: (name: string, data: any[]): void => {
+  saveCollection: (name: string, data: any[], opts?: { await?: boolean }): void | Promise<void> => {
     cache[name] = data;
+
+    if (opts && opts.await) {
+      // Return a Promise that resolves when persistence completes
+      return (async () => {
+        try {
+          await persistCollection(name, data);
+        } catch (err) {
+          console.warn('Persist failed:', err);
+        }
+      })();
+    }
+
+    // Fire-and-forget (backwards compatible)
     (async () => {
       try {
         await persistCollection(name, data);
@@ -113,6 +127,7 @@ export const dbService = {
         console.warn('Persist failed:', err);
       }
     })();
+
   },
 
   persistCollectionAsync: async (name: string, data: any[]): Promise<void> => {
@@ -238,6 +253,36 @@ export const dbService = {
     collections.forEach((col) => {
       dbService.clearCollection(col);
     });
+  },
+
+  /**
+   * Async variant: clear all collections and wait for backend persistence to finish.
+   * Useful for deterministic flows like factory reset or import where we need to guarantee
+   * the storage state before proceeding.
+   */
+  clearAllCollectionsAsync: async (): Promise<void> => {
+    const collections = dbService.listCollections();
+    // If using indexeddb backend, call indexedDbService to ensure persistence
+    if (_backend === 'indexeddb') {
+      try {
+        const mod = await import('./indexedDbService');
+        for (const c of collections) {
+          await mod.indexedDbService.clearCollection(c);
+        }
+      } catch (e) {
+        console.warn('clearAllCollectionsAsync (indexeddb) failed:', e);
+        // Fallback to clearing localStorage items that match prefix
+        for (const c of collections) {
+          localStorage.removeItem(DB_PREFIX + c);
+        }
+      }
+    } else {
+      // localStorage or memory: clear synchronously
+      for (const c of collections) {
+        localStorage.removeItem(DB_PREFIX + c);
+        delete cache[c];
+      }
+    }
   },
 
   /**

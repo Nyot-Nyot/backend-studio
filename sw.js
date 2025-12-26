@@ -8,6 +8,9 @@ self.addEventListener("activate", event => {
 
 const API_PREFIX = "/api/"; // Extracted for maintainability
 
+// Timeout for how long SW waits for a client response before falling back to network (milliseconds)
+const HANDSHAKE_TIMEOUT_MS = 3000; // configurable default
+
 self.addEventListener("fetch", event => {
 	const url = new URL(event.request.url);
 
@@ -60,8 +63,22 @@ async function handleRequest(event) {
 	return new Promise(resolve => {
 		const channel = new MessageChannel();
 
+		// Fallback timer: jika client tidak merespons dalam waktu tertentu, lakukan fallback ke network
+		let settled = false;
+		const timeoutId = setTimeout(() => {
+			if (settled) return;
+			settled = true;
+			console.warn(`SW: client did not respond within ${HANDSHAKE_TIMEOUT_MS}ms, falling back to network`);
+			// Clean up listener
+			channel.port1.onmessage = null;
+			resolve(fetch(event.request));
+		}, HANDSHAKE_TIMEOUT_MS);
+
 		// Dengarkan balasan dari React App
 		channel.port1.onmessage = msg => {
+			if (settled) return; // ignore late responses
+			clearTimeout(timeoutId);
+			settled = true;
 			try {
 				const { response } = msg.data || {};
 

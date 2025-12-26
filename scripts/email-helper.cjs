@@ -22,9 +22,19 @@ const storage = multer.diskStorage({
 	},
 });
 
+// Acceptable extensions (for this helper): .zip, .json, .txt, .png, .jpg
+const ACCEPT_EXTENSIONS = new Set([".zip", ".json", ".txt", ".png", ".jpg", ".jpeg"]);
+
 const upload = multer({
 	storage,
 	limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max
+	fileFilter: (req, file, cb) => {
+		const ext = path.extname(file.originalname || "").toLowerCase();
+		if (!ACCEPT_EXTENSIONS.has(ext)) {
+			return cb(new Error("File type not allowed"), false);
+		}
+		cb(null, true);
+	},
 });
 
 const app = express();
@@ -34,10 +44,11 @@ app.use(express.json());
 // serve files with simple static middleware
 app.use("/files", express.static(UPLOAD_DIR, { index: false }));
 
-const USE_0X0 = process.env.EMAIL_HELPER_UPLOAD_TO_0X0 === 'true' || process.env.EMAIL_HELPER_PUBLIC_HOST === '0x0.st';
+const USE_0X0 = process.env.EMAIL_HELPER_UPLOAD_TO_0X0 === "true" || process.env.EMAIL_HELPER_PUBLIC_HOST === "0x0.st";
 
 app.post("/upload-temp", upload.single("file"), async (req, res) => {
 	if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+	if (req.file && req.file.size > 50 * 1024 * 1024) return res.status(413).json({ error: "File too large" });
 	const expiresAt = Date.now() + TTL_HOURS * 60 * 60 * 1000;
 	// store metadata small JSON beside file
 	const meta = { originalName: req.file.originalname, filename: req.file.filename, size: req.file.size, expiresAt };
@@ -45,24 +56,26 @@ app.post("/upload-temp", upload.single("file"), async (req, res) => {
 
 	if (USE_0X0) {
 		try {
-			const FormData = require('form-data');
+			const FormData = require("form-data");
 			const form = new FormData();
 			const filePath = path.join(UPLOAD_DIR, req.file.filename);
-			form.append('file', fs.createReadStream(filePath), { filename: req.file.originalname });
-			const fetchRes = await fetch('https://0x0.st', { method: 'POST', body: form, headers: form.getHeaders() });
+			form.append("file", fs.createReadStream(filePath), { filename: req.file.originalname });
+			const fetchRes = await fetch("https://0x0.st", { method: "POST", body: form, headers: form.getHeaders() });
 			const text = (await fetchRes.text()).trim();
-			if (fetchRes.ok && text && text.startsWith('http')) {
+			if (fetchRes.ok && text && text.startsWith("http")) {
 				const url = text;
 				meta.remoteUrl = url;
 				fs.writeFileSync(path.join(UPLOAD_DIR, `${req.file.filename}.json`), JSON.stringify(meta));
 				// remove local file to save disk space
-				try { fs.unlinkSync(filePath); } catch (e) {}
+				try {
+					fs.unlinkSync(filePath);
+				} catch (e) {}
 				return res.json({ url, expiresAt });
 			} else {
-				console.warn('0x0.st upload failed', fetchRes.status, text);
+				console.warn("0x0.st upload failed", fetchRes.status, text);
 			}
 		} catch (e) {
-			console.error('Public upload error', e);
+			console.error("Public upload error", e);
 		}
 	}
 
@@ -104,8 +117,20 @@ setInterval(() => {
 
 app.get("/health", (req, res) => res.json({ ok: true }));
 
-app.listen(PORT, () => {
-	console.log(`Email helper server running on port ${PORT}`);
-	console.log(`Upload endpoint: POST http://localhost:${PORT}/upload-temp (form field name 'file')`);
-	console.log(`Public uploads to 0x0.st enabled: ${USE_0X0 ? 'yes' : 'no'}`);
-});
+function createApp() {
+	// Reuse the already-configured global app instance, which has
+	// all middleware, routes (including /upload-temp and /health),
+	// and static file handling set up.
+	return app;
+}
+
+if (require.main === module) {
+	const app = createApp();
+	app.listen(PORT, () => {
+		console.log(`Email helper server running on port ${PORT}`);
+		console.log(`Upload endpoint: POST http://localhost:${PORT}/upload-temp (form field name 'file')`);
+		console.log(`Public uploads to 0x0.st enabled: ${USE_0X0 ? "yes" : "no"}`);
+	});
+}
+
+module.exports = { createApp };

@@ -39,7 +39,8 @@
 		"test:swagger": "npx tsx test/task6_4_swagger_export.ts",
 		"test:e2e": "playwright test --config=playwright.config.ts",
 		"test:unit": "npx tsx test/*.test.ts",
-		"ci": "npm run test:unit && npm run test:e2e"
+		"ci": "npm run test:unit && npm run test:e2e",
+		"ci-local": "npx tsc --noEmit && npm run test:unit"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.57.0",

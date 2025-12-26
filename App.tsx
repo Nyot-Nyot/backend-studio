@@ -37,6 +37,7 @@ import { generateServerCode as buildServerCode } from "./services/exportService"
 import { simulateRequest } from "./services/mockEngine";
 import { generateOpenApiSpec } from "./services/openApiService";
 import socketClient from "./services/socketClient";
+import { postErrorResponseToPort } from "./services/swHelpers";
 import { EnvironmentVariable, HttpMethod, LogEntry, MockEndpoint, Project, TestConsoleState, ViewState } from "./types";
 
 const STORAGE_KEY_PROJECTS = "api_sim_projects";
@@ -49,6 +50,8 @@ const DEFAULT_PROJECT: Project = {
 	name: "Default Workspace",
 	createdAt: Date.now(),
 };
+
+import { dbService } from "./services/dbService";
 
 function App() {
 	// --- STATE ---
@@ -300,14 +303,23 @@ function App() {
 					});
 				}
 
-				const result = await simulateRequest(
-					payload.method,
-					payload.url,
-					payload.headers,
-					payload.body,
-					mocksRef.current,
-					envVarsRef.current // Pass restored env vars
-				);
+				let result: any;
+				try {
+					result = await simulateRequest(
+						payload.method,
+						payload.url,
+						payload.headers,
+						payload.body,
+						mocksRef.current,
+						envVarsRef.current // Pass restored env vars
+					);
+				} catch (err) {
+					console.error("[App] Error while handling INTERCEPT_REQUEST", err);
+					if (event.ports && event.ports[0]) {
+						postErrorResponseToPort(event.ports[0], "Internal server error");
+					}
+					return;
+				}
 
 				// Add Log (local)
 				const newLog: LogEntry = {
@@ -583,11 +595,16 @@ function App() {
 		const file = event.target.files?.[0];
 		if (!file) return;
 		const reader = new FileReader();
-		reader.onload = e => {
+		reader.onload = async e => {
 			try {
 				const content = e.target?.result as string;
 				const data = JSON.parse(content);
-				if (!Array.isArray(data.projects) || !Array.isArray(data.mocks)) throw new Error("Invalid file format");
+				// Validate imported structure strictly
+				try {
+					await import("./services/validation").then(mod => mod.validateWorkspaceImport(data));
+				} catch (vErr) {
+					throw vErr;
+				}
 				if (
 					confirm(
 						`Replace current workspace with ${data.projects.length} projects and ${data.mocks.length} routes?`
@@ -840,9 +857,19 @@ function App() {
 		}
 	};
 
-	const handleFactoryReset = () => {
+	const handleFactoryReset = async () => {
 		if (confirm("Are you sure you want to reset everything? This cannot be undone.")) {
-			localStorage.clear();
+			try {
+				// Ensure DB-backed collections are cleared and persisted
+				await dbService.clearAllCollectionsAsync();
+				// Clear localStorage (feature flags, app keys, etc.) to match previous behavior
+				localStorage.clear();
+				addToast("Reset complete", "success");
+			} catch (err) {
+				console.error("Factory reset failed:", err);
+				addToast("Factory reset failed", "error");
+			}
+			// Reload to apply default workspace
 			window.location.reload();
 		}
 	};

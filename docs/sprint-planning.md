@@ -63,20 +63,20 @@ const tombolKirim = "Kirim";
 
 ---
 
-## Phase 0 — P0 (Critical, must-fix before production)
+## Phase 0 — P0 (Critical, must-fix before production) — **Status: ✅ Selesai**
 
--   [ ] Add Service Worker postMessage handshake helper with timeout and network fallback
--   [ ] Update `sw.js` to use handshake helper and add unit tests for timeout/fallback
--   [ ] Update `App.tsx` SW listener to use the robust handshake and graceful fallback path
--   [ ] Add integration test simulating an unresponsive client to verify fallback behavior
--   [ ] Make `dbService.saveCollection` optionally return a Promise / implement and document `persistCollectionAsync`
--   [ ] Refactor import/export and factory-reset flows to await persistence before confirming completion
--   [ ] Add integration tests for persistence across reloads (localStorage and indexedDB modes)
--   [ ] Remove implicit API key pickup from `openrouterClient`; require explicit opt-in for client keys
--   [ ] Enforce server-side API key handling in `scripts/openrouter-proxy.cjs` and add tests for missing/invalid key
--   [ ] Harden input validation for proxy target, upload endpoints, and imported file formats; add tests for invalid inputs
--   [ ] Add CI workflow (`.github/workflows/ci.yml`) that runs lint, type-check, unit tests, dependency audit, and e2e
--   [ ] Add `npm run ci-local` to run CI steps locally during development
+-   [x] Add Service Worker postMessage handshake helper with timeout and network fallback
+-   [x] Update `sw.js` to use handshake helper and add unit tests for timeout/fallback
+-   [x] Update `App.tsx` SW listener to use the robust handshake and graceful fallback path
+-   [x] Add integration test simulating an unresponsive client to verify fallback behavior
+-   [x] Make `dbService.saveCollection` optionally return a Promise / implement and document `persistCollectionAsync`
+-   [x] Refactor import/export and factory-reset flows to await persistence before confirming completion
+-   [x] Add integration tests for persistence across reloads (localStorage and indexedDB modes)
+-   [x] Remove implicit API key pickup from `openrouterClient`; require explicit opt-in for client keys
+-   [x] Enforce server-side API key handling in `scripts/openrouter-proxy.cjs` and add tests for missing/invalid key
+-   [x] Harden input validation for proxy target, upload endpoints, and imported file formats; add tests for invalid inputs
+-   [x] Add CI workflow (`.github/workflows/ci.yml`) that runs lint, type-check, unit tests, dependency audit, and e2e
+-   [x] Add `npm run ci-local` to run CI steps locally during development
 
 ---
 
