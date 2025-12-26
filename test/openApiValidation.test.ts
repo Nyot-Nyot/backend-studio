@@ -1,5 +1,5 @@
 import { generateOpenApiSpec } from "../services/openApiService";
-import { MockEndpoint, HttpMethod, Project } from "../types";
+import { HttpMethod, MockEndpoint, Project } from "../types";
 
 /**
  * Validation test for OpenAPI 3.0 spec generation.
@@ -59,7 +59,6 @@ const comprehensiveMocks: MockEndpoint[] = [
     responseBody: JSON.stringify({
       id: 1,
       name: "John",
-      email: "john@example.com",
       role: "admin",
       active: true,
       createdAt: "2024-01-15T10:30:00Z",
@@ -81,7 +80,6 @@ const comprehensiveMocks: MockEndpoint[] = [
     responseBody: JSON.stringify({
       id: 3,
       name: "Alice",
-      email: "alice@example.com",
       role: "user",
       active: true,
       createdAt: "2024-12-19T15:45:00Z",
@@ -103,7 +101,6 @@ const comprehensiveMocks: MockEndpoint[] = [
     responseBody: JSON.stringify({
       id: 1,
       name: "John Updated",
-      email: "john.updated@example.com",
       role: "admin",
       active: true,
     }),
@@ -280,7 +277,7 @@ test("OpenAPI 3.0.0 - Responses with content have valid media types", () => {
             ];
             assert(
               validTypes.includes(mediaType) ||
-                mediaType.includes("application"),
+              mediaType.includes("application"),
               `Invalid media type '${mediaType}' at ${method} ${path} response ${statusCode}`
             );
           });

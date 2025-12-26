@@ -1,17 +1,8 @@
 /**
- * LocalStorage-based Database Service
- *
- * Features:
- * - Simple key-value storage backed by localStorage
- * - CRUD operations with type-safe interfaces
- * - Smart auto-ID generation (numeric auto-increment or UUID)
- * - Loose comparison for ID matching (string vs number)
- * - No data corruption or duplicates
- *
- * ID Strategy:
- * - If collection has numeric IDs: uses auto-increment
- * - Otherwise: uses short UUID (first segment)
- * - Allows falsy IDs like 0 (checks for undefined/null explicitly)
+ * Database Service with optional pluggable persistence backends.
+ * - Default behavior remains compatible with existing synchronous API
+ * - Supports backend: 'localStorage' (default), 'indexeddb', 'memory'
+ * - Adds async helpers for consumers that want deterministic persistence
  */
 
 const DB_PREFIX = "api_sim_db_";
@@ -44,105 +35,149 @@ const generateShortUuid = (): string => {
   return crypto.randomUUID().split("-")[0];
 };
 
+// In-memory cache to keep synchronous API stable while persistence may be async
+const cache: Record<string, any[]> = {};
+let _backend: 'localStorage' | 'indexeddb' | 'memory' = 'localStorage';
+
+const persistCollection = async (name: string, data: any[]) => {
+  if (_backend === 'localStorage') {
+    try {
+      localStorage.setItem(DB_PREFIX + name, JSON.stringify(data));
+    } catch (e) {
+      console.error(`Error saving collection "${name}" to localStorage:`, e);
+    }
+    return;
+  }
+
+  if (_backend === 'indexeddb') {
+    try {
+      const mod = await import('./indexedDbService');
+      await mod.indexedDbService.saveCollection(name, data);
+    } catch (e) {
+      console.warn(`Error saving collection "${name}" to IndexedDB:`, e);
+    }
+    return;
+  }
+
+  // memory backend: do nothing (cache already set)
+};
+
+const loadAllFromLocalStorage = () => {
+  for (let i = 0; i < (localStorage.length || 0); i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith(DB_PREFIX)) {
+      const name = key.replace(DB_PREFIX, "");
+      try {
+        cache[name] = JSON.parse(localStorage.getItem(key) || 'null') || [];
+      } catch (e) {
+        cache[name] = [];
+      }
+    }
+  }
+};
+
 export const dbService = {
   /**
-   * Get entire collection from localStorage
-   * @param name - Collection name
-   * @returns Array of items in collection, empty array if not found
+   * Get entire collection (synchronous API preserved)
+   * Uses in-memory cache if available, otherwise falls back to localStorage.
    */
   getCollection: (name: string): any[] => {
+    // If running in indexeddb mode and cache populated, prefer that for sync reads.
+    if (_backend === 'indexeddb' && cache[name]) return cache[name];
+
+    // Always read from localStorage for deterministic test behavior and to keep
+    // behavior identical to previous implementation unless explicitly initialized
+    // into indexeddb mode.
     try {
       const data = localStorage.getItem(DB_PREFIX + name);
-      return data ? JSON.parse(data) : [];
+      const parsed = data ? JSON.parse(data) : [];
+      cache[name] = parsed;
+      return parsed;
     } catch (error) {
       console.warn(`Error reading collection "${name}":`, error);
+      cache[name] = [];
       return [];
     }
   },
 
   /**
-   * Save entire collection to localStorage
-   * @param name - Collection name
-   * @param data - Array of items to save
+   * Save entire collection (synchronous signature retained)
+   * Persistence to backend is performed asynchronously in background.
    */
   saveCollection: (name: string, data: any[]): void => {
-    try {
-      localStorage.setItem(DB_PREFIX + name, JSON.stringify(data));
-    } catch (error) {
-      console.error(`Error saving collection "${name}":`, error);
-    }
+    cache[name] = data;
+    (async () => {
+      try {
+        await persistCollection(name, data);
+      } catch (err) {
+        console.warn('Persist failed:', err);
+      }
+    })();
+  },
+
+  persistCollectionAsync: async (name: string, data: any[]): Promise<void> => {
+    cache[name] = data;
+    await persistCollection(name, data);
   },
 
   /**
-   * Clear specific collection from localStorage
-   * @param name - Collection name
+   * Clear specific collection
    */
   clearCollection: (name: string): void => {
-    localStorage.removeItem(DB_PREFIX + name);
+    delete cache[name];
+    if (_backend === 'localStorage') {
+      localStorage.removeItem(DB_PREFIX + name);
+      return;
+    }
+    // async clear for indexedDB
+    (async () => {
+      if (_backend === 'indexeddb') {
+        try {
+          const mod = await import('./indexedDbService');
+          await mod.indexedDbService.clearCollection(name);
+        } catch (e) {
+          console.warn('Error clearing collection in indexedDB:', e);
+        }
+      }
+    })();
   },
 
   /**
-   * List all active collections
-   * @returns Array of collection names
+   * List collections (from cache + localStorage fallback)
    */
   listCollections: (): string[] => {
-    const names: string[] = [];
+    const names = new Set<string>(Object.keys(cache));
     for (let i = 0; i < (localStorage.length || 0); i++) {
       const key = localStorage.key(i);
       if (key && key.startsWith(DB_PREFIX)) {
-        names.push(key.replace(DB_PREFIX, ""));
+        names.add(key.replace(DB_PREFIX, ''));
       }
     }
-    return names;
+    return Array.from(names);
   },
 
-  /**
-   * Find item by ID (loose comparison: string/number ID mismatch OK)
-   * @param collection - Collection name
-   * @param id - Item ID (string or number)
-   * @returns Item if found, undefined otherwise
-   */
   find: (collection: string, id: string | number): any => {
     const list = dbService.getCollection(collection);
-    // Loose comparison (==) allows "123" to match 123
     return list.find((item: any) => item.id == id);
   },
 
-  /**
-   * Insert item into collection with auto-ID generation
-   *
-   * ID Generation Strategy:
-   * - If item has ID: use provided ID (even if falsy like 0)
-   * - If collection has numeric IDs: auto-increment from max
-   * - Otherwise: generate short UUID
-   *
-   * @param collection - Collection name
-   * @param item - Item to insert (can be without ID)
-   * @returns Inserted item (with generated ID if needed)
-   */
   insert: (collection: string, item: any): any => {
     const list = dbService.getCollection(collection);
 
-    // Check if ID is missing (undefined or null, but NOT 0 or empty string)
     if (item.id === undefined || item.id === null) {
       const existingIds = list
         .map((i: any) => i.id)
         .filter((val: any) => val !== undefined && val !== null);
 
       if (existingIds.length === 0) {
-        // Default behavior for fresh collections:
-        // - some collections (e.g. products/items) prefer UUIDs by convention
-        // - otherwise default to numeric auto-increment
         if (DEFAULT_UUID_COLLECTIONS.has(collection)) {
           item.id = generateShortUuid();
         } else {
           item.id = 1;
         }
       } else if (isNumericIdStrategy(existingIds)) {
-        // Use numeric auto-increment strategy
         item.id = generateNumericId(existingIds as number[]);
       } else {
-        // Use UUID strategy
         item.id = generateShortUuid();
       }
     }
@@ -152,13 +187,6 @@ export const dbService = {
     return item;
   },
 
-  /**
-   * Update item in collection by ID (loose comparison)
-   * @param collection - Collection name
-   * @param id - Item ID to update
-   * @param updates - Partial object with fields to update
-   * @returns Updated item if found, null otherwise
-   */
   update: (collection: string, id: string | number, updates: any): any => {
     const list = dbService.getCollection(collection);
     const index = list.findIndex((item: any) => item.id == id);
@@ -171,17 +199,10 @@ export const dbService = {
     return null;
   },
 
-  /**
-   * Delete item from collection by ID (loose comparison)
-   * @param collection - Collection name
-   * @param id - Item ID to delete
-   * @returns true if item was deleted, false if not found
-   */
   delete: (collection: string, id: string | number): boolean => {
     let list = dbService.getCollection(collection);
     const initialLen = list.length;
 
-    // Loose comparison (!=) to match string/number IDs
     list = list.filter((item: any) => item.id != id);
 
     if (list.length !== initialLen) {
@@ -191,28 +212,19 @@ export const dbService = {
     return false;
   },
 
-  /**
-   * Get statistics about a collection
-   * @param collection - Collection name
-   * @returns Stats including count, ID types, etc.
-   */
-  getStats: (
-    collection: string
-  ): { count: number; idType: "numeric" | "string" | "mixed" } => {
+  getStats: (collection: string): { count: number; idType: 'numeric' | 'string' | 'mixed' } => {
     const list = dbService.getCollection(collection);
 
-    // Empty collection: indeterminate ID type. Use 'mixed' as a neutral default.
     if (list.length === 0) {
-      return { count: 0, idType: "mixed" };
+      return { count: 0, idType: 'mixed' };
     }
 
     const idTypes = new Set(list.map((item: any) => typeof item.id));
-
-    let idType: "numeric" | "string" | "mixed" = "string";
+    let idType: 'numeric' | 'string' | 'mixed' = 'string';
     if (idTypes.size === 1) {
-      idType = idTypes.has("number") ? "numeric" : "string";
+      idType = idTypes.has('number') ? 'numeric' : 'string';
     } else {
-      idType = "mixed";
+      idType = 'mixed';
     }
 
     return {
@@ -221,13 +233,69 @@ export const dbService = {
     };
   },
 
-  /**
-   * Clear all collections from localStorage
-   */
   clearAllCollections: (): void => {
     const collections = dbService.listCollections();
     collections.forEach((col) => {
       dbService.clearCollection(col);
     });
   },
+
+  /**
+   * Initialize backends and optionally migrate data from localStorage to IndexedDB.
+   * If backend is 'auto' it prefers IndexedDB when available.
+   */
+  init: async (opts?: { backend?: 'auto' | 'indexeddb' | 'localStorage' }) => {
+    const backend = opts?.backend ?? 'auto';
+    const hasIndexedDB = typeof (globalThis as any).indexedDB !== 'undefined';
+
+    if (backend === 'indexeddb' || (backend === 'auto' && hasIndexedDB)) {
+      try {
+        _backend = 'indexeddb';
+        const mod = await import('./indexedDbService');
+        await mod.indexedDbService.init();
+
+        // Try migration if localStorage has data
+        const { migrated } = await mod.indexedDbService.migrateFromLocalStorage(DB_PREFIX);
+
+        // Load all collections from indexedDB into cache for sync reads
+        const cols = await mod.indexedDbService.listCollections();
+        for (const c of cols) {
+          cache[c] = await mod.indexedDbService.getCollection(c);
+        }
+
+        // Also pick up any leftover localStorage collections not migrated
+        loadAllFromLocalStorage();
+
+        return { migrated };
+      } catch (error) {
+        console.warn('IndexedDB init/migration failed:', error);
+        // fallback to localStorage mode
+        _backend = 'localStorage';
+        loadAllFromLocalStorage();
+        return { migrated: false };
+      }
+    }
+
+    // localStorage mode: populate cache right away
+    _backend = 'localStorage';
+    loadAllFromLocalStorage();
+    return { migrated: false };
+  },
+
+  // Async variants for new consumers
+  getCollectionAsync: async (name: string) => {
+    if (_backend === 'indexeddb') {
+      try {
+        const mod = await import('./indexedDbService');
+        const data = await mod.indexedDbService.getCollection(name);
+        cache[name] = data;
+        return data;
+      } catch (e) {
+        console.warn('getCollectionAsync (indexeddb) failed:', e);
+      }
+    }
+    // fallback to sync version
+    return dbService.getCollection(name);
+  },
+
 };

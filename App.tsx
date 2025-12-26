@@ -10,6 +10,7 @@ import {
 	Globe,
 	Info,
 	Key,
+	Mail,
 	Package,
 	Plus,
 	RefreshCw,
@@ -24,15 +25,18 @@ import {
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Dashboard } from "./components/Dashboard";
 import { DatabaseView } from "./components/DatabaseView";
+import EmailExportModal, { EmailExportParams } from "./components/EmailExportModal";
 import { LogViewer } from "./components/LogViewer";
 import { MockEditor } from "./components/MockEditor";
 import { Sidebar } from "./components/Sidebar";
 import { TestConsole } from "./components/TestConsole";
 import { ToastContainer, ToastMessage, ToastType } from "./components/Toast";
+import { FEATURES } from "./config/featureFlags";
+import { sendEmailViaEmailJS } from "./services/emailService";
 import { generateServerCode as buildServerCode } from "./services/exportService";
-import { generateEndpointConfig } from "./services/geminiService";
 import { simulateRequest } from "./services/mockEngine";
 import { generateOpenApiSpec } from "./services/openApiService";
+import socketClient from "./services/socketClient";
 import { EnvironmentVariable, HttpMethod, LogEntry, MockEndpoint, Project, TestConsoleState, ViewState } from "./types";
 
 const STORAGE_KEY_PROJECTS = "api_sim_projects";
@@ -58,16 +62,55 @@ function App() {
 
 	const [logs, setLogs] = useState<LogEntry[]>([]);
 	const [toasts, setToasts] = useState<ToastMessage[]>([]);
-
-	// Editor State
+	// Socket connection state for UI indicator
+	const [socketStatus, setSocketStatus] = useState<"connected" | "connecting" | "disconnected">("disconnected");
 	const [editingMock, setEditingMock] = useState<MockEndpoint | null>(null);
 
 	// Modals State
 	const [isDeployModalOpen, setIsDeployModalOpen] = useState(false);
+	// Email Export Modal State
+	const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+	const [sendingEmail, setSendingEmail] = useState(false);
 
-	// API Key UI State
-	const [userApiKey, setUserApiKey] = useState(() => localStorage.getItem("api_sim_user_gemini_key") || "");
+	// API Key UI State (OpenRouter key if user opts to provide one)
+	const [userApiKey, setUserApiKey] = useState(() => localStorage.getItem("api_sim_user_openrouter_key") || "");
 	const [showApiKey, setShowApiKey] = useState(false);
+	// Used to force re-render when feature flags are toggled in localStorage
+	const [featureClock, setFeatureClock] = useState(0);
+	// Proxy health status: null = unknown/checking, true = healthy, false = unreachable
+	const [proxyHealthy, setProxyHealthy] = useState<boolean | null>(null);
+
+	// Poll proxy health while in dev / when AI feature is visible
+	React.useEffect(() => {
+		let mounted = true;
+		if (!FEATURES.AI()) return;
+		const check = async () => {
+			try {
+				const res = await fetch("/openrouter/health");
+				if (!mounted) return;
+				setProxyHealthy(res.ok);
+			} catch (e) {
+				if (!mounted) return;
+				setProxyHealthy(false);
+			}
+		};
+		check();
+		const id = setInterval(check, 10000);
+		return () => {
+			mounted = false;
+			clearInterval(id);
+		};
+	}, [featureClock]);
+
+	// DEV: if env enables email export, ensure the localStorage flag is set so UI appears immediately
+	React.useEffect(() => {
+		if (typeof window !== "undefined" && (import.meta.env as any).VITE_ENABLE_EMAIL === "true") {
+			if (window.localStorage.getItem("feature_email_export") !== "true") {
+				window.localStorage.setItem("feature_email_export", "true");
+				setFeatureClock(c => c + 1);
+			}
+		}
+	}, []);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 
 	// Test Console State
@@ -179,9 +222,70 @@ function App() {
 		if (activeProjectId) localStorage.setItem(STORAGE_KEY_ACTIVE_PROJECT, activeProjectId);
 	}, [activeProjectId]);
 
+	// Expose a test-only helper to inject fixture data during e2e tests (DEV-only)
+	if (import.meta.env?.DEV) {
+		// Attach a helper to the window that tests can call to set projects/mocks
+		// Usage (page.evaluate): window.__applyTestFixtures(projects, mocks, activeProjectId)
+		(window as any).__applyTestFixtures = (
+			projectsValue: any[],
+			mocksValue: any[],
+			activeProjectIdValue?: string
+		) => {
+			try {
+				setProjects(projectsValue);
+				setMocks(mocksValue);
+				if (activeProjectIdValue) setActiveProjectId(activeProjectIdValue);
+				// Persist to localStorage as well
+				localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projectsValue));
+				localStorage.setItem(STORAGE_KEY_MOCKS, JSON.stringify(mocksValue));
+				if (activeProjectIdValue) localStorage.setItem(STORAGE_KEY_ACTIVE_PROJECT, activeProjectIdValue);
+				return true;
+			} catch (err) {
+				console.error("applyTestFixtures failed", err);
+				return false;
+			}
+		};
+
+		// Also expose a test helper to directly call simulateRequest with the current in-memory mocks
+		(window as any).__simulateRequest = async (
+			method: string,
+			url: string,
+			headersObj: Record<string, string> = {},
+			body: string = ""
+		) => {
+			try {
+				const res = await simulateRequest(
+					method as any,
+					url,
+					headersObj,
+					body,
+					mocksRef.current,
+					envVarsRef.current
+				);
+				return res;
+			} catch (err) {
+				console.error("simulateRequest helper error", err);
+				throw err;
+			}
+		};
+
+		// Test helper to set mocks directly into the runtime (bypass storage races)
+		(window as any).__setMocksDirect = (mocksValue: any[]) => {
+			try {
+				mocksRef.current = mocksValue;
+				setMocks(mocksValue);
+				localStorage.setItem(STORAGE_KEY_MOCKS, JSON.stringify(mocksValue));
+				return true;
+			} catch (e) {
+				console.error("setMocksDirect failed", e);
+				return false;
+			}
+		};
+	}
+
 	// --- SERVICE WORKER LISTENER ---
 	useEffect(() => {
-		const handleMessage = (event: MessageEvent) => {
+		const handleMessage = async (event: MessageEvent) => {
 			if (event.data && event.data.type === "INTERCEPT_REQUEST") {
 				const { payload } = event.data;
 				const port = event.ports[0];
@@ -196,7 +300,7 @@ function App() {
 					});
 				}
 
-				const result = simulateRequest(
+				const result = await simulateRequest(
 					payload.method,
 					payload.url,
 					payload.headers,
@@ -205,7 +309,7 @@ function App() {
 					envVarsRef.current // Pass restored env vars
 				);
 
-				// Add Log
+				// Add Log (local)
 				const newLog: LogEntry = {
 					id: crypto.randomUUID(),
 					timestamp: Date.now(),
@@ -217,6 +321,43 @@ function App() {
 				};
 				setLogs(prev => [newLog, ...prev].slice(0, 500));
 
+				// Forward log to socket server so other connected clients receive it
+				const forwardPayload = {
+					id: newLog.id,
+					ts: newLog.timestamp,
+					method: newLog.method,
+					path: newLog.path,
+					statusCode: newLog.statusCode,
+					duration: newLog.duration,
+					ip: newLog.ip,
+					workspaceId: activeProjectId || undefined,
+				};
+
+				try {
+					if (socketClient.isConnected()) {
+						socketClient.emit("log:publish", forwardPayload);
+						console.info("[App] forwarded log via socket", forwardPayload.id);
+					} else {
+						// HTTP fallback: call server's /emit-log endpoint (build from hostname to avoid double-port like http://localhost:3000:9150)
+						const defaultPort =
+							typeof import.meta !== "undefined" && (import.meta.env as any)?.VITE_SOCKET_PORT
+								? String((import.meta.env as any).VITE_SOCKET_PORT)
+								: "9150";
+						const base =
+							typeof window !== "undefined"
+								? `${window.location.protocol}//${window.location.hostname}:${defaultPort}`
+								: "http://localhost:9150";
+						console.info("[App] emit-log fallback url", `${base}/emit-log`);
+						fetch(`${base}/emit-log`, {
+							method: "POST",
+							headers: { "content-type": "application/json" },
+							body: JSON.stringify(forwardPayload),
+						}).catch(e => console.info("[App] emit-log fallback failed", e));
+					}
+				} catch (e) {
+					console.debug("[App] forward to socket failed", e);
+				}
+
 				if (port) {
 					port.postMessage({ response: result.response });
 				}
@@ -226,6 +367,67 @@ function App() {
 		navigator.serviceWorker.addEventListener("message", handleMessage);
 		return () => navigator.serviceWorker.removeEventListener("message", handleMessage);
 	}, []);
+
+	// --- SOCKET LOG STREAM ---
+	useEffect(() => {
+		if (!FEATURES.LOG_VIEWER()) return;
+		try {
+			setSocketStatus("connecting");
+
+			const onConnect = () => {
+				console.info("[App] socket connected");
+				setSocketStatus("connected");
+				if (activeProjectId) {
+					socketClient.join(`logs:${activeProjectId}`);
+					console.info("[App] joined room", `logs:${activeProjectId}`);
+				}
+			};
+			const onDisconnect = () => {
+				console.info("[App] socket disconnected");
+				setSocketStatus("disconnected");
+			};
+			const onConnectError = (err: any) => {
+				console.info("[App] socket connect_error", err?.message || err);
+				setSocketStatus("disconnected");
+			};
+
+			// Register handlers BEFORE connecting to avoid missing early events
+			socketClient.on("connect", onConnect);
+			socketClient.on("disconnect", onDisconnect);
+			socketClient.on("connect_error", onConnectError);
+
+			// then connect
+			socketClient.connect();
+
+			const handler = (payload: any) => {
+				const newLog: LogEntry = {
+					id: payload.id || crypto.randomUUID(),
+					timestamp: payload.ts || Date.now(),
+					method: (payload.method as any) || "GET",
+					path: payload.path || payload.url || "/",
+					statusCode: payload.statusCode || 0,
+					duration: payload.duration || 0,
+					ip: payload.ip || payload.ipAddress || "0.0.0.0",
+				};
+				setLogs(prev => {
+					if (prev.some(l => l.id === newLog.id)) return prev;
+					return [newLog, ...prev].slice(0, 500);
+				});
+			};
+			socketClient.on("log:new", handler);
+			return () => {
+				socketClient.off("log:new", handler);
+				socketClient.off("connect", onConnect);
+				socketClient.off("disconnect", onDisconnect);
+				socketClient.off("connect_error", onConnectError);
+				if (activeProjectId) socketClient.leave(`logs:${activeProjectId}`);
+				socketClient.disconnect();
+				setSocketStatus("disconnected");
+			};
+		} catch (e) {
+			console.error("Socket log stream failed", e);
+		}
+	}, [activeProjectId]);
 
 	// --- HELPERS ---
 	const addToast = (message: string, type: ToastType) => {
@@ -293,6 +495,11 @@ function App() {
 
 	// --- HANDLERS: AI & GENERATION ---
 	const handleMagicCreate = async () => {
+		if (!FEATURES.AI()) {
+			addToast("AI features are disabled. Enable via Settings or feature flags.", "info");
+			return;
+		}
+
 		const prompt = window.prompt(
 			"Describe the endpoint you want to create (e.g. 'A GET users list with pagination')"
 		);
@@ -300,6 +507,7 @@ function App() {
 
 		try {
 			addToast("Generating configuration...", "info");
+			const { generateEndpointConfig } = await import("./services/aiService");
 			const config = await generateEndpointConfig(prompt);
 
 			const newMock: MockEndpoint = {
@@ -307,7 +515,7 @@ function App() {
 				projectId: activeProjectId,
 				name: config.name,
 				path: config.path,
-				method: config.method,
+				method: (config.method as any) || HttpMethod.GET,
 				statusCode: config.statusCode,
 				delay: 50,
 				responseBody: config.responseBody,
@@ -324,13 +532,16 @@ function App() {
 			setView("editor");
 			addToast("Draft generated from AI", "success");
 		} catch (e) {
-			addToast("Failed to generate endpoint. Check API Key.", "error");
+			const msg = (e as Error).message || "";
+			if (msg.includes("OPENROUTER_DISABLED"))
+				addToast("OpenRouter provider disabled. Enable in Settings.", "error");
+			else addToast("Failed to generate endpoint. Check API Key or proxy.", "error");
 		}
 	};
 
 	// --- HANDLERS: SETTINGS & DATA ---
 	const handleSaveApiKey = () => {
-		localStorage.setItem("api_sim_user_gemini_key", userApiKey);
+		localStorage.setItem("api_sim_user_openrouter_key", userApiKey);
 		addToast("API Key saved securely", "success");
 	};
 
@@ -487,6 +698,148 @@ function App() {
 		addToast("Server code copied to clipboard", "info");
 	};
 
+	const getAttachmentPreview = async ({
+		includeWorkspace,
+		includeOpenApi,
+		includeServer,
+	}: {
+		includeWorkspace: boolean;
+		includeOpenApi: boolean;
+		includeServer: boolean;
+	}) => {
+		const files: { name: string; blob: Blob }[] = [];
+		if (includeWorkspace) {
+			files.push({
+				name: `backend-studio-backup-${new Date().toISOString().slice(0, 10)}.json`,
+				blob: new Blob(
+					[JSON.stringify({ version: "1.0", timestamp: Date.now(), projects, mocks, envVars }, null, 2)],
+					{ type: "application/json" }
+				),
+			});
+		}
+		if (includeOpenApi) {
+			const currentProject = projects.find(p => p.id === activeProjectId);
+			if (currentProject) {
+				const spec = generateOpenApiSpec(currentProject, mocks);
+				files.push({
+					name: `openapi-${currentProject.name.toLowerCase().replace(/\s+/g, "-")}.json`,
+					blob: new Blob([JSON.stringify(spec, null, 2)], { type: "application/json" }),
+				});
+			}
+		}
+		if (includeServer) {
+			const code = generateServerCode();
+			files.push({ name: "server.js", blob: new Blob([code], { type: "text/javascript" }) });
+		}
+		if (files.length === 0) return [];
+		if (files.length > 1) {
+			const zipBlob = await (await import("./services/zipService")).createZipBlob(files);
+			return [{ name: `backend-studio-export-${new Date().toISOString().slice(0, 10)}.zip`, size: zipBlob.size }];
+		}
+		return files.map(f => ({ name: f.name, size: f.blob.size || 0 }));
+	};
+
+	const sendEmail = async (params: EmailExportParams) => {
+		setSendingEmail(true);
+		try {
+			const {
+				recipients,
+				subject,
+				message: originalMessage,
+				includeWorkspace,
+				includeOpenApi,
+				includeServer,
+			} = params;
+			let messageToSend = originalMessage;
+			const files: { name: string; blob: Blob }[] = [];
+
+			if (includeWorkspace) {
+				const data = {
+					version: "1.0",
+					timestamp: Date.now(),
+					projects,
+					mocks,
+					envVars,
+				};
+				files.push({
+					name: `backend-studio-backup-${new Date().toISOString().slice(0, 10)}.json`,
+					blob: new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
+				});
+			}
+
+			if (includeOpenApi) {
+				const currentProject = projects.find(p => p.id === activeProjectId);
+				if (currentProject) {
+					const spec = generateOpenApiSpec(currentProject, mocks);
+					files.push({
+						name: `openapi-${currentProject.name.toLowerCase().replace(/\s+/g, "-")}.json`,
+						blob: new Blob([JSON.stringify(spec, null, 2)], { type: "application/json" }),
+					});
+				}
+			}
+
+			if (includeServer) {
+				const code = generateServerCode();
+				files.push({ name: "server.js", blob: new Blob([code], { type: "text/javascript" }) });
+			}
+
+			// If multiple files are selected, bundle into a ZIP (keeps a single attachment)
+			let filesToSend = files;
+			if (files.length > 1) {
+				const zipBlob = await (await import("./services/zipService")).createZipBlob(files);
+				filesToSend = [
+					{ name: `backend-studio-export-${new Date().toISOString().slice(0, 10)}.zip`, blob: zipBlob },
+				];
+			}
+
+			// Size check: fail early if larger than 20MB
+			const totalBytes = filesToSend.reduce((s, f) => s + (f.blob.size || 0), 0);
+			if (totalBytes > 20 * 1024 * 1024)
+				throw new Error("Attachments exceed 20 MB limit. Reduce attachment size.");
+
+			// Upload the single file to the helper and include a download link in the message
+			let downloadUrl: string | null = null;
+			if (filesToSend.length > 0) {
+				try {
+					const uploadService = await import("./services/uploadService");
+					const res = await uploadService.uploadTempFile(filesToSend[0].blob, filesToSend[0].name);
+					downloadUrl = res.url;
+					messageToSend = `${messageToSend}\n\nDownload exported files: ${downloadUrl} (expires ${new Date(
+						res.expiresAt
+					).toLocaleString()})`;
+				} catch (e: any) {
+					addToast("Upload failed: " + (e?.message || "unknown error"), "error");
+					throw e;
+				}
+			}
+
+			const serviceId = (import.meta.env as any).VITE_EMAILJS_SERVICE_ID;
+			const templateId = (import.meta.env as any).VITE_EMAILJS_TEMPLATE_ID;
+			const publicKey = (import.meta.env as any).VITE_EMAILJS_PUBLIC_KEY;
+			const demoMode =
+				(typeof (import.meta as any).env !== "undefined" &&
+					(import.meta as any).env.VITE_EMAILJS_DEMO === "true") ||
+				process.env.VITE_EMAILJS_DEMO === "true";
+			if (!serviceId || !templateId || !publicKey) {
+				if (!demoMode) {
+					throw new Error(
+						"EmailJS not configured. Set VITE_EMAILJS_SERVICE_ID, VITE_EMAILJS_TEMPLATE_ID, VITE_EMAILJS_PUBLIC_KEY."
+					);
+				}
+			}
+
+			// Send without attachments (we included a link instead)
+			await sendEmailViaEmailJS(serviceId, templateId, publicKey, recipients, subject, messageToSend, []);
+			addToast("Email sent!", "success");
+			setIsEmailModalOpen(false);
+		} catch (err: any) {
+			addToast(err?.message || "Email send failed", "error");
+			throw err;
+		} finally {
+			setSendingEmail(false);
+		}
+	};
+
 	const handleFactoryReset = () => {
 		if (confirm("Are you sure you want to reset everything? This cannot be undone.")) {
 			localStorage.clear();
@@ -557,7 +910,9 @@ function App() {
 					<TestConsole mocks={projectMocks} state={testConsoleState} setState={setTestConsoleState} />
 				)}
 
-				{view === "logs" && <LogViewer logs={logs} onClearLogs={() => setLogs([])} />}
+				{view === "logs" && FEATURES.LOG_VIEWER() && (
+					<LogViewer logs={logs} onClearLogs={() => setLogs([])} socketStatus={socketStatus} />
+				)}
 
 				{view === "database" && <DatabaseView />}
 
@@ -637,80 +992,100 @@ function App() {
 						</div>
 
 						{/* AI Configuration Section */}
-						<div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-							<h3 className="text-xl font-semibold text-slate-800 mb-2 flex items-center">
-								<Key className="w-5 h-5 mr-3 text-violet-600" />
-								AI Configuration
-							</h3>
-							<p className="text-slate-500 text-sm mb-6 max-w-2xl leading-relaxed">
-								Enter your Google Gemini API Key to enable Magic Create and Auto-Generate features. The
-								key is stored securely in your browser's local storage.
-							</p>
+						{FEATURES.AI() && (
+							<div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+								<h3 className="text-xl font-semibold text-slate-800 mb-2 flex items-center justify-between">
+									<div className="flex items-center">
+										<Key className="w-5 h-5 mr-3 text-violet-600" />
+										AI Configuration
+									</div>
+									<div className="text-sm">
+										{proxyHealthy === null ? (
+											<span className="text-slate-400">Checking proxy…</span>
+										) : proxyHealthy ? (
+											<span className="text-emerald-600">Proxy: running</span>
+										) : (
+											<span className="text-rose-500">Proxy: unavailable</span>
+										)}
+									</div>
+								</h3>
+								<p className="text-slate-500 text-sm mb-6 max-w-2xl leading-relaxed">
+									Optionally provide an OpenRouter API key for direct calls (recommended: run the
+									local proxy and set a server-side key instead). Store keys only if you understand
+									they are visible to your browser localStorage.
+								</p>
 
-							<div className="max-w-xl space-y-4">
-								<div>
-									<label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-										Google Gemini API Key
-									</label>
-									<div className="relative">
-										<div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-											<ShieldCheck className="h-5 w-5 text-slate-400" />
+								<div className="max-w-xl space-y-4">
+									<div>
+										<label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+											OpenRouter API Key (optional)
+										</label>
+										<div className="relative">
+											<div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+												<ShieldCheck className="h-5 w-5 text-slate-400" />
+											</div>
+											<input
+												type={showApiKey ? "text" : "password"}
+												value={userApiKey}
+												onChange={e => setUserApiKey(e.target.value)}
+												className="block w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none transition-all text-sm font-mono"
+												placeholder="sk-or-..."
+											/>
+											<button
+												onClick={() => setShowApiKey(!showApiKey)}
+												className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+											>
+												{showApiKey ? (
+													<EyeOff className="h-4 w-4" />
+												) : (
+													<Eye className="h-4 w-4" />
+												)}
+											</button>
 										</div>
-										<input
-											type={showApiKey ? "text" : "password"}
-											value={userApiKey}
-											onChange={e => setUserApiKey(e.target.value)}
-											className="block w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none transition-all text-sm font-mono"
-											placeholder="AIzaSy..."
-										/>
-										<button
-											onClick={() => setShowApiKey(!showApiKey)}
-											className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+									</div>
+									<div className="flex items-center justify-between">
+										<a
+											href="https://openrouter.ai/docs"
+											target="_blank"
+											rel="noreferrer"
+											className="text-xs font-medium text-violet-600 hover:text-violet-700 hover:underline"
 										>
-											{showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+											Get a free API Key
+										</a>
+										<button
+											onClick={handleSaveApiKey}
+											className="px-6 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-bold text-sm transition-all shadow-md shadow-violet-200 active:scale-95"
+										>
+											Save Key
 										</button>
 									</div>
 								</div>
-								<div className="flex items-center justify-between">
-									<a
-										href="https://aistudio.google.com/app/apikey"
-										target="_blank"
-										rel="noreferrer"
-										className="text-xs font-medium text-violet-600 hover:text-violet-700 hover:underline"
-									>
-										Get a free API Key
-									</a>
+							</div>
+						)}
+
+						{FEATURES.EXPORT_SERVER() && (
+							<div className="bg-slate-900 p-8 rounded-2xl shadow-xl border border-slate-700 text-white relative overflow-hidden group">
+								{/* Export Runtime Section */}
+								<div className="relative z-10">
+									<h3 className="text-xl font-bold mb-2 flex items-center">
+										<Server className="w-5 h-5 mr-3 text-brand-400" />
+										Server Runtime
+									</h3>
+									<p className="text-slate-400 text-sm mb-6 max-w-2xl leading-relaxed">
+										Export your endpoints as a standalone Node.js server. Useful for local
+										development or deploying to cloud providers.
+									</p>
+
 									<button
-										onClick={handleSaveApiKey}
-										className="px-6 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-bold text-sm transition-all shadow-md shadow-violet-200 active:scale-95"
+										onClick={() => setIsDeployModalOpen(true)}
+										className="flex items-center justify-center space-x-2 px-6 py-3 bg-brand-600 hover:bg-brand-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-brand-900/50 active:scale-95"
 									>
-										Save Key
+										<Rocket className="w-4 h-4" />
+										<span>Open Export Hub</span>
 									</button>
 								</div>
 							</div>
-						</div>
-
-						{/* Export Runtime Section */}
-						<div className="bg-slate-900 p-8 rounded-2xl shadow-xl border border-slate-700 text-white relative overflow-hidden group">
-							<div className="relative z-10">
-								<h3 className="text-xl font-bold mb-2 flex items-center">
-									<Server className="w-5 h-5 mr-3 text-brand-400" />
-									Server Runtime
-								</h3>
-								<p className="text-slate-400 text-sm mb-6 max-w-2xl leading-relaxed">
-									Export your endpoints as a standalone Node.js server. Useful for local development
-									or deploying to cloud providers.
-								</p>
-
-								<button
-									onClick={() => setIsDeployModalOpen(true)}
-									className="flex items-center justify-center space-x-2 px-6 py-3 bg-brand-600 hover:bg-brand-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-brand-900/50 active:scale-95"
-								>
-									<Rocket className="w-4 h-4" />
-									<span>Open Export Hub</span>
-								</button>
-							</div>
-						</div>
+						)}
 
 						{/* Export Specification Section */}
 						<div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
@@ -749,6 +1124,16 @@ function App() {
 									<Download className="w-4 h-4" />
 									<span>Export Configuration</span>
 								</button>
+
+								{FEATURES.EMAIL_EXPORT() && (
+									<button
+										onClick={() => setIsEmailModalOpen(true)}
+										className="flex items-center justify-center space-x-2 px-6 py-3 bg-sky-700 hover:bg-sky-600 text-white rounded-xl border border-sky-800 transition-all font-medium active:scale-95 w-full sm:w-auto"
+									>
+										<Mail className="w-4 h-4 text-white" />
+										<span>Send via Email</span>
+									</button>
+								)}
 
 								<div className="relative">
 									<input
@@ -880,9 +1265,18 @@ function App() {
 											</span>
 											<Download className="w-4 h-4 opacity-50 group-hover:opacity-100" />
 										</button>
+										{FEATURES.EMAIL_EXPORT() && (
+											<button
+												onClick={() => setIsEmailModalOpen(true)}
+												className="px-4 py-2.5 rounded-lg bg-sky-700 hover:bg-sky-600 text-white font-medium transition-all flex items-center justify-between group border border-sky-800"
+											>
+												<span className="flex items-center gap-2">
+													<Mail className="w-4 h-4 text-white" /> Send via Email
+												</span>
+											</button>
+										)}
 									</div>
 								</div>
-
 								{/* Cloud Setup */}
 								<div>
 									<label className="block text-xs font-bold text-sky-400 uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -935,6 +1329,13 @@ function App() {
 				</div>
 			)}
 
+			<EmailExportModal
+				isOpen={isEmailModalOpen}
+				onClose={() => setIsEmailModalOpen(false)}
+				onSend={sendEmail}
+				sending={sendingEmail}
+				getAttachmentPreview={getAttachmentPreview}
+			/>
 			<ToastContainer toasts={toasts} removeToast={removeToast} />
 		</div>
 	);

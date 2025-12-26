@@ -117,15 +117,12 @@ runner.scenario(
     // Create users
     const user1 = dbService.insert("users", {
       name: "Alice",
-      email: "alice@test.com",
     });
     const user2 = dbService.insert("users", {
       name: "Bob",
-      email: "bob@test.com",
     });
     const user3 = dbService.insert("users", {
       name: "Charlie",
-      email: "charlie@test.com",
     });
 
     // Verify auto-increment IDs
@@ -143,20 +140,20 @@ runner.scenario(
 
     // Update user
     const updated = dbService.update("users", 2, {
-      email: "bob.updated@test.com",
+      name: "Bob Updated",
     });
     assert(updated !== null, "Should update user");
     assertEqual(
-      updated.email,
-      "bob.updated@test.com",
-      "Email should be updated"
+      updated.name,
+      "Bob Updated",
+      "Name should be updated"
     );
 
     // Verify persistence
     const refetched = dbService.find("users", 2);
     assertEqual(
-      refetched.email,
-      "bob.updated@test.com",
+      refetched.name,
+      "Bob Updated",
       "Update should persist"
     );
 

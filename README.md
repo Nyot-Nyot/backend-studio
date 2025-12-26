@@ -10,6 +10,38 @@ Backend Studio adalah single-page application untuk mensimulasikan REST API back
 
 Persyaratan singkat: Node.js (LTS) dan npm. Untuk menjalankan: jalankan `npm install` lalu `npm run dev`, kemudian buka alamat yang tampil di terminal (biasanya `http://localhost:5173`).
 
+Catatan penyimpanan: aplikasi sekarang mendukung **IndexedDB** sebagai backend persistence yang lebih andal. Startup akan memanggil `dbService.init({ backend: 'auto' })` (di `index.tsx`) dan akan otomatis memigrasi data `localStorage` bila diperlukan. Untuk menjalankan tes terkait IndexedDB secara lokal gunakan:
+
+-   `npx tsx test/indexedDbService.test.ts`
+-   `npx tsx test/dbService.indexedDb.integration.test.ts`
+
+## Continuous Integration (CI)
+
+A GitHub Actions workflow is included at `.github/workflows/ci.yml` that runs unit tests and Playwright E2E on pushes and pull requests to `main`/`master`.
+
+Run the same checks locally:
+
+-   Unit tests: `npm run test:unit`
+-   Playwright E2E: `npm run test:e2e`
+
+**Security: API Keys**
+
+-   Do not commit real API keys to the repository. If a key is accidentally committed, rotate/revoke it immediately and replace it with a placeholder in `.env`.
+-   For OpenRouter or other AI providers, prefer running a local server-side proxy that reads a non-VITE env var like `OPENROUTER_API_KEY` instead of exposing a `VITE_` key to the browser.
+
+To add a badge to the repository README use the following template (replace `OWNER` and `REPO`):
+
+Optional: running the OpenRouter proxy locally
+
+-   Start dev proxy that forwards requests to OpenRouter (reads `OPENROUTER_API_KEY`): `OPENROUTER_API_KEY=<your_key> npm run dev:openrouter-proxy` (runs on port 3002 by default). This keeps your API key server-side and out of the browser.
+-   For convenience during development only, you can allow client-provided keys by setting `DEV_ALLOW_CLIENT_KEY=1` when starting the proxy. This lets the UI send an `X-OpenRouter-Key` header for ad-hoc testing (NOT recommended for production): `DEV_ALLOW_CLIENT_KEY=1 npm run dev:openrouter-proxy`.
+
+```
+![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)
+```
+
+The workflow will upload Playwright report artifacts on every run for debugging when tests fail.
+
 ## Ringkasan Proyek
 
 Aplikasi ini bertujuan menyediakan lingkungan kerja lokal yang dapat memalsukan (mock) endpoint API sehingga pengembangan frontend dapat berjalan beriringan tanpa backend ready. Komponen pentingnya meliputi `sw.js` untuk intercept request, `mockEngine` untuk membangkitkan response, dan panel Test Console untuk mengirim/mengecek request.
@@ -49,6 +81,17 @@ flowchart TD
 Sebelum mulai mengerjakan task, pastikan untuk membaca `docs/sprint-planning.md` yang berisi daftar epic dan task beserta acceptance criteria-nya, baca singkat aja. File ini adalah panduan utama untuk memahami apa yang perlu dikerjakan dalam sprint saat ini.
 
 Jadi intinya `sprint-1/todo.md`, `sprint-2/todo.md`, dan `sprint-3/todo.md` itu pecahan rinci untuk setiap sprint berdasarkan task di `sprint-planning.md`.
+
+## Email Export (flag & env vars)
+
+This project includes an optional Email Export feature (client-side EmailJS MVP). Enable with env var or localStorage feature flag:
+
+-   `VITE_ENABLE_EMAIL` — set to `'true'` to enable the Email Export UI by default.
+-   `VITE_EMAILJS_SERVICE_ID` — EmailJS service id (client-only public service identifier).
+-   `VITE_EMAILJS_TEMPLATE_ID` — EmailJS template id for composing the message.
+-   `VITE_EMAILJS_PUBLIC_KEY` — EmailJS public key.
+
+For production use we recommend using a server-side mail relay (SendGrid/SES) to keep secrets server-side and enforce rate-limits.
 
 ## Dokumen Pendukung
 

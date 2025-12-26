@@ -27,9 +27,9 @@ import {
 	X,
 } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
+import { FEATURES } from "../config/featureFlags";
 import { formatAuthPreview } from "../services/authUtils";
-import { generateMockData } from "../services/geminiService";
-import { MOCK_VARIABLES_HELP } from "../services/mockEngine";
+import { MOCK_VARIABLES_HELP, patternsConflict } from "../services/mockEngine";
 import { HttpMethod, MockEndpoint } from "../types";
 import { ToastType } from "./Toast";
 
@@ -58,6 +58,7 @@ const DEFAULT_MOCK: MockEndpoint = {
 	headers: [],
 	storeName: "",
 	authConfig: { type: "NONE" },
+	proxy: { enabled: false, target: "", timeout: 5000, fallbackToMock: false },
 };
 
 const Label = ({ children, className }: { children?: React.ReactNode; className?: string }) => (
@@ -499,6 +500,7 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 				...initialData,
 				headers: initialData.headers ? initialData.headers.map(h => ({ ...h })) : [],
 				authConfig: initialData.authConfig || { type: "NONE" },
+				proxy: initialData.proxy || { enabled: false, target: "", timeout: 5000, fallbackToMock: false },
 			});
 			// Strict check for initial load
 			const structureError = validateJsonStructure(initialData.responseBody);
@@ -549,11 +551,11 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 	// Conflict Detection Effect
 	useEffect(() => {
 		if (formData.path && formData.method) {
-			const isConflict = existingMocks.some(
+			const isConflict = (existingMocks || []).some(
 				m =>
 					m.id !== formData.id && // Don't match self
 					m.method === formData.method &&
-					m.path.trim().toLowerCase() === formData.path.trim().toLowerCase()
+					patternsConflict(m.path, formData.path)
 			);
 
 			if (isConflict) {
@@ -848,6 +850,12 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 		setIsGenerating(true);
 		try {
 			const context = `Name: ${formData.name}, Method: ${formData.method}, Path: ${formData.path}`;
+			if (!FEATURES.AI()) {
+				addToast("AI features are disabled. Enable via Settings or feature flags.", "info");
+				setIsGenerating(false);
+				return;
+			}
+			const { generateMockData } = await import("../services/aiService");
 			const json = await generateMockData(formData.path, context);
 			handleChange("responseBody", json);
 
@@ -863,8 +871,11 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 			}
 			addToast("Generated response body", "success");
 		} catch (e) {
-			if ((e as Error).message.includes("MISSING_API_KEY")) {
-				addToast("Gemini API Key missing. Configure in Settings.", "error");
+			const msg = (e as Error).message || "";
+			if (msg.includes("OPENROUTER_DISABLED")) {
+				addToast("OpenRouter provider disabled. Enable in Settings.", "error");
+			} else if (msg.includes("OPENROUTER_API_KEY not configured") || msg.includes("401")) {
+				addToast("OpenRouter API Key missing or proxy not running. Configure or start proxy.", "error");
 			} else {
 				addToast("Failed to generate", "error");
 			}
@@ -1310,19 +1321,102 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 								</p>
 							</div>
 						)}
-					</div>
 
-					{/* Stateful Config */}
-					<div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4 relative overflow-hidden">
-						<div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-bl-full -z-10 opacity-50"></div>
-						<h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 pb-2 border-b border-slate-100">
-							<Database className="w-4 h-4 text-indigo-500" /> Stateful Behavior
-						</h3>
+						{FEATURES.PROXY() && (
+							<div className="bg-white p-4 rounded-lg border border-slate-200">
+								<Label>Proxy / Passthrough</Label>
+								<div className="flex items-center gap-3 mb-2">
+									<button
+										onClick={() =>
+											setFormData(prev => ({
+												...prev,
+												proxy: { ...(prev.proxy || {}), enabled: !prev.proxy?.enabled },
+											}))
+										}
+										className={`w-9 h-5 flex items-center rounded-full transition-colors duration-200 ease-in-out px-0.5 ${
+											formData.proxy?.enabled ? "bg-emerald-500" : "bg-slate-300"
+										}`}
+									>
+										<div
+											className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform duration-200 ${
+												formData.proxy?.enabled ? "translate-x-4" : "translate-x-0"
+											}`}
+										/>
+									</button>
+									<div className="text-sm text-slate-700 font-medium">Enable Proxy</div>
+								</div>
 
-						<p className="text-xs text-slate-500 leading-relaxed">
-							Connect this endpoint to an in-memory database collection to simulate real CRUD operations
-							(Create, Read, Update, Delete).
-						</p>
+								{formData.proxy?.enabled && (
+									<div className="space-y-3 p-2 border border-slate-100 rounded-md bg-emerald-50">
+										<div>
+											<Label>Proxy Target (Base URL)</Label>
+											<input
+												type="text"
+												value={formData.proxy?.target || ""}
+												onChange={e =>
+													setFormData(prev => ({
+														...prev,
+														proxy: {
+															...(prev.proxy || {}),
+															enabled: prev.proxy?.enabled ?? false,
+															target: e.target.value,
+														},
+													}))
+												}
+												placeholder="https://api.example.com"
+												className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-sm font-mono focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+											/>
+											<p className="text-[10px] text-slate-500 mt-1">
+												Requests to this route will be forwarded to the configured target base
+												URL (path preserved).
+											</p>
+										</div>
+
+										<div className="grid grid-cols-2 gap-3">
+											<div>
+												<Label>Timeout (ms)</Label>
+												<input
+													type="number"
+													value={formData.proxy?.timeout ?? 5000}
+													onChange={e =>
+														setFormData(prev => ({
+															...prev,
+															proxy: {
+																...(prev.proxy || {}),
+																enabled: prev.proxy?.enabled ?? false,
+																timeout: Number(e.target.value),
+															},
+														}))
+													}
+													className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none"
+												/>
+											</div>
+
+											<div>
+												<Label>Fallback to Mock</Label>
+												<select
+													value={String(formData.proxy?.fallbackToMock || false)}
+													onChange={e =>
+														setFormData(prev => ({
+															...prev,
+															proxy: {
+																...(prev.proxy || {}),
+																enabled: prev.proxy?.enabled ?? false,
+																fallbackToMock: e.target.value === "true",
+															},
+														}))
+													}
+													className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none"
+												>
+													<option value="false">Disabled</option>
+													<option value="true">Enabled</option>
+												</select>
+											</div>
+										</div>
+									</div>
+								)}
+							</div>
+						)}
 
 						<div>
 							<Label>Collection Name</Label>

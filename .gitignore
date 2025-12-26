@@ -27,3 +27,9 @@ dist-ssr
 test-results/
 *.report.html
 
+# Environment files
+.env
+.env.test
+.env.production
+.env.local
+.env.*.local

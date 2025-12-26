@@ -25,9 +25,15 @@
 -   **Mock Engine di Frontend**:
     -   Implementasi di modul seperti `mockEngine.ts`, `dbService.ts`, dan komponen React.
     -   Mencocokkan request dengan konfigurasi endpoint, menjalankan logika delay, auth, CRUD, dan variable injection.
+    -   **Catatan:** ada opsi integrasi _generator_ berbasis AI (misal: OpenRouter deepseek) yang bersifat **opsional/eksperimental** dan membutuhkan API key atau proxy yang disediakan/pasang pengguna; fitur ini harus dianggap fragile tanpa pengujian/validasi output tambahan.
 -   **Penyimpanan Data Lokal**:
+
     -   Menggunakan `localStorage` (dan bisa diperluas ke IndexedDB jika dibutuhkan).
+
+    -   Note: Dukungan **IndexedDB** sudah diimplementasikan (`services/indexedDbService.ts`) termasuk logic inisialisasi dan migrasi dari `localStorage`; ada tes integrasi terkait (`test/dbService.indexedDb.integration.test.ts`).
+
     -   Menyimpan: proyek, daftar endpoint, environment variables, dan state database mock.
+
 -   **Export Node.js Server (Optional)**:
     -   Aplikasi dapat menghasilkan file `server.js` + `package.json` berbasis **Express.js**.
     -   Server ini adalah artefak edukasi/praktikum: dijalankan secara lokal atau di platform gratis (Vercel/Render/Railway) bila diinginkan.
@@ -113,8 +119,7 @@
         -   `server.js` hasil export berisi:
             -   Definisi route (method, path).
             -   Handler asinkron yang mengimplementasikan logika delay, auth check, dan response body.
-        -   `package.json` hasil export menyertakan dependensi standar (express, cors, dsb.).
-    -   Free tier deployment:
+        -   `package.json` hasil export menyertakan dependensi standar (express, cors, dsb.). - **Catatan implementasi:** Pada versi saat ini, export yang dihasilkan adalah **minimal** dan biasanya menginline response sebagai handler statis. Export tidak selalu menerapkan pengecekan autentikasi per-route, delay simulasi, atau store DB stateful secara otomatis; jika diperlukan, ekspor perlu diperluas secara manual atau sebagai PR fitur parity di roadmap. - Free tier deployment:
         -   Dapat di-_deploy_ ke platform gratis (Vercel/Render/Railway) bila ingin demo online.
         -   Misalnya: hanya gunakan `free instance` dan batasi jumlah request selama demo.
 
@@ -137,10 +142,8 @@
 -   **MongoDB & NoSQL**:
     -   Konsep koleksi dan dokumen di-_mapping_ ke penyimpanan JSON di LocalStorage/IndexedDB.
     -   Jika perlu, adaptor tambahan dapat dibuat untuk menulis ke MongoDB Atlas menggunakan connection string free tier.
--   **Protokol Email & Socket Programming (opsional / future work)**:
-    -   Dapat ditambahkan modul contoh:
-        -   Endpoint mock `POST /send-email` yang secara internal memanggil SMTP server dummy atau hanya mencatat log.
-        -   WebSocket server sederhana di Node (mis. dengan `ws` atau `socket.io`) untuk broadcast log request ke beberapa client secara real‑time.
+-   **Socket Programming (opsional / future work)**:
+    -   WebSocket server sederhana di Node (mis. dengan `ws` atau `socket.io`) untuk broadcast log request ke beberapa client secara real‑time.
     -   Fitur ini bersifat tambahan untuk memperkaya presentasi tugas, tidak wajib untuk versi minimum.
 
 ---
@@ -163,4 +166,4 @@ Arsitektur Backend Studio sengaja didesain **client‑side first** dengan Servic
 
 -   Memenuhi kebutuhan tugas Pemrograman Jaringan (HTTP, async, Node, API design, NoSQL).
 -   Menghindari biaya infrastruktur dengan memaksimalkan browser dan free tier layanan eksternal.
--   Memberikan jalur jelas bagi pengembangan lanjutan (export Node/Express, integrasi MongoDB, email/socket module) tanpa perlu mengubah fondasi utama aplikasi.
+-   Memberikan jalur jelas bagi pengembangan lanjutan (export Node/Express, integrasi MongoDB, socket module) tanpa perlu mengubah fondasi utama aplikasi.

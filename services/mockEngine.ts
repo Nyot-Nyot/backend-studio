@@ -12,19 +12,157 @@ export const matchRoute = (pattern: string, requestPath: string): { matches: boo
   const pathSegments = cleanReqPath.split('/').filter(Boolean);
   const params: any = {};
 
-  if (patternSegments.length !== pathSegments.length) return { matches: false, params: {} };
+  // Two-pointer approach to allow optional params (:id?), single '*' wildcard (matches one segment)
+  // and trailing '*' wildcard that matches the rest of the path.
+  let p = 0; // index in patternSegments
+  let i = 0; // index in pathSegments
 
-  const matches = patternSegments.every((seg, i) => {
-    if (seg.startsWith(':')) {
-      params[seg.substring(1)] = pathSegments[i];
-      return true;
+  while (p < patternSegments.length) {
+    const seg = patternSegments[p];
+
+    // Trailing wildcard: match the rest
+    if (seg === '*' && p === patternSegments.length - 1) {
+      // capture rest as wildcard param if desired; here we just match
+      return { matches: true, params };
     }
-    return seg === pathSegments[i];
-  });
 
-  return { matches, params };
+    const pathSeg = pathSegments[i];
+
+    // If we've run out of path segments
+    if (pathSeg === undefined) {
+      // Segment can still match if it's an optional param like ':id?'
+      if (seg.startsWith(':') && seg.endsWith('?')) {
+        const paramName = seg.substring(1, seg.length - 1);
+        params[paramName] = undefined;
+        p++;
+        continue;
+      }
+      // otherwise no match
+      return { matches: false, params: {} };
+    }
+
+    if (seg === '*') {
+      // single-segment wildcard
+      p++;
+      i++;
+      continue;
+    }
+
+    if (seg.startsWith(':')) {
+      const isOptional = seg.endsWith('?');
+      const paramName = isOptional ? seg.substring(1, seg.length - 1) : seg.substring(1);
+      params[paramName] = pathSeg;
+      p++;
+      i++;
+      continue;
+    }
+
+    // exact match
+    if (seg === pathSeg) {
+      p++;
+      i++;
+      continue;
+    }
+
+    // no match
+    return { matches: false, params: {} };
+  }
+
+  // Only match if all path segments are consumed
+  if (i !== pathSegments.length) {
+    return { matches: false, params: {} };
+  }
+
+  return { matches: true, params };
 };
+// Check whether two route patterns may conflict (i.e., there exists at least one path
+// that would be matched by both patterns). This is a conservative check used by
+// the editor to prevent saving overlapping routes.
+export const patternsConflict = (a: string, b: string): boolean => {
+  const clean = (s: string) => s.replace(/\/+$/g, '').split('/').filter(Boolean);
+  const pa = clean(a);
+  const pb = clean(b);
 
+  // Quick equality
+  if (a.trim().toLowerCase() === b.trim().toLowerCase()) return true;
+
+  const MAX_CHECK = 10; // reasonable cap for path length exploration
+
+  const minLen = (p: string[]) => p.filter(seg => !(seg.startsWith(':') && seg.endsWith('?'))).length;
+  const hasTrailingWildcard = (p: string[]) => p.length > 0 && p[p.length - 1] === '*';
+  const maxLen = (p: string[]) => hasTrailingWildcard(p) ? MAX_CHECK : p.length;
+
+  const minA = minLen(pa);
+  const minB = minLen(pb);
+  const maxA = maxLen(pa);
+  const maxB = maxLen(pb);
+
+  const start = Math.max(minA, minB);
+  const end = Math.min(maxA, maxB);
+  const trailingIndexA = hasTrailingWildcard(pa) ? pa.length - 1 : -1;
+  const trailingIndexB = hasTrailingWildcard(pb) ? pb.length - 1 : -1;
+
+  for (let n = start; n <= end; n++) {
+    let ok = true;
+    for (let i = 0; i < n; i++) {
+      const segA = pa[i];
+      const segB = pb[i];
+
+      const segAIsWildcardRest = segA === '*' && i === pa.length - 1;
+      const segBIsWildcardRest = segB === '*' && i === pb.length - 1;
+
+      const segAExists = segA !== undefined && !segAIsWildcardRest;
+      const segBExists = segB !== undefined && !segBIsWildcardRest;
+
+      // If segment in A is undefined
+      if (!segAExists) {
+        // If A has trailing wildcard earlier, it can absorb remaining segments
+        if (trailingIndexA >= 0 && trailingIndexA <= i) {
+          // ok, wildcard at end of A covers this position
+        } else if (segAIsWildcardRest) {
+          // wildcard at end of A can match remaining segments
+        } else {
+          ok = false;
+          break;
+        }
+      }
+
+      if (!segBExists) {
+        if (trailingIndexB >= 0 && trailingIndexB <= i) {
+          // ok, wildcard at end of B covers this position
+        } else if (segBIsWildcardRest) {
+          // wildcard at end of B
+        } else {
+          ok = false;
+          break;
+        }
+      }
+
+      // Treat trailing wildcard earlier as an effective '*' for matching
+      const effectiveSegA = (trailingIndexA >= 0 && trailingIndexA <= i) ? '*' : segA;
+      const effectiveSegB = (trailingIndexB >= 0 && trailingIndexB <= i) ? '*' : segB;
+
+      // If either is a trailing rest wildcard at this position, this position can be matched
+      if (segAIsWildcardRest || segBIsWildcardRest) continue;
+
+      // If either is a single '*' wildcard, it's fine
+      if (effectiveSegA === '*' || effectiveSegB === '*') continue;
+
+      // If either is a param (including optional), it's fine
+      if ((effectiveSegA && effectiveSegA.startsWith(':')) || (effectiveSegB && effectiveSegB.startsWith(':'))) continue;
+
+      // Both literals must match to be compatible at this position
+      if (effectiveSegA !== effectiveSegB) {
+        ok = false;
+        break;
+      }
+    }
+
+    if (ok) return true;
+  }
+
+  return false;
+};
 export const processMockResponse = (
   bodyTemplate: string,
   requestPath: string,
@@ -116,12 +254,6 @@ export const processMockResponse = (
       const names = ['Alice', 'Bob', 'Charlie', 'David', 'Eve', 'Frank', 'Grace', 'Heidi', 'Ivan'];
       return names[Math.floor(Math.random() * names.length)];
     },
-    '{{$randomEmail}}': () => {
-      const domains = ['example.com', 'test.io', 'demo.net', 'acme.org'];
-      const user = Math.random().toString(36).substring(7);
-      const domain = domains[Math.floor(Math.random() * domains.length)];
-      return `${user}@${domain}`;
-    },
     '{{$randomCity}}': () => {
       const cities = ['New York', 'London', 'Tokyo', 'Jakarta', 'Berlin', 'Paris', 'Sydney'];
       return cities[Math.floor(Math.random() * cities.length)];
@@ -130,7 +262,6 @@ export const processMockResponse = (
 
     // Faker-like aliases (no external dep): map to existing generators
     '{{$fakerName}}': () => replacements['{{$randomName}}'](),
-    '{{$fakerEmail}}': () => replacements['{{$randomEmail}}'](),
     '{{$fakerCity}}': () => replacements['{{$randomCity}}']()
   };
 
@@ -147,11 +278,9 @@ export const MOCK_VARIABLES_HELP = [
   { label: '{{$uuid}}', desc: 'Random UUID v4' },
   { label: '{{$randomInt}}', desc: 'Random number (0-1000)' },
   { label: '{{$randomName}}', desc: 'Random first name' },
-  { label: '{{$randomEmail}}', desc: 'Random email address' },
   { label: '{{$randomCity}}', desc: 'Random city' },
   { label: '{{$isoDate}}', desc: 'Current ISO 8601 Date' },
   { label: '{{$fakerName}}', desc: 'Faker-like alias for random name' },
-  { label: '{{$fakerEmail}}', desc: 'Faker-like alias for random email' },
   { label: '{{$fakerCity}}', desc: 'Faker-like alias for random city' },
   { label: '{{@param.id}}', desc: 'Value from URL path /:id' },
   { label: '{{@query.page}}', desc: 'Value from query string e.g. ?page=2' },
@@ -170,14 +299,14 @@ export interface SimulationResult {
 }
 
 // The core logic that acts as the "Server"
-export const simulateRequest = (
+export const simulateRequest = async (
   method: string,
   url: string,
   headers: Record<string, string>, // Headers passed from SW
   body: string,
   mocks: MockEndpoint[],
   envVars: EnvironmentVariable[] = [] // NEW: Env Vars
-): SimulationResult => {
+): Promise<SimulationResult> => {
   const urlObj = new URL(url);
   const pathname = urlObj.pathname;
 
@@ -240,6 +369,132 @@ export const simulateRequest = (
         },
         matchedMockId: matchedMock.id
       };
+    }
+  }
+
+  // --- PROXY / PASSTHROUGH ---
+  if (matchedMock.proxy && matchedMock.proxy.enabled && matchedMock.proxy.target) {
+    try {
+      const proxyTarget = matchedMock.proxy.target.replace(/\/+$/g, '');
+
+      // Basic validation: only allow http(s) schemes and block known local/private hosts
+      try {
+        const targetUrl = new URL(proxyTarget);
+        const scheme = targetUrl.protocol.replace(':', '').toLowerCase();
+        const hostname = targetUrl.hostname;
+
+        // Only allow http or https
+        if (scheme !== 'http' && scheme !== 'https') {
+          return {
+            response: {
+              status: 400,
+              body: JSON.stringify({ error: 'Invalid Proxy Target', message: 'Only http(s) proxy targets are allowed' }, null, 2),
+              headers: [{ key: 'Content-Type', value: 'application/json' }],
+              delay: matchedMock.delay,
+            },
+            matchedMockId: matchedMock.id,
+          };
+        }
+
+        // Disallow common local hostnames and IP ranges (basic IP pattern checks)
+        const lowerHost = hostname.toLowerCase();
+        const isIp = /^\d+\.\d+\.\d+\.\d+$/.test(lowerHost);
+        if (
+          lowerHost === 'localhost' ||
+          lowerHost === '::1' ||
+          lowerHost === '127.0.0.1' ||
+          (isIp && (() => {
+            const parts = lowerHost.split('.').map(Number);
+            // 10.0.0.0/8
+            if (parts[0] === 10) return true;
+            // 172.16.0.0/12
+            if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+            // 192.168.0.0/16
+            if (parts[0] === 192 && parts[1] === 168) return true;
+            // link-local 169.254.0.0/16
+            if (parts[0] === 169 && parts[1] === 254) return true;
+            return false;
+          })())
+        ) {
+          return {
+            response: {
+              status: 400,
+              body: JSON.stringify({ error: 'Invalid Proxy Target', message: 'Proxy target resolves to a disallowed local or private address' }, null, 2),
+              headers: [{ key: 'Content-Type', value: 'application/json' }],
+              delay: matchedMock.delay,
+            },
+            matchedMockId: matchedMock.id,
+          };
+        }
+      } catch (err) {
+        return {
+          response: {
+            status: 400,
+            body: JSON.stringify({ error: 'Invalid Proxy Target', message: 'Proxy target is not a valid URL' }, null, 2),
+            headers: [{ key: 'Content-Type', value: 'application/json' }],
+            delay: matchedMock.delay,
+          },
+          matchedMockId: matchedMock.id,
+        };
+      }
+
+      const urlObj = new URL(url);
+      const proxyUrl = proxyTarget + urlObj.pathname + (urlObj.search || '');
+
+      // Prepare headers for proxy request (pass-through existing headers)
+      const proxyHeaders: Record<string, string> = { ...headers };
+
+      // Use AbortController for timeout
+      const controller = new AbortController();
+      const timeout = typeof matchedMock.proxy.timeout === 'number' ? matchedMock.proxy.timeout : 5000;
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+      const fetchResponse = await fetch(proxyUrl, {
+        method,
+        headers: proxyHeaders,
+        body: body || undefined,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      // Read response body as text
+      const proxiedBody = await fetchResponse.text();
+
+      // Convert headers to array
+      const finalHeadersArray: { key: string; value: string }[] = [];
+      try {
+        if (fetchResponse.headers && typeof fetchResponse.headers.forEach === 'function') {
+          fetchResponse.headers.forEach((v, k) => finalHeadersArray.push({ key: k, value: String(v) }));
+        }
+      } catch (e) {
+        // ignore header conversion errors
+      }
+
+      return {
+        response: {
+          status: fetchResponse.status || 200,
+          body: proxiedBody,
+          headers: finalHeadersArray,
+          delay: matchedMock.delay,
+        },
+        matchedMockId: matchedMock.id,
+      };
+    } catch (err: any) {
+      // On failure, either fallback to local mock or return 502
+      if (matchedMock.proxy.fallbackToMock) {
+        // continue to mock handling
+      } else {
+        return {
+          response: {
+            status: 502,
+            body: JSON.stringify({ error: 'Bad Gateway', message: String(err.message || err) }, null, 2),
+            headers: [{ key: 'Content-Type', value: 'application/json' }],
+            delay: matchedMock.delay,
+          },
+          matchedMockId: matchedMock.id,
+        };
+      }
     }
   }
 

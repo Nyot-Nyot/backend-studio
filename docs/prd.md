@@ -68,6 +68,12 @@ Dalam pengembangan perangkat lunak modern:
     -   `{{@param.key}}` (Mengambil nilai dari URL parameter)
     -   `{{@query.key}}` (Mengambil nilai dari Query string)
 
+> **Catatan eksperimen:** Terdapat fitur _optional_ yang menggunakan model AI (misal: OpenRouter deepseek) untuk _auto-generate_ response atau endpoint configs. Fitur ini bersifat **eksperimental** dan membutuhkan API key atau proxy server yang dikonfigurasi oleh pengguna. Hasil generator AI dapat bervariasi; pastikan untuk meninjau dan memverifikasi output sebelum digunakan di workspace atau saat mengekspor.
+
+-   **Feature flags:** Experimental features are configurable via localStorage (`feature_ai`, `feature_sw`, `feature_logviewer`, `feature_proxy`, `feature_export`) or environment variables (`VITE_ENABLE_*`). The Traffic Monitor (live logs) and Service Worker interception are enabled by default; other experimental features (AI provider, Proxy, Export Server) remain behind feature flags and are disabled unless explicitly enabled.
+
+> **Schema & Data Generator (baru):** Ditambahkan layanan awal untuk mendefinisikan `ResourceSchema` dan menghasilkan data contoh (file: `services/dataGenerator.ts`, tipe: `ResourceSchema` di `types.ts`). Saat ini generator menyediakan opsi dasar (uuid, randomName, email, isoDate, number, boolean) dan dapat digunakan untuk seed collection di UI DatabaseView (seed workflow akan diimplementasikan lebih lanjut).
+
 ### 4.4. Stateful Mocking (In-Memory Database)
 
 -   **Logic:** Mensimulasikan backend nyata yang bisa menyimpan data (bukan hanya respon statis).
@@ -99,7 +105,8 @@ Dalam pengembangan perangkat lunak modern:
 ### 4.7. Export & Deployment
 
 -   **OpenAPI Export:** Menghasilkan file `openapi.json` (Swagger) berdasarkan definisi route yang ada.
--   **Node.js Server Export (Optional):** Menghasilkan file `server.js` dan `package.json` mandiri (Express.js) yang berisi logika endpoint yang telah didesain, siap untuk dijalankan secara lokal atau dideploy ke platform _hosting_ gratis (misal: Vercel, Render, Railway) oleh pengguna. Fitur ini mendemonstrasikan konsep **Node.js**, **Express.js**, dan **non‑blocking I/O** yang dipelajari di kelas, tanpa adanya server permanen yang dikelola oleh pembuat aplikasi.
+-   **Node.js Server Export (Optional):** Menghasilkan file `server.js` dan `package.json` mandiri (Express.js). **Catatan penting:** artefak export ini bersifat **minimal dan statis**—pada versi ini server yang dihasilkan _menginline_ response yang dikonfigurasi sebagai handler statis. **Terlampir:** export tidak secara otomatis menerapkan pengecekan autentikasi per-route, simulasi delay (Service Worker), logika DB stateful/CRUD, atau proxy passthrough. Jika Anda membutuhkan server yang meniru perilaku penuh aplikasi (auth, delay, DB), ekspor harus diperluas secara manual atau menunggu fitur parity yang tercantum di roadmap.
+-   **Node.js Server Export (Educational):** Fitur ini tetap berguna sebagai artefak edukasi yang memperlihatkan bagaimana route dapat diterjemahkan ke Express, namun jangan mengandalkannya sebagai pengganti backend produksi.
 
 ---
 
@@ -154,7 +161,7 @@ Dalam pengembangan perangkat lunak modern:
 Inti dari aplikasi ini adalah `sw.js`.
 
 1.  Aplikasi mendaftarkan Service Worker saat startup.
-2.  Setiap kali aplikasi (atau aplikasi lain di domain yang sama) melakukan `fetch()`, Service Worker mengintersep request tersebut.
+2.  Setiap kali aplikasi (atau aplikasi lain di domain yang sama) melakukan `fetch()`, Service Worker mengintersep request tersebut. Jika **tidak ada** client (mis. tidak ada tab browser yang aktif atau tersedia untuk memproses pesan), Service Worker akan melakukan _fallback_ ke jaringan (network) dan tidak mengintersep request tersebut.
 3.  Request dikirim via `MessageChannel` ke thread utama React (`App.tsx` -> `mockEngine.ts`).
 4.  `mockEngine.ts` mencocokkan URL dengan daftar `mocks` yang ada.
 5.  Engine memproses logika (Delay, Auth, CRUD Database, Variable Injection) secara **asynchronous** dan **non‑blocking**, menerapkan konsep event loop dan Promise di lingkungan browser.
@@ -174,7 +181,7 @@ Inti dari aplikasi ini adalah `sw.js`.
 -   **HTTP Protocol & Web Server:** Seluruh desain endpoint mengikuti pola REST HTTP (method, status code, headers, body).
 -   **API Architecture Pattern:** Mendukung perancangan resource‑oriented API dengan path dinamis dan simulasi autentikasi.
 -   **NoSQL / MongoDB:** Disimulasikan dengan koleksi berbasis key‑value di LocalStorage/IndexedDB; pada export Node nantinya dapat diperluas untuk menggunakan MongoDB Atlas (free tier) bila diperlukan.
--   **Email Protocol & Socket Programming:** Tidak menjadi bagian fitur inti, namun dapat dipertimbangkan sebagai **ekstensi** (misal: mock endpoint yang mensimulasikan pengiriman email, atau penggunaan WebSocket untuk live log update) tanpa menambah dependensi berbayar.
+-   **Socket Programming:** Tidak menjadi bagian fitur inti, namun dapat dipertimbangkan sebagai **ekstensi** (misal: WebSocket untuk live log update) tanpa menambah dependensi berbayar.
 
 ---
 

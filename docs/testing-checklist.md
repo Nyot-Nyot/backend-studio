@@ -5,7 +5,7 @@
 -   [x] Create a new workspace/project via UI (New Project button) and verify it appears in the project list. (tested via Playwright; pass in Chromium & Firefox)
 -   [x] Delete a project and confirm at least one project remains (prevent deletion of last project). (verified by `test/e2e/workspace.spec.ts`)
 -   [x] Switch between projects and verify state persists after reload. (verified by `test/e2e/workspace.spec.ts`)
--   [ ] Rename a project and verify name reflected across UI and exports.
+-   [ ] Rename a project and verify name reflected across UI and exports. (TODO: implement UI support and add e2e test, or explicitly document limitation)
 -   [x] Project import (replace) prompts confirmation and fully replaces current workspace when accepted (no partial corruption). (tested via Playwright; pass in Chromium & Firefox)
 -   [x] Project import with invalid JSON shows clear error and preserves existing workspace. (tested via Playwright; pass in Chromium & Firefox)
 
@@ -24,6 +24,7 @@
 -   [x] Export server bundle (`server.js`, `package.json`) — run `npm install` and `node server.js` and verify exported endpoints behave as in app. (verified by `npm run test:export`)
 -   [x] Ensure exported server includes mocks and DB initial data or documents clear instructions to populate them before run. (verified by export tests)
 -   [x] Exporting with incomplete workspace data should show a clear warning and not produce a corrupt bundle. (verified in e2e import tests)
+-   [ ] Export parity: Add tests and/or documentation verifying whether exported `server.js` preserves route-level auth, delay simulation, and stateful DB behavior, or explicitly document that export is intentionally minimal (TODO: decide and add tests).
 
 ## MockEditor validation (automated tests)
 
@@ -44,12 +45,13 @@
 
 ## Response Body & Generators
 
--   [x] Test built-in placeholders: `{{$uuid}}`, `{{$randomEmail}}`, `{{$isoDate}}`, `{{$randomName}}`, `{{$randomInt}}` — verify format and uniqueness as expected. (verified in unit tests)
+-   [x] Test built-in placeholders: `{{$uuid}}`, `{{$isoDate}}`, `{{$randomName}}`, `{{$randomInt}}` — verify format and uniqueness as expected. (verified in unit tests)
 -   [x] Test `{{@param.*}}` and `{{@query.*}}` placeholder substitution in responses with dynamic path and query examples. (verified in unit/e2e tests)
 -   [x] Test `{{$faker*}}` patterns (if implemented) and ensure expected output shape. (faker aliases implemented and verified)
 -   [x] Test nested objects/arrays in responses with placeholder expansion. (verified in e2e)
 -   [x] Test pretty-printed responses and minified options from MockEditor. (verified in UI tests)
 -   [x] Test generators interacting with stateful DB (e.g., POST creates resource, subsequent GET returns it). (verified in simulateRequest tests)
+-   [ ] AI generation (OpenRouter): Verify that AI-based generation (Magic Create / generateEndpointConfig) handles missing/invalid API keys and proxy errors gracefully and surfaces a clear, actionable error message to the user. (TODO: add unit + integration tests)
 
 ## Stateful Mocking (DatabaseView)
 

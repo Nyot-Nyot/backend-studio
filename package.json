@@ -3,8 +3,27 @@
 	"private": true,
 	"version": "0.0.0",
 	"type": "module",
+	"dependencies": {
+		"@google/genai": "^1.33.0",
+		"lucide-react": "^0.561.0",
+		"react": "^19.2.3",
+		"react-dom": "^19.2.3",
+		"recharts": "^3.6.0",
+		"@emailjs/browser": "^3.8.0",
+		"jszip": "^3.10.0",
+		"express": "^4.18.4",
+		"multer": "^1.4.5-lts.1",
+		"cors": "^2.8.5",
+		"form-data": "^4.0.0",
+		"socket.io": "^4.8.1",
+		"socket.io-client": "^4.8.1"
+	},
 	"scripts": {
 		"dev": "vite",
+		"dev:helper": "node scripts/email-helper.cjs",
+		"dev:openrouter-proxy": "node scripts/openrouter-proxy.cjs",
+		"dev:socket": "node scripts/socket-server.cjs",
+		"dev:with-email": "concurrently \"npm:dev\" \"npm:dev:helper\"",
 		"build": "vite build",
 		"preview": "vite preview",
 		"test:db": "npx tsx test/dbService.test.ts",
@@ -18,14 +37,9 @@
 		"test:openapi": "npx tsx test/openApiService.test.ts",
 		"test:openapi:validation": "npx tsx test/openApiValidation.test.ts",
 		"test:swagger": "npx tsx test/task6_4_swagger_export.ts",
-		"test:e2e": "playwright test --config=playwright.config.ts"
-	},
-	"dependencies": {
-		"@google/genai": "^1.33.0",
-		"lucide-react": "^0.561.0",
-		"react": "^19.2.3",
-		"react-dom": "^19.2.3",
-		"recharts": "^3.6.0"
+		"test:e2e": "playwright test --config=playwright.config.ts",
+		"test:unit": "npx tsx test/*.test.ts",
+		"ci": "npm run test:unit && npm run test:e2e"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.57.0",
@@ -33,6 +47,10 @@
 		"@vitejs/plugin-react": "^5.0.0",
 		"tsx": "^4.9.6",
 		"typescript": "~5.8.2",
-		"vite": "^6.2.0"
+		"vite": "^6.2.0",
+		"fake-indexeddb": "^3.1.6",
+		"@types/react": "^18.2.0",
+		"@types/react-dom": "^18.2.0",
+		"concurrently": "^8.2.0"
 	}
 }

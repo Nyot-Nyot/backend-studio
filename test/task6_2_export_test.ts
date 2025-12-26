@@ -16,8 +16,8 @@ const sampleMocks: MockEndpoint[] = [
     statusCode: 200,
     delay: 0,
     responseBody: JSON.stringify([
-      { id: 1, name: "Alice", email: "alice@example.com" },
-      { id: 2, name: "Bob", email: "bob@example.com" },
+      { id: 1, name: "Alice" },
+      { id: 2, name: "Bob" },
     ]),
     isActive: true,
     version: "1",
@@ -36,7 +36,6 @@ const sampleMocks: MockEndpoint[] = [
     responseBody: JSON.stringify({
       id: 1,
       name: "Alice",
-      email: "alice@example.com",
     }),
     isActive: true,
     version: "1",
@@ -55,7 +54,6 @@ const sampleMocks: MockEndpoint[] = [
     responseBody: JSON.stringify({
       id: 3,
       name: "Charlie",
-      email: "charlie@example.com",
       created: true,
     }),
     isActive: true,
@@ -75,7 +73,6 @@ const sampleMocks: MockEndpoint[] = [
     responseBody: JSON.stringify({
       id: 1,
       name: "Alice Updated",
-      email: "alice.new@example.com",
     }),
     isActive: true,
     version: "1",
@@ -287,7 +284,7 @@ async function runTests() {
       method: "POST",
       path: "/api/users",
       expectStatus: 201,
-      data: JSON.stringify({ name: "Test", email: "test@example.com" }),
+      data: JSON.stringify({ name: "Test" }),
     },
     {
       name: "PUT /api/users/:id (update)",
