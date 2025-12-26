@@ -14,12 +14,15 @@
 		"express": "^4.18.4",
 		"multer": "^1.4.5-lts.1",
 		"cors": "^2.8.5",
-		"form-data": "^4.0.0"
+		"form-data": "^4.0.0",
+		"socket.io": "^4.8.1",
+		"socket.io-client": "^4.8.1"
 	},
 	"scripts": {
 		"dev": "vite",
 		"dev:helper": "node scripts/email-helper.cjs",
 		"dev:openrouter-proxy": "node scripts/openrouter-proxy.cjs",
+		"dev:socket": "node scripts/socket-server.cjs",
 		"dev:with-email": "concurrently \"npm:dev\" \"npm:dev:helper\"",
 		"build": "vite build",
 		"preview": "vite preview",

@@ -36,6 +36,7 @@ import { sendEmailViaEmailJS } from "./services/emailService";
 import { generateServerCode as buildServerCode } from "./services/exportService";
 import { simulateRequest } from "./services/mockEngine";
 import { generateOpenApiSpec } from "./services/openApiService";
+import socketClient from "./services/socketClient";
 import { EnvironmentVariable, HttpMethod, LogEntry, MockEndpoint, Project, TestConsoleState, ViewState } from "./types";
 
 const STORAGE_KEY_PROJECTS = "api_sim_projects";
@@ -61,8 +62,8 @@ function App() {
 
 	const [logs, setLogs] = useState<LogEntry[]>([]);
 	const [toasts, setToasts] = useState<ToastMessage[]>([]);
-
-	// Editor State
+	// Socket connection state for UI indicator
+	const [socketStatus, setSocketStatus] = useState<"connected" | "connecting" | "disconnected">("disconnected");
 	const [editingMock, setEditingMock] = useState<MockEndpoint | null>(null);
 
 	// Modals State
@@ -308,7 +309,7 @@ function App() {
 					envVarsRef.current // Pass restored env vars
 				);
 
-				// Add Log
+				// Add Log (local)
 				const newLog: LogEntry = {
 					id: crypto.randomUUID(),
 					timestamp: Date.now(),
@@ -320,6 +321,43 @@ function App() {
 				};
 				setLogs(prev => [newLog, ...prev].slice(0, 500));
 
+				// Forward log to socket server so other connected clients receive it
+				const forwardPayload = {
+					id: newLog.id,
+					ts: newLog.timestamp,
+					method: newLog.method,
+					path: newLog.path,
+					statusCode: newLog.statusCode,
+					duration: newLog.duration,
+					ip: newLog.ip,
+					workspaceId: activeProjectId || undefined,
+				};
+
+				try {
+					if (socketClient.isConnected()) {
+						socketClient.emit("log:publish", forwardPayload);
+						console.info("[App] forwarded log via socket", forwardPayload.id);
+					} else {
+						// HTTP fallback: call server's /emit-log endpoint (build from hostname to avoid double-port like http://localhost:3000:9150)
+						const defaultPort =
+							typeof import.meta !== "undefined" && (import.meta.env as any)?.VITE_SOCKET_PORT
+								? String((import.meta.env as any).VITE_SOCKET_PORT)
+								: "9150";
+						const base =
+							typeof window !== "undefined"
+								? `${window.location.protocol}//${window.location.hostname}:${defaultPort}`
+								: "http://localhost:9150";
+						console.info("[App] emit-log fallback url", `${base}/emit-log`);
+						fetch(`${base}/emit-log`, {
+							method: "POST",
+							headers: { "content-type": "application/json" },
+							body: JSON.stringify(forwardPayload),
+						}).catch(e => console.info("[App] emit-log fallback failed", e));
+					}
+				} catch (e) {
+					console.debug("[App] forward to socket failed", e);
+				}
+
 				if (port) {
 					port.postMessage({ response: result.response });
 				}
@@ -329,6 +367,67 @@ function App() {
 		navigator.serviceWorker.addEventListener("message", handleMessage);
 		return () => navigator.serviceWorker.removeEventListener("message", handleMessage);
 	}, []);
+
+	// --- SOCKET LOG STREAM ---
+	useEffect(() => {
+		if (!FEATURES.LOG_VIEWER()) return;
+		try {
+			setSocketStatus("connecting");
+
+			const onConnect = () => {
+				console.info("[App] socket connected");
+				setSocketStatus("connected");
+				if (activeProjectId) {
+					socketClient.join(`logs:${activeProjectId}`);
+					console.info("[App] joined room", `logs:${activeProjectId}`);
+				}
+			};
+			const onDisconnect = () => {
+				console.info("[App] socket disconnected");
+				setSocketStatus("disconnected");
+			};
+			const onConnectError = (err: any) => {
+				console.info("[App] socket connect_error", err?.message || err);
+				setSocketStatus("disconnected");
+			};
+
+			// Register handlers BEFORE connecting to avoid missing early events
+			socketClient.on("connect", onConnect);
+			socketClient.on("disconnect", onDisconnect);
+			socketClient.on("connect_error", onConnectError);
+
+			// then connect
+			socketClient.connect();
+
+			const handler = (payload: any) => {
+				const newLog: LogEntry = {
+					id: payload.id || crypto.randomUUID(),
+					timestamp: payload.ts || Date.now(),
+					method: (payload.method as any) || "GET",
+					path: payload.path || payload.url || "/",
+					statusCode: payload.statusCode || 0,
+					duration: payload.duration || 0,
+					ip: payload.ip || payload.ipAddress || "0.0.0.0",
+				};
+				setLogs(prev => {
+					if (prev.some(l => l.id === newLog.id)) return prev;
+					return [newLog, ...prev].slice(0, 500);
+				});
+			};
+			socketClient.on("log:new", handler);
+			return () => {
+				socketClient.off("log:new", handler);
+				socketClient.off("connect", onConnect);
+				socketClient.off("disconnect", onDisconnect);
+				socketClient.off("connect_error", onConnectError);
+				if (activeProjectId) socketClient.leave(`logs:${activeProjectId}`);
+				socketClient.disconnect();
+				setSocketStatus("disconnected");
+			};
+		} catch (e) {
+			console.error("Socket log stream failed", e);
+		}
+	}, [activeProjectId]);
 
 	// --- HELPERS ---
 	const addToast = (message: string, type: ToastType) => {
@@ -811,7 +910,9 @@ function App() {
 					<TestConsole mocks={projectMocks} state={testConsoleState} setState={setTestConsoleState} />
 				)}
 
-				{view === "logs" && FEATURES.LOG_VIEWER() && <LogViewer logs={logs} onClearLogs={() => setLogs([])} />}
+				{view === "logs" && FEATURES.LOG_VIEWER() && (
+					<LogViewer logs={logs} onClearLogs={() => setLogs([])} socketStatus={socketStatus} />
+				)}
 
 				{view === "database" && <DatabaseView />}
 
