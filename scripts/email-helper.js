@@ -10,6 +10,19 @@ const PORT = process.env.EMAIL_HELPER_PORT || process.env.VITE_EMAIL_HELPER_PORT
 const UPLOAD_DIR = path.resolve(process.cwd(), "tmp", "email-uploads");
 const TTL_HOURS = Number(process.env.EMAIL_HELPER_TTL_HOURS || 24);
 
+// CLI / env: quiet mode to suppress potentially sensitive logs
+const argv = process.argv.slice(2);
+const QUIET = argv.includes("--quiet") || process.env.EMAIL_HELPER_QUIET === "true";
+function safeLog(...args) {
+	if (!QUIET) console.log(...args);
+}
+function safeWarn(...args) {
+	if (!QUIET) console.warn(...args);
+}
+function safeError(...args) {
+	console.error(...args);
+}
+
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const storage = multer.diskStorage({
@@ -22,9 +35,61 @@ const storage = multer.diskStorage({
 	},
 });
 
+// Acceptable extensions (safe whitelist to reduce malicious uploads)
+const ACCEPT_EXTENSIONS = new Set([".zip", ".json", ".txt", ".eml", ".png", ".jpg", ".jpeg", ".gif"]);
+
+// Simple in-memory rate limiter (per-IP). Configurable via env vars
+const RATE_LIMIT = Number(process.env.EMAIL_HELPER_RATE_LIMIT || 20); // uploads per window
+const RATE_WINDOW_MS = Number(process.env.EMAIL_HELPER_RATE_WINDOW_HOURS || 1) * 60 * 60 * 1000;
+const rateMap = new Map();
+
+function rateLimitMiddleware(req, res, next) {
+	const ip = req.ip || (req.connection && req.connection.remoteAddress) || "unknown";
+	let entry = rateMap.get(ip);
+	const now = Date.now();
+	if (!entry || now - entry.first > RATE_WINDOW_MS) {
+		entry = { count: 0, first: now };
+	}
+	entry.count += 1;
+	rateMap.set(ip, entry);
+	if (entry.count > RATE_LIMIT) {
+		safeWarn(`Rate limit exceeded for ${ip} (${entry.count} > ${RATE_LIMIT})`);
+		return res.status(429).json({ error: "Too many upload requests" });
+	}
+	next();
+}
+
+// cleanup old entries periodically
+setInterval(() => {
+	const now = Date.now();
+	rateMap.forEach((v, k) => {
+		if (now - v.first > RATE_WINDOW_MS * 2) rateMap.delete(k);
+	});
+}, RATE_WINDOW_MS);
+
 const upload = multer({
 	storage,
 	limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max
+	fileFilter: (req, file, cb) => {
+		const ext = path.extname(file.originalname || "").toLowerCase();
+		if (!ACCEPT_EXTENSIONS.has(ext)) {
+			// don't throw; signal validation failure and reject the file
+			req._fileValidationError = "File type not allowed";
+			return cb(null, false);
+		}
+		cb(null, true);
+	},
+});
+
+// Generic error handler for pretty upload errors
+app.use((err, req, res, next) => {
+	if (!err) return next();
+	// Multer file size error
+	if (err.code === "LIMIT_FILE_SIZE") return res.status(413).json({ error: "File too large" });
+	if (err.message && err.message.includes("File type not allowed"))
+		return res.status(400).json({ error: "File type not allowed" });
+	safeError("Upload error", err);
+	return res.status(500).json({ error: "Internal upload error" });
 });
 
 const app = express();
@@ -34,35 +99,62 @@ app.use(express.json());
 // serve files with simple static middleware
 app.use("/files", express.static(UPLOAD_DIR, { index: false }));
 
-const USE_0X0 = process.env.EMAIL_HELPER_UPLOAD_TO_0X0 === 'true' || process.env.EMAIL_HELPER_PUBLIC_HOST === '0x0.st';
+const USE_0X0 = process.env.EMAIL_HELPER_UPLOAD_TO_0X0 === "true" || process.env.EMAIL_HELPER_PUBLIC_HOST === "0x0.st";
 
-app.post("/upload-temp", upload.single("file"), async (req, res) => {
+// Multer error wrapper so fileFilter errors are returned as JSON
+function uploadHandler(req, res, next) {
+	upload.single("file")(req, res, function (err) {
+		if (err) {
+			if (err.code === "LIMIT_FILE_SIZE") return res.status(413).json({ error: "File too large" });
+			safeError("Upload error (unexpected)", err);
+			return res.status(500).json({ error: "Internal upload error" });
+		}
+		// handle fileFilter validation signal
+		if (req._fileValidationError) return res.status(400).json({ error: req._fileValidationError });
+		next();
+	});
+}
+
+app.post("/upload-temp", rateLimitMiddleware, uploadHandler, async (req, res) => {
+	// if the file was rejected by validation the helper will set a flag
+	if (req._fileValidationError) return res.status(400).json({ error: req._fileValidationError });
 	if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+	// ensure file isn't larger than limit (double-check in case middleware was bypassed)
+	if (req.file && req.file.size > 50 * 1024 * 1024) return res.status(413).json({ error: "File too large" });
+
 	const expiresAt = Date.now() + TTL_HOURS * 60 * 60 * 1000;
+	// sanitize original filename to avoid path injection and weird chars
+	const sanitizedOriginalName = path
+		.basename(req.file.originalname || "")
+		.replace(/[^\w.\-]+/g, "_")
+		.slice(0, 255);
 	// store metadata small JSON beside file
-	const meta = { originalName: req.file.originalname, filename: req.file.filename, size: req.file.size, expiresAt };
+	const meta = { originalName: sanitizedOriginalName, filename: req.file.filename, size: req.file.size, expiresAt };
 	fs.writeFileSync(path.join(UPLOAD_DIR, `${req.file.filename}.json`), JSON.stringify(meta));
 
 	if (USE_0X0) {
 		try {
-			const FormData = require('form-data');
+			const FormData = require("form-data");
 			const form = new FormData();
 			const filePath = path.join(UPLOAD_DIR, req.file.filename);
-			form.append('file', fs.createReadStream(filePath), { filename: req.file.originalname });
-			const fetchRes = await fetch('https://0x0.st', { method: 'POST', body: form, headers: form.getHeaders() });
+			form.append("file", fs.createReadStream(filePath), { filename: req.file.originalname });
+			const fetchRes = await fetch("https://0x0.st", { method: "POST", body: form, headers: form.getHeaders() });
 			const text = (await fetchRes.text()).trim();
-			if (fetchRes.ok && text && text.startsWith('http')) {
+			if (fetchRes.ok && text && text.startsWith("http")) {
 				const url = text;
 				meta.remoteUrl = url;
 				fs.writeFileSync(path.join(UPLOAD_DIR, `${req.file.filename}.json`), JSON.stringify(meta));
 				// remove local file to save disk space
-				try { fs.unlinkSync(filePath); } catch (e) {}
+				try {
+					fs.unlinkSync(filePath);
+				} catch (e) {}
 				return res.json({ url, expiresAt });
 			} else {
-				console.warn('0x0.st upload failed', fetchRes.status, text);
+				// Avoid logging remote response body (may contain sensitive URLs). Log status only unless not quiet.
+				safeWarn("0x0.st upload failed", fetchRes.status);
 			}
 		} catch (e) {
-			console.error('Public upload error', e);
+			console.error("Public upload error", e);
 		}
 	}
 
@@ -98,14 +190,14 @@ setInterval(() => {
 			}
 		});
 	} catch (e) {
-		console.error("Cleanup error", e);
+		safeError("Cleanup error", e);
 	}
 }, 60 * 60 * 1000); // hourly
 
 app.get("/health", (req, res) => res.json({ ok: true }));
 
 app.listen(PORT, () => {
-	console.log(`Email helper server running on port ${PORT}`);
-	console.log(`Upload endpoint: POST http://localhost:${PORT}/upload-temp (form field name 'file')`);
-	console.log(`Public uploads to 0x0.st enabled: ${USE_0X0 ? 'yes' : 'no'}`);
+	safeLog(`Email helper server running on port ${PORT}`);
+	safeLog(`Upload endpoint: POST http://localhost:${PORT}/upload-temp (form field name 'file')`);
+	safeLog(`Public uploads to 0x0.st enabled: ${USE_0X0 ? "yes" : "no"}`);
 });

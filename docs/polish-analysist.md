@@ -82,7 +82,7 @@
 
 ---
 
-### [scripts/email-helper.js](../scripts/email-helper.js)
+### [scripts/email-helper.js](../scripts/email-helper.js) complete [x]
 
 -   Logs server URLs and options with `console.log` (may leak sensitive info in CI logs); add a --quiet option and avoid printing secrets.
 -   No clear input validation for uploads or rate limiting; might be fine for dev but should be documented and sandboxed.
