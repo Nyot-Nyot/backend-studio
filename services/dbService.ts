@@ -7,8 +7,18 @@
 
 const DB_PREFIX = "api_sim_db_";
 
-/**
- * Detects if all IDs in a collection are numeric
+/** * Basic typed interfaces for stored items and IDs
+ */
+export type Id = string | number;
+export interface DbItem {
+  id?: Id;
+  [k: string]: unknown;
+}
+
+/** Helper to detect presence of localStorage in the environment */
+const hasLocalStorage = () => typeof (globalThis as any).localStorage !== 'undefined' && (globalThis as any).localStorage !== null;
+
+/** * Detects if all IDs in a collection are numeric
  */
 const isNumericIdStrategy = (ids: unknown[]): boolean => {
   return ids.length > 0 && ids.every((val) => typeof val === "number");
@@ -36,16 +46,23 @@ const generateShortUuid = (): string => {
 };
 
 // In-memory cache to keep synchronous API stable while persistence may be async
-const cache: Record<string, Record<string, unknown>[]> = {};
+const cache: Record<string, DbItem[]> = {};
 let _backend: 'localStorage' | 'indexeddb' | 'memory' = 'localStorage';
+
+// Default first numeric id when collection chooses numeric strategy (kept for backwards compatibility)
+const DEFAULT_FIRST_NUMERIC_ID = 1;
 
 import { logger } from './logger';
 const log = logger('dbService');
 
-const persistCollection = async (name: string, data: Record<string, unknown>[]) => {
+const persistCollection = async (name: string, data: DbItem[]): Promise<void> => {
   if (_backend === 'localStorage') {
+    if (!hasLocalStorage()) {
+      log.warn(`localStorage unavailable: cannot persist collection "${name}"`);
+      return;
+    }
     try {
-      localStorage.setItem(DB_PREFIX + name, JSON.stringify(data));
+      (globalThis as any).localStorage.setItem(DB_PREFIX + name, JSON.stringify(data));
     } catch (e) {
       log.error(`Error saving collection "${name}" to localStorage:`, e);
     }
@@ -66,12 +83,13 @@ const persistCollection = async (name: string, data: Record<string, unknown>[]) 
 };
 
 const loadAllFromLocalStorage = () => {
-  for (let i = 0; i < (localStorage.length || 0); i++) {
-    const key = localStorage.key(i);
+  if (!hasLocalStorage()) return;
+  for (let i = 0; i < ((globalThis as any).localStorage.length || 0); i++) {
+    const key = (globalThis as any).localStorage.key(i);
     if (key && key.startsWith(DB_PREFIX)) {
       const name = key.replace(DB_PREFIX, "");
       try {
-        cache[name] = JSON.parse(localStorage.getItem(key) || 'null') || [];
+        cache[name] = JSON.parse((globalThis as any).localStorage.getItem(key) || 'null') || [];
       } catch (e) {
         cache[name] = [];
       }
@@ -84,16 +102,21 @@ export const dbService = {
    * Get entire collection (synchronous API preserved)
    * Uses in-memory cache if available, otherwise falls back to localStorage.
    */
-  getCollection: (name: string): Record<string, unknown>[] => {
+  getCollection: <T extends DbItem = DbItem>(name: string): T[] => {
     // If running in indexeddb mode and cache populated, prefer that for sync reads.
-    if (_backend === 'indexeddb' && cache[name]) return cache[name];
+    if (_backend === 'indexeddb' && cache[name]) return cache[name] as T[];
 
     // Always read from localStorage for deterministic test behavior and to keep
     // behavior identical to previous implementation unless explicitly initialized
     // into indexeddb mode.
+    if (!hasLocalStorage()) {
+      cache[name] = cache[name] || [];
+      return cache[name] as T[];
+    }
+
     try {
-      const data = localStorage.getItem(DB_PREFIX + name);
-      const parsed = data ? JSON.parse(data) : [];
+      const data = (globalThis as any).localStorage.getItem(DB_PREFIX + name);
+      const parsed = data ? (JSON.parse(data) as T[]) : [];
       cache[name] = parsed;
       return parsed;
     } catch (error) {
@@ -108,14 +131,14 @@ export const dbService = {
    * - Default: synchronous signature (fire-and-forget background persistence) to preserve existing behavior.
    * - If `opts.await` is true, returns a Promise that resolves when persistence completes.
    */
-  saveCollection: (name: string, data: Record<string, unknown>[], opts?: { await?: boolean }): void | Promise<void> => {
-    cache[name] = data;
+  saveCollection: <T extends DbItem = DbItem>(name: string, data: T[], opts?: { await?: boolean }): void | Promise<void> => {
+    cache[name] = data as DbItem[];
 
     if (opts && opts.await) {
       // Return a Promise that resolves when persistence completes
       return (async () => {
         try {
-          await persistCollection(name, data);
+          await persistCollection(name, data as DbItem[]);
         } catch (err) {
           log.warn('Persist failed:', err);
         }
@@ -125,15 +148,15 @@ export const dbService = {
     // Fire-and-forget (backwards compatible)
     (async () => {
       try {
-        await persistCollection(name, data);
+        await persistCollection(name, data as DbItem[]);
       } catch (err) {
-        console.warn('Persist failed:', err);
+        log.warn('Persist failed:', err);
       }
     })();
 
   },
 
-  persistCollectionAsync: async (name: string, data: Record<string, unknown>[]): Promise<void> => {
+  persistCollectionAsync: async (name: string, data: DbItem[]): Promise<void> => {
     cache[name] = data;
     await persistCollection(name, data);
   },
@@ -144,7 +167,11 @@ export const dbService = {
   clearCollection: (name: string): void => {
     delete cache[name];
     if (_backend === 'localStorage') {
-      localStorage.removeItem(DB_PREFIX + name);
+      if (hasLocalStorage()) {
+        (globalThis as any).localStorage.removeItem(DB_PREFIX + name);
+      } else {
+        log.warn(`localStorage unavailable: cannot remove collection "${name}"`);
+      }
       return;
     }
     // async clear for indexedDB
@@ -165,8 +192,9 @@ export const dbService = {
    */
   listCollections: (): string[] => {
     const names = new Set<string>(Object.keys(cache));
-    for (let i = 0; i < (localStorage.length || 0); i++) {
-      const key = localStorage.key(i);
+    if (!hasLocalStorage()) return Array.from(names);
+    for (let i = 0; i < ((globalThis as any).localStorage.length || 0); i++) {
+      const key = (globalThis as any).localStorage.key(i);
       if (key && key.startsWith(DB_PREFIX)) {
         names.add(key.replace(DB_PREFIX, ''));
       }
@@ -174,9 +202,9 @@ export const dbService = {
     return Array.from(names);
   },
 
-  find: (collection: string, id: string | number): Record<string, unknown> | undefined => {
-    const list = dbService.getCollection(collection);
-    return list.find((item) => (item as { id?: unknown }).id == id) as Record<string, unknown> | undefined;
+  find: <T extends DbItem = DbItem>(collection: string, id: string | number): T | undefined => {
+    const list = dbService.getCollection<T>(collection);
+    return list.find((item) => (item as { id?: unknown }).id == id) as T | undefined;
   },
 
   insert: (collection: string, item: Record<string, unknown>): Record<string, unknown> & { id: string | number } => {
@@ -224,7 +252,7 @@ export const dbService = {
     list = list.filter((item) => (item as { id?: unknown }).id != id);
 
     if (list.length !== initialLen) {
-      dbService.saveCollection(collection, list);
+      dbService.saveCollection(collection, list as DbItem[]);
       return true;
     }
     return false;
@@ -273,16 +301,16 @@ export const dbService = {
           await mod.indexedDbService.clearCollection(c);
         }
       } catch (e) {
-        console.warn('clearAllCollectionsAsync (indexeddb) failed:', e);
+        log.warn('clearAllCollectionsAsync (indexeddb) failed:', e);
         // Fallback to clearing localStorage items that match prefix
         for (const c of collections) {
-          localStorage.removeItem(DB_PREFIX + c);
+          if (hasLocalStorage()) (globalThis as any).localStorage.removeItem(DB_PREFIX + c);
         }
       }
     } else {
       // localStorage or memory: clear synchronously
       for (const c of collections) {
-        localStorage.removeItem(DB_PREFIX + c);
+        if (hasLocalStorage()) (globalThis as any).localStorage.removeItem(DB_PREFIX + c);
         delete cache[c];
       }
     }
@@ -294,7 +322,7 @@ export const dbService = {
    */
   init: async (opts?: { backend?: 'auto' | 'indexeddb' | 'localStorage' }) => {
     const backend = opts?.backend ?? 'auto';
-    const hasIndexedDB = typeof (globalThis as any).indexedDB !== 'undefined';
+    const hasIndexedDB = typeof (globalThis as any).indexedDB !== 'undefined' && (globalThis as any).indexedDB !== null;
 
     if (backend === 'indexeddb' || (backend === 'auto' && hasIndexedDB)) {
       try {

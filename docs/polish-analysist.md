@@ -66,7 +66,7 @@
 
 ---
 
-### [services/dbService.ts](../services/dbService.ts)
+### [services/dbService.ts](../services/dbService.ts) complete [x]
 
 -   Heavy use of `any` for stored records; missing typed collection interfaces.
 -   ID generation mixes numeric and short-UUID strategies and returns default `1` for first numeric id, which may surprise consumers (better to document or make consistent).
