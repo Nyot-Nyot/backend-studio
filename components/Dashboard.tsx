@@ -61,19 +61,19 @@ export const Dashboard: React.FC<DashboardProps> = ({
 			if (navigator.clipboard && navigator.clipboard.writeText) {
 				await navigator.clipboard.writeText(path);
 			} else {
-				const ta = document.createElement('textarea');
+				const ta = document.createElement("textarea");
 				ta.value = path;
-				ta.style.position = 'fixed';
-				ta.style.left = '-9999px';
+				ta.style.position = "fixed";
+				ta.style.left = "-9999px";
 				document.body.appendChild(ta);
 				ta.select();
-				document.execCommand('copy');
+				document.execCommand("copy");
 				document.body.removeChild(ta);
 			}
-			addToast('Route path copied to clipboard', 'info');
+			addToast("Route path copied to clipboard", "info");
 		} catch (err) {
-			console.error('copy failed', err);
-			addToast('Failed to copy route path', 'error');
+			console.error("copy failed", err);
+			addToast("Failed to copy route path", "error");
 		}
 	};
 
@@ -115,8 +115,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
 		}
 	};
 
-	const handleSelect = (e: React.MouseEvent | React.ChangeEvent | React.KeyboardEvent, id: string, index?: number) => {
-		if ('stopPropagation' in e && typeof e.stopPropagation === 'function') e.stopPropagation();
+	const handleSelect = (
+		e: React.MouseEvent | React.ChangeEvent | React.KeyboardEvent,
+		id: string,
+		index?: number
+	) => {
+		if ("stopPropagation" in e && typeof e.stopPropagation === "function") e.stopPropagation();
 		const shiftKey = (e as any).shiftKey || false;
 		toggleSelect(id, index, !!shiftKey);
 	};
@@ -141,7 +145,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
 		[HttpMethod.DELETE]: "bg-red-50 text-red-700 border-red-200 ring-red-500/10",
 	};
 
-	const getMethodStyle = (method: HttpMethod) => METHOD_STYLE_MAP[method] ?? "bg-slate-50 text-slate-700 border-slate-200 ring-slate-500/10";
+	const getMethodStyle = (method: HttpMethod) =>
+		METHOD_STYLE_MAP[method] ?? "bg-slate-50 text-slate-700 border-slate-200 ring-slate-500/10";
 
 	return (
 		<div className="p-8 max-w-[1600px] mx-auto space-y-10 animate-enter pb-20 relative">
@@ -210,17 +215,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
 							key={mock.id}
 							data-testid={`mock-card-${mock.name.replace(/[^a-zA-Z0-9_-]/g, "-")}`}
 							onClick={() => onEdit(mock)}
-						tabIndex={0}
-						onKeyDown={e => {
-							if (e.key === "Enter") {
-								onEdit(mock);
-							} else if (e.key === " " || e.key === "Spacebar") {
-								e.preventDefault();
-								handleSelect(e, mock.id, index);
-							}
-						}}
-						aria-selected={isSelected}
-						className={`group relative bg-white rounded-2xl border transition-all duration-300 hover:shadow-xl hover:shadow-slate-200/50 hover:-translate-y-1 cursor-pointer overflow-hidden flex flex-col animate-in fade-in slide-in-from-bottom-4 fill-mode-backwards focus:outline-none focus:ring-2 focus:ring-brand-500 ${
+							tabIndex={0}
+							onKeyDown={e => {
+								if (e.key === "Enter") {
+									onEdit(mock);
+								} else if (e.key === " " || e.key === "Spacebar") {
+									e.preventDefault();
+									handleSelect(e, mock.id, index);
+								}
+							}}
+							aria-selected={isSelected}
+							className={`group relative bg-white rounded-2xl border transition-all duration-300 hover:shadow-xl hover:shadow-slate-200/50 hover:-translate-y-1 cursor-pointer overflow-hidden flex flex-col animate-in fade-in slide-in-from-bottom-4 fill-mode-backwards focus:outline-none focus:ring-2 focus:ring-brand-500 ${
 								mock.isActive ? "border-slate-200" : "border-slate-200 bg-slate-50/50 opacity-80"
 							} ${isSelected ? "ring-2 ring-brand-500 border-brand-500" : ""}`}
 							style={{ animationDelay: `${index * 50}ms` }}
@@ -238,16 +243,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
 									className={`absolute top-4 left-4 z-20 transition-opacity duration-200 ${
 										isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
 									}`}
-					>
-						<input
-							type="checkbox"
-							checked={isSelected}
-							onChange={e => handleSelect(e, mock.id, index)}
-							onClick={e => e.stopPropagation()}
-							aria-label={`Select ${mock.name}`}
-							aria-checked={isSelected}
-							className="w-5 h-5 rounded border-gray-300 text-brand-600 focus:ring-2 focus:ring-brand-500 cursor-pointer accent-brand-600"
-						/>
+								>
+									<input
+										type="checkbox"
+										checked={isSelected}
+										onChange={e => handleSelect(e, mock.id, index)}
+										onClick={e => e.stopPropagation()}
+										aria-label={`Select ${mock.name}`}
+										aria-checked={isSelected}
+										className="w-5 h-5 rounded border-gray-300 text-brand-600 focus:ring-2 focus:ring-brand-500 cursor-pointer accent-brand-600"
+									/>
 								</div>
 								<div className="flex justify-between items-start mb-4 pl-6">
 									<div className="flex flex-col gap-1.5 min-w-0 pr-12">
@@ -274,8 +279,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
 										</div>
 									</div>
 
-						{/* Actions (visible on hover/active) - place inline to avoid overlapping content */}
-								<div className="flex-shrink-0 flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-all duration-200 translate-y-2 group-hover:translate-y-0 bg-white/90 backdrop-blur rounded-lg p-1 shadow-sm border border-slate-100 pointer-events-none group-hover:pointer-events-auto">
+									{/* Actions (visible on hover/active) - place inline to avoid overlapping content */}
+									<div className="flex-shrink-0 flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-all duration-200 translate-y-2 group-hover:translate-y-0 bg-white/90 backdrop-blur rounded-lg p-1 shadow-sm border border-slate-100 pointer-events-none group-hover:pointer-events-auto">
 										<ActionButton
 											onClick={e => handleToggle(e, mock.id)}
 											icon={
@@ -379,7 +384,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
 								<CheckSquare className="w-4 h-4" />
 								{selectedIds.length === filteredMocks.length ? "Deselect All" : "Select All"}
 							</button>
-						<div className="hidden sm:block text-xs text-slate-400 ml-3">Tip: use Shift+Click to select a range</div>
+							<div className="hidden sm:block text-xs text-slate-400 ml-3">
+								Tip: use Shift+Click to select a range
+							</div>
 
 							<button
 								onClick={() => setSelectedIds([])}
