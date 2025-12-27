@@ -179,7 +179,7 @@ export const dbService = {
     return list.find((item) => (item as { id?: unknown }).id == id) as Record<string, unknown> | undefined;
   },
 
-  insert: (collection: string, item: Record<string, unknown>): Record<string, unknown> => {
+  insert: (collection: string, item: Record<string, unknown>): Record<string, unknown> & { id: string | number } => {
     const list = dbService.getCollection(collection);
 
     if ((item as { id?: unknown }).id === undefined || (item as { id?: unknown }).id === null) {
@@ -202,7 +202,7 @@ export const dbService = {
 
     list.push(item);
     dbService.saveCollection(collection, list);
-    return item;
+    return item as Record<string, unknown> & { id: string | number };
   },
 
   update: (collection: string, id: string | number, updates: Partial<Record<string, unknown>>): Record<string, unknown> | null => {

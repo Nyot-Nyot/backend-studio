@@ -4,7 +4,7 @@
 
 ---
 
-### [components/MockEditor.tsx](../components/MockEditor.tsx)
+### [components/MockEditor.tsx](../components/MockEditor.tsx) complete [x]
 
 -   Visual editor treats arrays as a simple string (disabled input) — poor UX for editing arrays and potential data loss.
 -   Root-array support uses `isRootArray` and `Object.values()` when serializing, which can lose keys and is surprising for users.
@@ -17,7 +17,7 @@
 
 ---
 
-### [components/Dashboard.tsx](../components/Dashboard.tsx)
+### [components/Dashboard.tsx](../components/Dashboard.tsx) complete [x]
 
 -   Checkbox for selection is read-only and wrapped in a clickable container with `onClick` fragment handling — can be confusing for keyboard/screen-reader users.
 -   Copy-to-clipboard flow does not handle errors from `navigator.clipboard.writeText` (no catch) — possible silent failures.

@@ -155,7 +155,7 @@ test("insert with UUID strategy when no numeric IDs", () => {
   const item = dbService.insert("items", { name: "Item 3" });
   assert(typeof item.id === "string", "Should generate string UUID");
   assert(
-    item.id.length === 8,
+    (item.id as string).length === 8,
     "UUID should be short (8 chars from first segment)"
   );
 });
