@@ -547,6 +547,11 @@ function App() {
 			const err = e as any;
 			if (err?.code === "OPENROUTER_DISABLED") {
 				addToast("OpenRouter provider disabled. Enable in Settings.", "error");
+			} else if (err?.code === "OPENROUTER_TIMEOUT") {
+				addToast(
+					"OpenRouter request timed out. Check network or increase proxy timeout (OPENROUTER_TIMEOUT_MS)",
+					"error"
+				);
 			} else {
 				addToast("Failed to generate endpoint. Check API Key or proxy.", "error");
 			}

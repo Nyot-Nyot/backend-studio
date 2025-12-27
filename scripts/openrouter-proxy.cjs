@@ -88,12 +88,17 @@ function createApp(opts = {}) {
 		};
 
 		// Use retry with reasonable defaults and per-attempt timeout
+		const timeoutMsEnv = process.env.OPENROUTER_TIMEOUT_MS
+			? parseInt(process.env.OPENROUTER_TIMEOUT_MS, 10)
+			: undefined;
+		const timeoutMs = typeof timeoutMsEnv === "number" && !Number.isNaN(timeoutMsEnv) ? timeoutMsEnv : 8000;
+		if (process.env.DEBUG_OPENROUTER === "1") console.log(`OpenRouter call: timeoutMs=${timeoutMs}`);
 		const result = await retryUtil.retry(doFetch, {
 			retries: 3,
 			baseDelayMs: 200,
 			factor: 2,
 			maxDelayMs: 1500,
-			timeoutMs: 8000,
+			timeoutMs: timeoutMs,
 		});
 		return result;
 	}

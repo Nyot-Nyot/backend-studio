@@ -58,7 +58,7 @@
 
 ---
 
-### [services/openrouterClient.ts](../services/openrouterClient.ts)
+### [services/openrouterClient.ts](../services/openrouterClient.ts) complete [x]
 
 -   `BASE` fallback concatenation uses env value without consistent guard; may produce invalid URLs when empty or misconfigured.
 -   `postJson` sets an `X-OpenRouter-Key` from localStorage for convenience — this may accidentally leak secrets if users store keys there; add explicit opt-in with documentation.

@@ -866,6 +866,11 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 			const err = e as any;
 			if (err?.code === "OPENROUTER_DISABLED") {
 				addToast("OpenRouter provider disabled. Enable in Settings.", "error");
+			} else if (err?.code === "OPENROUTER_TIMEOUT") {
+				addToast(
+					"OpenRouter request timed out. Check network or increase proxy timeout (OPENROUTER_TIMEOUT_MS)",
+					"error"
+				);
 			} else if (
 				(err?.message &&
 					(err.message.includes("OPENROUTER_API_KEY not configured") || err.message.includes("401"))) ||

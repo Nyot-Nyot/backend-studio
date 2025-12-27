@@ -1,7 +1,7 @@
 import { FEATURES } from '../config/featureFlags';
 import { GeneratedEndpointConfig } from '../types';
 import { AIError, AIErrorCode } from './aiErrors';
-import { openrouterGenerateEndpoint, openrouterGenerateMock } from './openrouterClient';
+import { OpenRouterError, openrouterGenerateEndpoint, openrouterGenerateMock } from './openrouterClient';
 
 export async function generateMockData(path: string, context: string): Promise<string> {
   // prefer OpenRouter provider (check generic AI flag)
@@ -15,8 +15,15 @@ export async function generateMockData(path: string, context: string): Promise<s
     if (!res || typeof res.json !== 'string') throw new AIError(AIErrorCode.INVALID_AI_RESPONSE, 'Invalid AI response');
     return res.json;
   } catch (e) {
-    // Surface a typed error for callers; attach original error as cause when available
+    // Surface a typed error for callers; map OpenRouter timeout/errors to specific code
     if (e instanceof AIError) throw e;
+    if ((e as any) instanceof OpenRouterError) {
+      const oe = e as OpenRouterError;
+      const body = String(oe.body || '').toLowerCase();
+      if (oe.status === 504 || body.includes('proxy_timeout') || body.includes('timeout')) {
+        throw new AIError(AIErrorCode.OPENROUTER_TIMEOUT, 'OpenRouter request timed out', { cause: e });
+      }
+    }
     throw new AIError(AIErrorCode.INVALID_AI_RESPONSE, 'Failed to generate mock data', { cause: e });
   }
 }
@@ -34,6 +41,13 @@ export async function generateEndpointConfig(prompt: string): Promise<GeneratedE
     return res as GeneratedEndpointConfig;
   } catch (e) {
     if (e instanceof AIError) throw e;
+    if ((e as any) instanceof OpenRouterError) {
+      const oe = e as OpenRouterError;
+      const body = String(oe.body || '').toLowerCase();
+      if (oe.status === 504 || body.includes('proxy_timeout') || body.includes('timeout')) {
+        throw new AIError(AIErrorCode.OPENROUTER_TIMEOUT, 'OpenRouter request timed out', { cause: e });
+      }
+    }
     throw new AIError(AIErrorCode.INVALID_AI_CONFIG, 'Failed to generate endpoint config', { cause: e });
   }
 }

@@ -1,5 +1,5 @@
-import { generateMockData, generateEndpointConfig } from "../services/aiService";
 import { AIError, AIErrorCode } from "../services/aiErrors";
+import { generateEndpointConfig, generateMockData } from "../services/aiService";
 
 async function run() {
   console.log("🧪 aiService disabled tests");
