@@ -50,7 +50,7 @@
 
 ---
 
-### [services/aiService.ts](../services/aiService.ts)
+### [services/aiService.ts](../services/aiService.ts) complete [x]
 
 -   Checks `FEATURES.AI && !FEATURES.AI()` — redundant and slightly confusing; prefer `if (!FEATURES.AI())`.
 -   Throws string-like error codes (`OPENROUTER_DISABLED`) and relies on message matching elsewhere — use typed error classes or constants for more robust handling.

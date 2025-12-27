@@ -863,10 +863,14 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 			}
 			addToast("Generated response body", "success");
 		} catch (e) {
-			const msg = (e as Error).message || "";
-			if (msg.includes("OPENROUTER_DISABLED")) {
+			const err = e as any;
+			if (err?.code === "OPENROUTER_DISABLED") {
 				addToast("OpenRouter provider disabled. Enable in Settings.", "error");
-			} else if (msg.includes("OPENROUTER_API_KEY not configured") || msg.includes("401")) {
+			} else if (
+				(err?.message &&
+					(err.message.includes("OPENROUTER_API_KEY not configured") || err.message.includes("401"))) ||
+				err?.code === "OPENROUTER_UNAUTHORIZED"
+			) {
 				addToast("OpenRouter API Key missing or proxy not running. Configure or start proxy.", "error");
 			} else {
 				addToast("Failed to generate", "error");
