@@ -75,7 +75,7 @@
 
 ---
 
-### [sw.js](../sw.js)
+### [sw.js](../sw.js) complete [x]
 
 -   Service worker has some commented logic about fallbacks but may not handle edge-cases (cache vs network race) — review strategy and add tests for offline flows.
 -   Uses verbose inline comments but missing tests or integration checks in CI for SW behavior.

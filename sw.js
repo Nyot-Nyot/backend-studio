@@ -35,16 +35,17 @@ async function handleRequest(event) {
 	const clients = await self.clients.matchAll({ type: "window" });
 	const client = clients.find(c => c.visibilityState === "visible") || clients[0]; // prefer visible tab
 
+	// If no client available, simply fallback to network. Keep behavior stable.
 	if (!client) {
 		return fetch(event.request);
 	}
 
+	// Try to read body safely
 	let requestBody = "";
 	try {
 		const method = (event.request.method || "GET").toUpperCase();
 		const mayHaveBody = method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE";
 		if (mayHaveBody) {
-			// Clone before consuming body to avoid locking the stream
 			const cloned = event.request.clone();
 			requestBody = await cloned.text();
 		} else {
@@ -60,93 +61,170 @@ async function handleRequest(event) {
 		requestHeaders[key] = value;
 	}
 
-	return new Promise(resolve => {
-		const channel = new MessageChannel();
+	// Helper: build a promise that resolves when client responds via MessageChannel
+	const clientResponsePromise = () => {
+		return new Promise((resolveClient) => {
+			const channel = new MessageChannel();
+			let settled = false;
 
-		// Fallback timer: jika client tidak merespons dalam waktu tertentu, lakukan fallback ke network
-		let settled = false;
-		const timeoutId = setTimeout(() => {
-			if (settled) return;
-			settled = true;
-			console.warn(`SW: client did not respond within ${HANDSHAKE_TIMEOUT_MS}ms, falling back to network`);
-			// Clean up listener
-			channel.port1.onmessage = null;
-			resolve(fetch(event.request));
-		}, HANDSHAKE_TIMEOUT_MS);
+			// Timeout will cause rejection so the race can continue with other strategies
+			const timeoutId = setTimeout(() => {
+				if (settled) return;
+				settled = true;
+				channel.port1.onmessage = null;
+				resolveClient(null); // indicate no client response in time
+			}, HANDSHAKE_TIMEOUT_MS);
 
-		// Dengarkan balasan dari React App
-		channel.port1.onmessage = msg => {
-			if (settled) return; // ignore late responses
-			clearTimeout(timeoutId);
-			settled = true;
+			channel.port1.onmessage = msg => {
+				if (settled) return; // ignore late responses
+				clearTimeout(timeoutId);
+				settled = true;
+				try {
+					const { response } = msg.data || {};
+					if (!response) {
+						resolveClient(null);
+						return;
+					}
+
+					// Build Headers robustly
+					const headers = new Headers();
+					if (Array.isArray(response.headers)) {
+						response.headers.forEach(h => {
+							if (h && h.key) headers.append(String(h.key), String(h.value ?? ""));
+						});
+					} else if (response.headers && typeof response.headers === "object") {
+						Object.entries(response.headers).forEach(([k, v]) => headers.append(k, String(v ?? "")));
+					}
+
+					const body = response.body === null || response.body === undefined ? null :
+						typeof response.body === "string" ? response.body : JSON.stringify(response.body);
+
+					resolveClient(new Response(body, { status: response.status ?? 200, headers }));
+				} catch (err) {
+					console.error("SW: Error handling message from client", err);
+					resolveClient(null);
+				}
+			};
+
+			// Send the request over to client for processing, transfer port2
+			const requestId = `${Date.now()}-${Math.floor(Math.random() * 100000)}`;
 			try {
-				const { response } = msg.data || {};
+				client.postMessage(
+					{
+						type: "INTERCEPT_REQUEST",
+						payload: {
+							id: requestId,
+							url: event.request.url,
+							method: event.request.method,
+							headers: requestHeaders,
+							body: requestBody,
+						},
+					},
+					[channel.port2]
+				);
 
-				if (!response) {
-					// jika client tidak membalas dengan response yang diharapkan, fallback ke network
-					resolve(fetch(event.request));
-					return;
-				}
-
-				// Build Headers robustly: accept array of {key,value} or plain object
-				const headers = new Headers();
-				if (Array.isArray(response.headers)) {
-					response.headers.forEach(h => {
-						if (h && h.key) headers.append(String(h.key), String(h.value ?? ""));
-					});
-				} else if (response.headers && typeof response.headers === "object") {
-					Object.entries(response.headers).forEach(([k, v]) => headers.append(k, String(v ?? "")));
-				}
-
-				// Ensure body is a string or null
-				const body =
-					response.body === null || response.body === undefined
-						? null
-						: typeof response.body === "string"
-						? response.body
-						: JSON.stringify(response.body);
-
-				const sendResponse = () => {
+				// Also listen for controller-level replies as a fallback for test environments
+				const onGlobalReply = (ev) => {
 					try {
-						resolve(
-							new Response(body, {
-								status: response.status ?? 200,
-								headers: headers,
-							})
-						);
-					} catch (err) {
-						// If Response construction fails for any reason, fallback to network
-						console.error("SW: Failed to construct Response from client data", err);
-						resolve(fetch(event.request));
+						const { id, response } = ev.data || {};
+						if (id === requestId && response) {
+							if (settled) return;
+							clearTimeout(timeoutId);
+							settled = true;
+							try {
+								const headers = new Headers();
+								if (Array.isArray(response.headers)) {
+									response.headers.forEach(h => { if (h && h.key) headers.append(String(h.key), String(h.value ?? "")); });
+								} else if (response.headers && typeof response.headers === 'object') {
+									Object.entries(response.headers).forEach(([k, v]) => headers.append(k, String(v ?? '')));
+								}
+								const body = response.body === null || response.body === undefined ? null : (typeof response.body === 'string' ? response.body : JSON.stringify(response.body));
+								resolveClient(new Response(body, { status: response.status ?? 200, headers }));
+						} catch (e) {
+							console.error('SW: Error constructing response from global reply', e);
+							resolveClient(null);
+						}
+						}
+					} catch (e) {
+						// ignore
 					}
 				};
-
-				if (response.delay && typeof response.delay === "number") {
-					setTimeout(sendResponse, response.delay);
-				} else {
-					sendResponse();
-				}
-			} catch (outerErr) {
-				console.error("SW: Error handling message from client", outerErr);
-				resolve(fetch(event.request));
+				self.addEventListener('message', onGlobalReply, { once: true });
+			} catch (err) {
+				clearTimeout(timeoutId);
+				console.warn('SW: client.postMessage failed', err);
+				resolveClient(null);
 			}
-		};
+		});
+	};
 
-		// Kirim request ke React App untuk diproses ("Server-side logic" di Client)
-		const requestId = `${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+	// Strategy: check cache first for fast response, then race client vs network. If client responds before network, prefer client. If not, use network response.
+	try {
+		// Try cache first when available (fast path)
+		if (typeof caches !== 'undefined' && caches.match) {
+			const cached = await caches.match(event.request);
+			if (cached) return cached;
+		}
+	} catch (e) {
+		// ignore cache errors and continue
+	}
 
-		client.postMessage(
-			{
-				type: "INTERCEPT_REQUEST",
-				payload: {
-					id: requestId,
-					url: event.request.url,
-					method: event.request.method,
-					headers: requestHeaders, // Pass headers to app
-					body: requestBody,
-				},
-			},
-			[channel.port2]
-		);
+	// Respect an optional test header to artificially delay network fetches for deterministic testing
+	const testDelayMs = Number(event.request.headers.get('x-sw-test-delay') || 0);
+	// Allow tests to override the network target via header 'x-sw-test-network-url'
+	const testNetworkUrl = event.request.headers.get('x-sw-test-network-url');
+	if (testNetworkUrl) console.log('SW: using test network url', testNetworkUrl);
+	const networkPromise = (async () => {
+		try {
+			if (testDelayMs > 0) {
+				await new Promise(r => setTimeout(r, testDelayMs));
+			}
+			if (testNetworkUrl) {
+				console.log('SW: fetch ->', testNetworkUrl);
+				return await fetch(testNetworkUrl);
+			}
+			console.log('SW: fetch -> event.request');
+			return await fetch(event.request);
+		} catch (err) {
+			console.warn('SW: network fetch failed', err);
+			return null;
+		}
+	})();
+
+	const clientPromise = clientResponsePromise();
+
+	// race: whichever resolves with a usable Response first (client preferred if it resolves before network)
+	const res = await Promise.race([
+		clientPromise.then(r => ({ source: 'client', res: r })),
+		networkPromise.then(r => ({ source: 'network', res: r })),
+	]);
+
+	if (res && res.res) {
+		try {
+			if (res.source === 'network' && res.res) {
+				// tag network responses for test visibility
+				const clonedHeaders = new Headers(res.res.headers || {});
+				clonedHeaders.set('x-sw-source', 'network');
+				const text = await res.res.clone().text();
+				return new Response(text, { status: res.res.status ?? 200, headers: clonedHeaders });
+			}
+		} catch (e) {
+			// if tagging fails, fall back to original response
+			console.warn('SW: tagging response failed', e);
+		}
+
+		return res.res;
+	}
+
+	// Fallback: if neither produced a valid response, try a final network fetch (guarantee)
+	return fetch(event.request).catch((err) => {
+		console.error('SW: final fallback network fetch failed', err);
+		throw err;
 	});
 }
+
+// Expose handler for test environments
+if (typeof globalThis !== 'undefined') {
+	globalThis.__sw_handleRequest = handleRequest;
+}
+

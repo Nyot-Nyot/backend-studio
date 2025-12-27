@@ -19,8 +19,26 @@ export default defineConfig(({ mode }) => {
           rewrite: (path) => path,
         },
       },
+
     },
-    plugins: [react()],
+    plugins: [
+      react(),
+      // Simple dev plugin to serve /api/test during dev runs so SW e2e tests are deterministic
+      {
+        name: 'sw-test-middleware',
+        configureServer(server) {
+          server.middlewares.use((req, res, next) => {
+            if (req.url && req.url.startsWith('/api/test')) {
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'text/plain');
+              res.end('network');
+              return;
+            }
+            next();
+          });
+        },
+      },
+    ],
     define: {
       'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
