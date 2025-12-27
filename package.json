@@ -4,17 +4,18 @@
 	"version": "0.0.0",
 	"type": "module",
 	"dependencies": {
+		"@emailjs/browser": "^3.8.0",
 		"@google/genai": "^1.33.0",
+		"cors": "^2.8.5",
+		"express": "^4.18.4",
+		"form-data": "^4.0.0",
+		"jszip": "^3.10.0",
 		"lucide-react": "^0.561.0",
+		"multer": "^1.4.5-lts.1",
 		"react": "^19.2.3",
 		"react-dom": "^19.2.3",
+		"react-window": "^2.2.3",
 		"recharts": "^3.6.0",
-		"@emailjs/browser": "^3.8.0",
-		"jszip": "^3.10.0",
-		"express": "^4.18.4",
-		"multer": "^1.4.5-lts.1",
-		"cors": "^2.8.5",
-		"form-data": "^4.0.0",
 		"socket.io": "^4.8.1",
 		"socket.io-client": "^4.8.1"
 	},
@@ -44,16 +45,16 @@
 		"test:a11y": "npx playwright test test/e2e/a11y.spec.ts"
 	},
 	"devDependencies": {
+		"@axe-core/playwright": "^4.7.2",
 		"@playwright/test": "^1.57.0",
 		"@types/node": "^22.14.0",
-		"@vitejs/plugin-react": "^5.0.0",
-		"tsx": "^4.9.6",
-		"typescript": "~5.8.2",
-		"vite": "^6.2.0",
-		"fake-indexeddb": "^3.1.6",
 		"@types/react": "^18.2.0",
 		"@types/react-dom": "^18.2.0",
+		"@vitejs/plugin-react": "^5.0.0",
 		"concurrently": "^8.2.0",
-		"@axe-core/playwright": "^4.7.2"
+		"fake-indexeddb": "^3.1.6",
+		"tsx": "^4.9.6",
+		"typescript": "~5.8.2",
+		"vite": "^6.2.0"
 	}
 }

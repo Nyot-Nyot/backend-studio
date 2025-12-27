@@ -33,6 +33,13 @@ import { formatAuthPreview } from "../services/authUtils";
 import { MOCK_VARIABLES_HELP, patternsConflict } from "../services/mockEngine";
 import { HttpMethod, MockEndpoint } from "../types";
 import { ToastType } from "./Toast";
+import {
+	SchemaField,
+	convertSchemaToJson,
+	deepClone,
+	parseJsonToSchema,
+	validateJsonStructure,
+} from "./mockEditorUtils";
 
 interface MockEditorProps {
 	initialData?: MockEndpoint | null;
@@ -68,15 +75,7 @@ const Label = ({ children, className }: { children?: React.ReactNode; className?
 	</label>
 );
 
-// Types for the Visual Editor
-interface SchemaField {
-	id: string;
-	key: string;
-	value: string;
-	type: "string" | "number" | "boolean" | "object" | "array" | "null";
-	children?: SchemaField[]; // Recursive children for objects
-	isCollapsed?: boolean; // UI state for collapsing objects
-}
+// Schema types & helpers moved to ./mockEditorUtils.ts
 
 interface FieldRowContextProps {
 	dragSourceId: string | null;
@@ -92,6 +91,7 @@ interface FieldRowContextProps {
 	onSetActiveGeneratorDropdown: (id: string | null) => void;
 	onInsertVariable: (variable: string) => void;
 	onToggleCollapse: (id: string) => void;
+	onMoveField?: (id: string, direction: "up" | "down") => void;
 }
 
 const FieldRow: React.FC<{
@@ -125,14 +125,20 @@ const FieldRow: React.FC<{
             `}
 			>
 				{/* Drag Handle */}
-				<div
+				<button
+					type="button"
+					aria-label="Drag field"
+					onKeyDown={e => {
+						if (e.key === "ArrowUp") ctx.onMoveField?.(field.id, "up");
+						if (e.key === "ArrowDown") ctx.onMoveField?.(field.id, "down");
+					}}
 					className={`
                     p-1 flex-shrink-0 cursor-grab active:cursor-grabbing transition-colors
                     ${isTarget ? "text-brand-400" : "text-slate-300 group-hover:text-slate-500"}
                 `}
 				>
 					<GripVertical className="w-5 h-5" />
-				</div>
+				</button>
 
 				{/* Collapse Toggle for Objects */}
 				{field.type === "object" ? (
@@ -198,6 +204,7 @@ const FieldRow: React.FC<{
 						{field.type === "object" ? (
 							<button
 								type="button"
+								aria-label="Add property"
 								onClick={() => ctx.onAddField(field.id)}
 								className="flex items-center space-x-2 text-xs font-bold text-brand-600 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-md border border-brand-200 transition-colors w-full justify-center"
 							>
@@ -243,6 +250,7 @@ const FieldRow: React.FC<{
 										field.value.includes("{{") ? "text-brand-600 font-bold" : ""
 									} ${field.type === "array" ? "bg-slate-100 text-slate-500" : ""}`}
 								/>
+								{field.error && <div className="text-xs text-rose-500 mt-1">{field.error}</div>}
 								{field.type === "array" && (
 									<span className="absolute right-3 text-xs text-slate-400 pointer-events-none">
 										JSON
@@ -260,6 +268,7 @@ const FieldRow: React.FC<{
 											field.value.includes("{{") ? "text-brand-500" : "text-slate-400"
 										}`}
 										title="Insert Generator"
+										aria-label="Insert generator"
 									>
 										<Sparkles className="w-3.5 h-3.5" />
 									</button>
@@ -308,6 +317,7 @@ const FieldRow: React.FC<{
 					onClick={() => ctx.onRemoveFieldRequest(field.id)}
 					className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors opacity-0 group-hover:opacity-100"
 					title="Delete Field"
+					aria-label="Delete field"
 				>
 					<Trash2 className="w-4 h-4" />
 				</button>
@@ -373,19 +383,7 @@ const JsonHighlightOverlay = ({ code, fontSize }: { code: string; fontSize: numb
 	);
 };
 
-// Strict JSON Validation Helper
-const validateJsonStructure = (jsonString: string): string | null => {
-	try {
-		const parsed = JSON.parse(jsonString);
-		if (parsed === null) return "Root cannot be null for Visual Editor";
-		if (typeof parsed !== "object") {
-			return "Root element must be an Object {} or Array [] for Visual Editing";
-		}
-		return null;
-	} catch (e) {
-		return (e as Error).message;
-	}
-};
+// JSON validation helpers moved to ./mockEditorUtils.ts
 
 export const MockEditor: React.FC<MockEditorProps> = ({
 	initialData,
@@ -397,6 +395,7 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 }) => {
 	const [formData, setFormData] = useState<MockEndpoint>(DEFAULT_MOCK);
 	const [jsonError, setJsonError] = useState<string | null>(null);
+	const [jsonErrorLine, setJsonErrorLine] = useState<number | null>(null);
 	const [conflictError, setConflictError] = useState<string | null>(null);
 	const [isGenerating, setIsGenerating] = useState(false);
 
@@ -430,68 +429,7 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 
 	const generateId = () => crypto.randomUUID();
 
-	// Recursively parse JSON to Schema
-	const parseJsonToSchema = (data: any): SchemaField[] => {
-		if (typeof data !== "object" || data === null) return [];
-
-		return Object.entries(data).map(([key, value]) => {
-			const field: SchemaField = {
-				id: generateId(),
-				key,
-				value: "",
-				type: "string",
-				children: [],
-				isCollapsed: false,
-			};
-
-			if (value === null) {
-				field.type = "null";
-				field.value = "null";
-			} else if (Array.isArray(value)) {
-				field.type = "array";
-				field.value = JSON.stringify(value);
-			} else if (typeof value === "object") {
-				field.type = "object";
-				field.children = parseJsonToSchema(value);
-			} else if (typeof value === "number") {
-				field.type = "number";
-				field.value = String(value);
-			} else if (typeof value === "boolean") {
-				field.type = "boolean";
-				field.value = String(value);
-			} else {
-				field.type = "string";
-				field.value = String(value);
-			}
-			return field;
-		});
-	};
-
-	const convertSchemaToJson = (fields: SchemaField[]): any => {
-		const obj: any = {};
-		fields.forEach(field => {
-			if (!field.key) return;
-
-			if (field.type === "object") {
-				obj[field.key] = convertSchemaToJson(field.children || []);
-			} else if (field.type === "number") {
-				obj[field.key] = Number(field.value) || 0;
-			} else if (field.type === "boolean") {
-				obj[field.key] = field.value === "true";
-			} else if (field.type === "array") {
-				try {
-					obj[field.key] = JSON.parse(field.value);
-				} catch {
-					obj[field.key] = [];
-				}
-			} else if (field.type === "null") {
-				obj[field.key] = null;
-			} else {
-				obj[field.key] = field.value;
-			}
-		});
-		return obj;
-	};
+	// JSON <-> Schema helpers moved to ./mockEditorUtils.ts (parseJsonToSchema, convertSchemaToJson)
 
 	// --- Effects ---
 
@@ -508,7 +446,7 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 			if (!structureError) {
 				try {
 					const parsed = JSON.parse(initialData.responseBody);
-					setVisualFields(parseJsonToSchema(parsed));
+					setVisualFields(parseJsonToSchema(parsed, generateId));
 					setIsRootArray(Array.isArray(parsed));
 				} catch (e) {
 					setEditorMode("code");
@@ -570,14 +508,18 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 	// Sync Visual -> JSON
 	useEffect(() => {
 		if (editorMode === "visual") {
-			const jsonObj = convertSchemaToJson(visualFields);
-			// If root was array, convert object back to array values (ignores specific keys)
-			const finalJson = isRootArray ? Object.values(jsonObj) : jsonObj;
-			setFormData(prev => ({
-				...prev,
-				responseBody: JSON.stringify(finalJson, null, 2),
-			}));
-			setJsonError(null);
+			try {
+				const finalJson = convertSchemaToJson(visualFields, isRootArray);
+				setFormData(prev => ({
+					...prev,
+					responseBody: JSON.stringify(finalJson, null, 2),
+				}));
+				setJsonError(null);
+				setJsonErrorLine(null);
+			} catch (e) {
+				setJsonError((e as Error).message);
+				setJsonErrorLine(null);
+			}
 		}
 	}, [visualFields, editorMode, isRootArray]);
 
@@ -595,10 +537,10 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 		}
 		setFormData(prev => ({ ...prev, [field]: value }));
 
-		// Strict Structure Validation on Change
 		if (field === "responseBody") {
-			const structureError = validateJsonStructure(value);
-			setJsonError(structureError);
+			const structure = validateJsonStructure(value);
+			setJsonError(structure ? structure.message : null);
+			setJsonErrorLine(structure ? structure.line ?? null : null);
 		}
 	};
 
@@ -607,13 +549,15 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 			// Strict Validation before switching
 			const structureError = validateJsonStructure(formData.responseBody);
 			if (structureError) {
-				addToast(structureError, "error");
+				addToast(structureError.message, "error");
+				setJsonError(structureError.message);
+				setJsonErrorLine(structureError.line ?? null);
 				return;
 			}
 
 			try {
 				const parsed = JSON.parse(formData.responseBody);
-				setVisualFields(parseJsonToSchema(parsed));
+				setVisualFields(parseJsonToSchema(parsed, generateId));
 				setIsRootArray(Array.isArray(parsed));
 				setEditorMode("visual");
 			} catch {
@@ -650,7 +594,7 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 
 		if (dragSourceId && dragTargetId && dragSourceId !== dragTargetId) {
 			setVisualFields(prevFields => {
-				const newFields = JSON.parse(JSON.stringify(prevFields));
+				const newFields = deepClone(prevFields);
 				let sourceNode: SchemaField | null = null;
 				const removeNode = (list: SchemaField[]): boolean => {
 					const idx = list.findIndex(f => f.id === dragSourceId);
@@ -697,6 +641,25 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 					if (updates.type === "array" && field.type !== "array") {
 						updatedField.value = "[]";
 					}
+
+					// Inline validation for numbers and arrays to surface errors in UI
+					if (updatedField.type === "number") {
+						const n = parseFloat(String(updatedField.value));
+						if (Number.isNaN(n)) {
+							updatedField.error = `Invalid number: ${updatedField.value}`;
+						} else {
+							delete updatedField.error;
+						}
+					}
+					if (updatedField.type === "array") {
+						try {
+							JSON.parse(updatedField.value || "[]");
+							delete updatedField.error;
+						} catch (e) {
+							updatedField.error = (e as Error).message || "Invalid JSON array";
+						}
+					}
+
 					return updatedField;
 				}
 				if (field.children) return { ...field, children: updateRecursive(field.children) };
@@ -790,6 +753,34 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 		setVisualFields(prev => toggleRecursive(prev));
 	};
 
+	// Keyboard move helper: when focused on drag handle, ArrowUp/ArrowDown will move the field within its sibling list
+	const moveField = (id: string, direction: "up" | "down") => {
+		setVisualFields(prev => {
+			const newFields = deepClone(prev);
+			let moved = false;
+
+			const helper = (list: SchemaField[]): boolean => {
+				const idx = list.findIndex(f => f.id === id);
+				if (idx !== -1) {
+					const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+					if (swapIdx >= 0 && swapIdx < list.length) {
+						[list[idx], list[swapIdx]] = [list[swapIdx], list[idx]];
+						moved = true;
+					}
+					return true;
+				}
+				for (const item of list) {
+					if (item.children && helper(item.children)) return true;
+				}
+				return false;
+			};
+
+			helper(newFields);
+			if (moved) return newFields;
+			return prev;
+		});
+	};
+
 	const insertVariable = (variable: string) => {
 		if (activeGeneratorDropdown) {
 			updateField(activeGeneratorDropdown, { value: variable });
@@ -865,7 +856,7 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 					const parsed = JSON.parse(json);
 					// Strict check also for AI generation
 					if (typeof parsed === "object" && parsed !== null) {
-						setVisualFields(parseJsonToSchema(parsed));
+						setVisualFields(parseJsonToSchema(parsed, generateId));
 						setIsRootArray(Array.isArray(parsed));
 					}
 				} catch {}
@@ -987,6 +978,7 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 	};
 
 	const getErrorLine = (): number | null => {
+		if (jsonErrorLine) return jsonErrorLine;
 		if (!jsonError) return null;
 		const match = jsonError.match(/at position (\d+)/);
 		if (match && match[1]) {
@@ -1013,6 +1005,7 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 		onSetActiveGeneratorDropdown: setActiveGeneratorDropdown,
 		onInsertVariable: insertVariable,
 		onToggleCollapse: handleToggleCollapse,
+		onMoveField: moveField,
 	};
 
 	return (
