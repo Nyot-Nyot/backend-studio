@@ -156,32 +156,35 @@ export interface Scenario {
   steps: ScenarioStep[];
 }
 
-export interface ScenarioStepLog {
+export interface ScenarioStepLog<T = unknown> {
   stepId: string;
   startedAt: number;
   endedAt?: number;
   status: 'running' | 'success' | 'failed';
-  // Output can be any serializable value produced by the step; use `unknown` to force callers
-  // to assert the concrete type before using it.
-  output?: unknown;
+  /**
+   * Output can be any serializable value produced by the step.
+   * Use the generic parameter `T` to express a narrower type at the call site,
+   * or leave as the default `unknown` and narrow where the value is consumed.
+   */
+  output?: T;
   error?: string;
 }
 
-export interface ScenarioRun {
+export interface ScenarioRun<T = unknown> {
   id: string;
   scenarioId: string;
   startedAt: number;
   endedAt?: number;
   status: 'running' | 'completed' | 'failed';
-  stepLogs: ScenarioStepLog[];
+  stepLogs: ScenarioStepLog<T>[];
 }
 
-export interface Connector {
+export interface Connector<C extends Record<string, unknown> = Record<string, unknown>> {
   id: string;
   name: string;
   type: string;
-  // Connector configuration is connector-specific; prefer an object with unknown values
-  config?: Record<string, unknown>;
+  /** Connector configuration is connector-specific; use a generic to type it per-connector */
+  config?: C;
   createdAt: number;
 }
 

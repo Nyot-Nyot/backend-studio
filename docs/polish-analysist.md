@@ -35,7 +35,7 @@
 
 ---
 
-### [types.ts](../types.ts)
+### [types.ts](../types.ts) complete [x]
 
 -   Several `any` types used in shared types (`ScenarioStepLog.output?: any`, `Connector.config: any`, `ScenarioRun.stepLogs` outputs) — loss of type guarantees across services.
 -   Consider modeling known shapes (or `unknown` and narrow at use sites) to improve safety.
