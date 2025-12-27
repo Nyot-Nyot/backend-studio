@@ -63,7 +63,7 @@ async function handleRequest(event) {
 
 	// Helper: build a promise that resolves when client responds via MessageChannel
 	const clientResponsePromise = () => {
-		return new Promise((resolveClient) => {
+		return new Promise(resolveClient => {
 			const channel = new MessageChannel();
 			let settled = false;
 
@@ -96,8 +96,12 @@ async function handleRequest(event) {
 						Object.entries(response.headers).forEach(([k, v]) => headers.append(k, String(v ?? "")));
 					}
 
-					const body = response.body === null || response.body === undefined ? null :
-						typeof response.body === "string" ? response.body : JSON.stringify(response.body);
+					const body =
+						response.body === null || response.body === undefined
+							? null
+							: typeof response.body === "string"
+							? response.body
+							: JSON.stringify(response.body);
 
 					resolveClient(new Response(body, { status: response.status ?? 200, headers }));
 				} catch (err) {
@@ -124,7 +128,7 @@ async function handleRequest(event) {
 				);
 
 				// Also listen for controller-level replies as a fallback for test environments
-				const onGlobalReply = (ev) => {
+				const onGlobalReply = ev => {
 					try {
 						const { id, response } = ev.data || {};
 						if (id === requestId && response) {
@@ -134,25 +138,34 @@ async function handleRequest(event) {
 							try {
 								const headers = new Headers();
 								if (Array.isArray(response.headers)) {
-									response.headers.forEach(h => { if (h && h.key) headers.append(String(h.key), String(h.value ?? "")); });
-								} else if (response.headers && typeof response.headers === 'object') {
-									Object.entries(response.headers).forEach(([k, v]) => headers.append(k, String(v ?? '')));
+									response.headers.forEach(h => {
+										if (h && h.key) headers.append(String(h.key), String(h.value ?? ""));
+									});
+								} else if (response.headers && typeof response.headers === "object") {
+									Object.entries(response.headers).forEach(([k, v]) =>
+										headers.append(k, String(v ?? ""))
+									);
 								}
-								const body = response.body === null || response.body === undefined ? null : (typeof response.body === 'string' ? response.body : JSON.stringify(response.body));
+								const body =
+									response.body === null || response.body === undefined
+										? null
+										: typeof response.body === "string"
+										? response.body
+										: JSON.stringify(response.body);
 								resolveClient(new Response(body, { status: response.status ?? 200, headers }));
-						} catch (e) {
-							console.error('SW: Error constructing response from global reply', e);
-							resolveClient(null);
-						}
+							} catch (e) {
+								console.error("SW: Error constructing response from global reply", e);
+								resolveClient(null);
+							}
 						}
 					} catch (e) {
 						// ignore
 					}
 				};
-				self.addEventListener('message', onGlobalReply, { once: true });
+				self.addEventListener("message", onGlobalReply, { once: true });
 			} catch (err) {
 				clearTimeout(timeoutId);
-				console.warn('SW: client.postMessage failed', err);
+				console.warn("SW: client.postMessage failed", err);
 				resolveClient(null);
 			}
 		});
@@ -161,7 +174,7 @@ async function handleRequest(event) {
 	// Strategy: check cache first for fast response, then race client vs network. If client responds before network, prefer client. If not, use network response.
 	try {
 		// Try cache first when available (fast path)
-		if (typeof caches !== 'undefined' && caches.match) {
+		if (typeof caches !== "undefined" && caches.match) {
 			const cached = await caches.match(event.request);
 			if (cached) return cached;
 		}
@@ -170,23 +183,23 @@ async function handleRequest(event) {
 	}
 
 	// Respect an optional test header to artificially delay network fetches for deterministic testing
-	const testDelayMs = Number(event.request.headers.get('x-sw-test-delay') || 0);
+	const testDelayMs = Number(event.request.headers.get("x-sw-test-delay") || 0);
 	// Allow tests to override the network target via header 'x-sw-test-network-url'
-	const testNetworkUrl = event.request.headers.get('x-sw-test-network-url');
-	if (testNetworkUrl) console.log('SW: using test network url', testNetworkUrl);
+	const testNetworkUrl = event.request.headers.get("x-sw-test-network-url");
+	if (testNetworkUrl) console.log("SW: using test network url", testNetworkUrl);
 	const networkPromise = (async () => {
 		try {
 			if (testDelayMs > 0) {
 				await new Promise(r => setTimeout(r, testDelayMs));
 			}
 			if (testNetworkUrl) {
-				console.log('SW: fetch ->', testNetworkUrl);
+				console.log("SW: fetch ->", testNetworkUrl);
 				return await fetch(testNetworkUrl);
 			}
-			console.log('SW: fetch -> event.request');
+			console.log("SW: fetch -> event.request");
 			return await fetch(event.request);
 		} catch (err) {
-			console.warn('SW: network fetch failed', err);
+			console.warn("SW: network fetch failed", err);
 			return null;
 		}
 	})();
@@ -195,36 +208,35 @@ async function handleRequest(event) {
 
 	// race: whichever resolves with a usable Response first (client preferred if it resolves before network)
 	const res = await Promise.race([
-		clientPromise.then(r => ({ source: 'client', res: r })),
-		networkPromise.then(r => ({ source: 'network', res: r })),
+		clientPromise.then(r => ({ source: "client", res: r })),
+		networkPromise.then(r => ({ source: "network", res: r })),
 	]);
 
 	if (res && res.res) {
 		try {
-			if (res.source === 'network' && res.res) {
+			if (res.source === "network" && res.res) {
 				// tag network responses for test visibility
 				const clonedHeaders = new Headers(res.res.headers || {});
-				clonedHeaders.set('x-sw-source', 'network');
+				clonedHeaders.set("x-sw-source", "network");
 				const text = await res.res.clone().text();
 				return new Response(text, { status: res.res.status ?? 200, headers: clonedHeaders });
 			}
 		} catch (e) {
 			// if tagging fails, fall back to original response
-			console.warn('SW: tagging response failed', e);
+			console.warn("SW: tagging response failed", e);
 		}
 
 		return res.res;
 	}
 
 	// Fallback: if neither produced a valid response, try a final network fetch (guarantee)
-	return fetch(event.request).catch((err) => {
-		console.error('SW: final fallback network fetch failed', err);
+	return fetch(event.request).catch(err => {
+		console.error("SW: final fallback network fetch failed", err);
 		throw err;
 	});
 }
 
 // Expose handler for test environments
-if (typeof globalThis !== 'undefined') {
+if (typeof globalThis !== "undefined") {
 	globalThis.__sw_handleRequest = handleRequest;
 }
-

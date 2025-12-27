@@ -1,9 +1,9 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
-  import http from 'http';
-  import { once } from 'events';
+import { once } from 'events';
+import http from 'http';
 
-  test.describe('Service Worker messaging & fallback', () => {
+test.describe('Service Worker messaging & fallback', () => {
   let serverUrl: string | null = null;
   let server: http.Server | null = null;
 
@@ -122,7 +122,7 @@ import { test, expect } from '@playwright/test';
             if (id && navigator.serviceWorker.controller) {
               // send controller-level reply as a fallback; send on next tick to ensure SW listener is registered
               setTimeout(() => {
-                try { navigator.serviceWorker.controller?.postMessage({ id, response: resp }); } catch (e) {}
+                try { navigator.serviceWorker.controller?.postMessage({ id, response: resp }); } catch (e) { }
               }, 0);
             }
           } catch (err) {

@@ -26,12 +26,12 @@ console.log('🧪 [sw] Running Service Worker handler tests');
 
 // Setup a minimal Service Worker global environment
 (globalThis as any).self = (globalThis as any).self || globalThis;
-(globalThis as any).self.addEventListener = (globalThis as any).self.addEventListener || (() => {});
-(globalThis as any).self.removeEventListener = (globalThis as any).self.removeEventListener || (() => {});
-(globalThis as any).caches = (globalThis as any).caches || { match: async (_req:any) => null };
+(globalThis as any).self.addEventListener = (globalThis as any).self.addEventListener || (() => { });
+(globalThis as any).self.removeEventListener = (globalThis as any).self.removeEventListener || (() => { });
+(globalThis as any).caches = (globalThis as any).caches || { match: async (_req: any) => null };
 (globalThis as any).MessageChannel = (globalThis as any).MessageChannel || class {
-  port1: any = { onmessage: null, postMessage: (m:any)=>{} };
-  port2: any = { postMessage: (m:any)=>{ if (this.port1 && typeof this.port1.onmessage === 'function') this.port1.onmessage({ data: m }); } };
+  port1: any = { onmessage: null, postMessage: (m: any) => { } };
+  port2: any = { postMessage: (m: any) => { if (this.port1 && typeof this.port1.onmessage === 'function') this.port1.onmessage({ data: m }); } };
 };
 
 // import the sw.js to attach __sw_handleRequest (it will attach to globalThis)
@@ -41,7 +41,7 @@ const handleRequest = (globalThis as any).__sw_handleRequest;
 if (!handleRequest) throw new Error('handleRequest not exposed');
 
 // Helper to create a fake request
-const makeRequest = (url = 'https://example.com/api/test', method = 'GET', headers: Record<string,string> = {}) => {
+const makeRequest = (url = 'https://example.com/api/test', method = 'GET', headers: Record<string, string> = {}) => {
   return {
     url,
     method,
@@ -120,7 +120,7 @@ async function testClientTimeoutFallsBackToNetwork() {
 
 
 // Run tests sequentially
-const tests: Array<{name:string, fn: ()=>Promise<void>}> = [
+const tests: Array<{ name: string, fn: () => Promise<void> }> = [
   { name: 'noClientFallsBackToNetwork', fn: testNoClientFallsBackToNetwork },
   { name: 'clientRespondsBeforeNetwork', fn: testClientRespondsBeforeNetwork },
   { name: 'clientTimeoutFallsBackToNetwork', fn: testClientTimeoutFallsBackToNetwork },
@@ -131,7 +131,7 @@ const tests: Array<{name:string, fn: ()=>Promise<void>}> = [
     try {
       await t.fn();
       console.log(`✅ PASS: ${t.name}`);
-    } catch (err:any) {
+    } catch (err: any) {
       console.error(`❌ FAIL: ${t.name}`);
       console.error(err);
       process.exit(1);
