@@ -21,7 +21,29 @@ type Props = {
 	}) => Promise<{ name: string; size: number }[]>;
 };
 
+export function validateAndNormalizeRecipients(raw: string) {
+	const list = raw
+		.split(/[\n,;]+/)
+		.map(s => s.trim())
+		.filter(Boolean);
+	const unique = Array.from(new Set(list));
+	if (unique.length === 0) return { error: "Enter at least one recipient email.", recipients: [] };
+	const invalid = unique.filter(e => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+	if (invalid.length > 0)
+		return {
+			error: `Invalid email(s): ${invalid.slice(0, 5).join(", ")}${
+				invalid.length > 5 ? ` (+${invalid.length - 5} more)` : ""
+			}.`,
+			recipients: [],
+		};
+	if (unique.length > 10) return { error: `Too many recipients: ${unique.length}. Maximum is 10.`, recipients: [] };
+	return { error: null, recipients: unique };
+}
+
 export default function EmailExportModal({ isOpen, onClose, onSend, sending, getAttachmentPreview }: Props) {
+	const titleId = React.useId?.() || "email-export-modal-title";
+	const descId = React.useId?.() || "email-export-modal-desc";
+
 	const [recipients, setRecipients] = useState("");
 	const [subject, setSubject] = useState("My Backend Studio export");
 	const [message, setMessage] = useState("Hello! Please find the exported project attached.");
@@ -31,46 +53,109 @@ export default function EmailExportModal({ isOpen, onClose, onSend, sending, get
 	const [error, setError] = useState<string | null>(null);
 	const [preview, setPreview] = useState<{ name: string; size: number }[] | null>(null);
 	const [previewLoading, setPreviewLoading] = useState(false);
+	const [previewError, setPreviewError] = useState<string | null>(null);
 
-	const fetchPreview = async () => {
+	const dialogRef = React.useRef<HTMLDivElement | null>(null);
+	const previouslyFocusedRef = React.useRef<HTMLElement | null>(null);
+
+	const fetchPreview = React.useCallback(async () => {
 		if (!getAttachmentPreview) return setPreview(null);
+		setPreviewError(null);
 		setPreviewLoading(true);
 		try {
 			const p = await getAttachmentPreview({ includeWorkspace, includeOpenApi, includeServer });
 			setPreview(p);
-		} catch (err) {
+		} catch (err: any) {
 			setPreview(null);
+			setPreviewError(err?.message || "Failed to calculate preview.");
 		} finally {
 			setPreviewLoading(false);
 		}
-	};
+	}, [getAttachmentPreview, includeWorkspace, includeOpenApi, includeServer]);
 
 	React.useEffect(() => {
-		if (isOpen) fetchPreview();
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [isOpen, includeWorkspace, includeOpenApi, includeServer]);
+		if (!isOpen) return;
+		fetchPreview();
+	}, [isOpen, fetchPreview]);
+
+	React.useEffect(() => {
+		if (!isOpen) return;
+		previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+		const el = dialogRef.current;
+		// focus the first focusable element inside the dialog
+		setTimeout(() => {
+			if (!el) return;
+			const focusable = el.querySelectorAll<HTMLElement>(
+				'button, [href], input, textarea, select, [tabindex]:not([tabindex="-1"])'
+			);
+			if (focusable.length) focusable[0].focus();
+			else el.focus();
+		}, 0);
+
+		// make overlay clickable to close if clicked outside the dialog
+		const onOverlayClick = (ev: MouseEvent) => {
+			if (!dialogRef.current) return;
+			if (!dialogRef.current.contains(ev.target as Node)) {
+				onClose();
+			}
+		};
+		document.addEventListener("mousedown", onOverlayClick);
+		const removeOverlayListener = () => document.removeEventListener("mousedown", onOverlayClick);
+
+		const onKeyDown = (e: KeyboardEvent) => {
+			if (e.key === "Escape") {
+				e.preventDefault();
+				onClose();
+				return;
+			}
+			if (e.key === "Tab") {
+				const dialog = dialogRef.current;
+				if (!dialog) return;
+				const focusable = Array.from(
+					dialog.querySelectorAll<HTMLElement>(
+						'button, [href], input, textarea, select, [tabindex]:not([tabindex="-1"])'
+					)
+				).filter(f => !f.hasAttribute("disabled"));
+				if (focusable.length === 0) {
+					e.preventDefault();
+					return;
+				}
+				const first = focusable[0];
+				const last = focusable[focusable.length - 1];
+				if (e.shiftKey) {
+					if (document.activeElement === first) {
+						e.preventDefault();
+						last.focus();
+					}
+				} else {
+					if (document.activeElement === last) {
+						e.preventDefault();
+						first.focus();
+					}
+				}
+			}
+		};
+
+		document.addEventListener("keydown", onKeyDown);
+		// remove overlay click listener and keydown on cleanup
+		return () => {
+			document.removeEventListener("keydown", onKeyDown);
+			removeOverlayListener();
+			if (previouslyFocusedRef.current && document.contains(previouslyFocusedRef.current))
+				previouslyFocusedRef.current.focus();
+		};
+	}, [isOpen, onClose]);
 
 	if (!isOpen) return null;
 
-	const validateRecipients = (raw: string) => {
-		const list = raw
-			.split(/[\n,;]+/)
-			.map(s => s.trim())
-			.filter(Boolean);
-		if (list.length === 0) return "Enter at least one recipient email.";
-		const bad = list.find(e => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
-		if (bad) return `Invalid email: ${bad}`;
-		if (list.length > 10) return "Max 10 recipients supported.";
-		return null;
-	};
-
 	const handleSend = async () => {
 		setError(null);
-		const v = validateRecipients(recipients);
-		if (v) return setError(v);
+		const result = validateAndNormalizeRecipients(recipients);
+		if (result.error) return setError(result.error);
 		if (!includeWorkspace && !includeOpenApi && !includeServer) return setError("Select at least one attachment.");
 		try {
-			await onSend({ recipients, subject, message, includeWorkspace, includeOpenApi, includeServer });
+			const normalized = result.recipients.join(", ");
+			await onSend({ recipients: normalized, subject, message, includeWorkspace, includeOpenApi, includeServer });
 		} catch (err: any) {
 			setError(err?.message || "Send failed");
 		}
@@ -78,15 +163,29 @@ export default function EmailExportModal({ isOpen, onClose, onSend, sending, get
 
 	return (
 		<div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-			<div className="bg-[#0f172a] rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-700 overflow-hidden">
+			<div
+				ref={dialogRef}
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby={titleId}
+				aria-describedby={descId}
+				className="bg-[#0f172a] rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-700 overflow-hidden"
+			>
 				<div className="p-6 border-b border-slate-800 flex items-center justify-between">
 					<div>
-						<h2 className="text-lg font-bold text-white">Send Project via Email</h2>
-						<p className="text-slate-400 text-sm mt-1">
+						<h2 id={titleId} className="text-lg font-bold text-white">
+							Send Project via Email
+						</h2>
+						<p id={descId} className="text-slate-400 text-sm mt-1">
 							Send your workspace and related files to chosen recipients.
 						</p>
 					</div>
-					<button onClick={onClose} className="text-slate-500 hover:text-white">
+					<button
+						onClick={onClose}
+						aria-label="Close dialog"
+						type="button"
+						className="text-slate-500 hover:text-white"
+					>
 						×
 					</button>
 				</div>
@@ -167,6 +266,17 @@ export default function EmailExportModal({ isOpen, onClose, onSend, sending, get
 						<div className="font-medium mb-1">Attachment preview</div>
 						{previewLoading ? (
 							<div className="text-slate-500 text-xs">Calculating size…</div>
+						) : previewError ? (
+							<div className="text-amber-200 text-xs">
+								<div className="mb-2">{previewError}</div>
+								<button
+									type="button"
+									onClick={() => fetchPreview()}
+									className="px-3 py-1 rounded bg-amber-600 text-white text-xs"
+								>
+									Retry
+								</button>
+							</div>
 						) : preview && preview.length > 0 ? (
 							<div className="text-slate-400 text-xs">
 								<ul className="list-disc pl-4 space-y-1">
@@ -197,6 +307,7 @@ export default function EmailExportModal({ isOpen, onClose, onSend, sending, get
 						Cancel
 					</button>
 					<button
+						type="button"
 						onClick={handleSend}
 						className="px-5 py-2.5 rounded-xl bg-white text-slate-900 font-bold hover:bg-slate-200 transition-colors"
 						disabled={sending}

@@ -26,7 +26,7 @@
 
 ---
 
-### [components/EmailExportModal.tsx](../components/EmailExportModal.tsx)
+### [components/EmailExportModal.tsx](../components/EmailExportModal.tsx) complete [x]
 
 -   Modal lacks focus-trap and accessibility details (no `aria-modal`, close button `×` no `aria-label`).
 -   Uses `// eslint-disable-next-line react-hooks/exhaustive-deps` on effect that depends on `getAttachmentPreview` — can lead to stale previews if callback changes.
