@@ -42,7 +42,7 @@
 
 ---
 
-### [config/featureFlags.ts](../config/featureFlags.ts)
+### [config/featureFlags.ts](../config/featureFlags.ts) complete [x]
 
 -   Inconsistent guards for `import.meta.env` (some functions access `import.meta.env` directly, others protect with typeof checks) — can cause runtime issues in non-browser/test environments.
 -   Feature flag resolution mixes `import.meta.env` and `window.localStorage` in multiple places; makes behavior hard to reason about and to test.
