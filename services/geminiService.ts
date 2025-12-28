@@ -1,20 +1,71 @@
 // Deprecated: This adapter targets Google Gemini. New implementations should use OpenRouter via `services/aiService.ts`.
+// Notes: This module now guards access to browser-only APIs and validates AI outputs before parsing.
 import { GoogleGenAI } from "@google/genai";
 import { HttpMethod } from "../types";
 
 const STORAGE_KEY_API = 'api_sim_user_gemini_key';
+let _testClient: any = null;
+export function __setTestClient(c: any) { _testClient = c; }
+
+function localStorageAllowed() {
+  const allow = (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.DEV_ALLOW_CLIENT_KEY === '1') || process.env.DEV_ALLOW_CLIENT_KEY === '1';
+  return allow && typeof window !== 'undefined' && typeof (window as any).localStorage !== 'undefined';
+}
 
 const getClient = () => {
-  // Priority 1: User provided key in LocalStorage
-  const userKey = localStorage.getItem(STORAGE_KEY_API);
-  if (userKey) return new GoogleGenAI({ apiKey: userKey });
+  // Test client override (tests may set this)
+  if (_testClient) return _testClient;
 
-  // Priority 2: Environment variable (Fallback)
-  const envKey = process.env.API_KEY;
+  // Priority 1: Environment variable (preferred)
+  const envKey = process.env.GOOGLE_GENAI_API_KEY || process.env.API_KEY;
   if (envKey) return new GoogleGenAI({ apiKey: envKey });
+
+  // Priority 2: User provided key in LocalStorage — only if explicitly enabled via DEV_ALLOW_CLIENT_KEY=1
+  if (localStorageAllowed()) {
+    try {
+      const userKey = (window as any).localStorage.getItem(STORAGE_KEY_API);
+      if (userKey) return new GoogleGenAI({ apiKey: userKey });
+    } catch (e) {
+      // ignore localStorage errors (privacy mode etc.)
+    }
+  }
 
   return null;
 };
+
+function extractJsonFromText(text: string): any {
+  const trimmed = text.trim();
+  // Try parse directly
+  try {
+    return JSON.parse(trimmed);
+  } catch (e) {
+    // Try to find a JSON code block ```json ... ```
+    const codeFenceMatch = /```(?:json)?\s*([\s\S]*?)```/.exec(text);
+    if (codeFenceMatch && codeFenceMatch[1]) {
+      try {
+        return JSON.parse(codeFenceMatch[1].trim());
+      } catch (inner) {
+        // fall through
+      }
+    }
+
+    // Try to find first { ... } or [ ... ] block (naive balanced braces extraction)
+    const braceMatch = /([\{\[][\s\S]*[\}\]])/.exec(text);
+    if (braceMatch && braceMatch[1]) {
+      try {
+        return JSON.parse(braceMatch[1]);
+      } catch (inner) {
+        // fall through
+      }
+    }
+
+    // Nothing worked - throw descriptive error
+    const preview = text.length > 200 ? text.slice(0, 200) + '...' : text;
+    const err: any = new Error('AI output is not valid JSON');
+    err.raw = preview;
+    throw err;
+  }
+}
 
 export const generateMockData = async (path: string, context: string): Promise<string> => {
   const ai = getClient();
@@ -43,11 +94,12 @@ export const generateMockData = async (path: string, context: string): Promise<s
       contents: prompt,
     });
 
-    let text = response.text || "{}";
-    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    return text;
+    const text = (response.text || "{}").replace(/```json/g, '').replace(/```/g, '').trim();
+    const parsed = extractJsonFromText(text);
+    // Return a stable stringified JSON
+    return JSON.stringify(parsed);
   } catch (error) {
-    console.error("Gemini generation error:", error);
+    console.error("Gemini generation error:", error?.message || error);
     throw error; // Re-throw to handle in UI
   }
 };
@@ -87,11 +139,31 @@ export const generateEndpointConfig = async (userPrompt: string): Promise<Genera
       contents: systemPrompt,
     });
 
-    let text = response.text || "{}";
-    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(text);
+    const text = (response.text || "{}").replace(/```json/g, '').replace(/```/g, '').trim();
+    const parsed = extractJsonFromText(text);
+
+    // Validate shape
+    if (!parsed || typeof parsed !== 'object') throw new Error('Invalid endpoint config - not an object');
+    const name = parsed.name;
+    const path = parsed.path;
+    const method = parsed.method as HttpMethod;
+    const statusCode = Number(parsed.statusCode);
+    let responseBody = parsed.responseBody;
+
+    if (!name || !path || !method || !statusCode) {
+      throw new Error('Invalid endpoint config - missing required fields');
+    }
+
+    // Ensure responseBody is a string (stringified JSON). If it's an object, stringify it.
+    if (typeof responseBody === 'object') {
+      responseBody = JSON.stringify(responseBody);
+    } else if (typeof responseBody !== 'string') {
+      responseBody = String(responseBody === undefined ? '{}' : responseBody);
+    }
+
+    return { name, path, method, statusCode, responseBody } as GeneratedEndpointConfig;
   } catch (error) {
-    console.error("Gemini config generation error:", error);
+    console.error("Gemini config generation error:", error?.message || error);
     throw error;
   }
 };

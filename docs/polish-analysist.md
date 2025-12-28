@@ -169,10 +169,11 @@
 
 ---
 
-### [services/geminiService.ts](../services/geminiService.ts)
+### [services/geminiService.ts](../services/geminiService.ts) complete [x]
 
--   Deprecated adapter still present — either mark clearly or remove; code reads localStorage directly and uses process.env inconsistently (no guards for non-browser environments).
--   Replaces code fences and trims output but does not robustly validate returned JSON; callers can crash if model output is malformed.
+-   **Deprecated adapter**: Marked as deprecated and added a clear comment at top recommending `services/aiService.ts` for new work.
+-   **Key handling**: Environment variable `GOOGLE_GENAI_API_KEY` (or legacy `API_KEY`) is preferred. Reading from `localStorage` is now guarded and only used when `DEV_ALLOW_CLIENT_KEY=1` is set (admits explicit developer opt-in). Tests can override the client via `__setTestClient` for deterministic behavior.
+-   **Robust output validation**: Added JSON extraction & parsing helpers that attempt to extract JSON from code fences or brace-delimited blocks and throw a descriptive error if parsing fails. `generateMockData` now returns canonical JSON string, and `generateEndpointConfig` validates required fields and stringifies object `responseBody` when necessary. Unit tests were added to cover valid/invalid outputs and config parsing.
 
 ---
 
