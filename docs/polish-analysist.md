@@ -153,11 +153,11 @@
 
 ---
 
-### [services/emailService.ts](../services/emailService.ts)
+### [services/emailService.ts](../services/emailService.ts) complete [x]
 
--   Demo mode logs recipients and attachments, which could leak data in dev logs — avoid printing sensitive info.
--   Converts attachments to data URLs (base64) which may be memory heavy for large files; consider streaming or size limits and better error messages for oversized attachments.
--   Requires EmailJS env vars without a clear client-side fallback; document expected env config and secure handling.
+-   **Demo mode**: reduced logging to avoid leaking sensitive data. Demo sends now log only counts and total bytes (no recipient lists or attachment contents). Tests added to validate demo behaviour.
+-   **Attachments**: Enforced per-file (1MB) and total attachments (5MB) size limits. Large attachments now throw clear, actionable errors rather than causing silent memory issues. Tests added for per-file and total size rejections.
+-   **Config & errors**: Error message improved when EmailJS config is missing (suggest enabling demo mode for local testing). Documented expected behaviour and added unit tests covering missing config + attachment limits.
 
 ---
 
