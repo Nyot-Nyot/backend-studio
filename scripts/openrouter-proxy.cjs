@@ -39,18 +39,36 @@ const bodyParser = require("body-parser");
 const PORT = process.env.OPENROUTER_HELPER_PORT || 3002;
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || process.env.VITE_OPENROUTER_KEY;
 
-if (!OPENROUTER_API_KEY) {
-	console.warn("Warning: OPENROUTER_API_KEY is not set. Proxy will respond with 401 unless a key is provided.");
-} else {
-	// log that we have a key but never print it outright
-	const k = String(OPENROUTER_API_KEY);
-	const redacted = k.length > 8 ? `${k.slice(0, 4)}...${k.slice(-4)}` : "***";
-	console.log(`OpenRouter proxy: using server key ${redacted}`);
-}
+// Note: server key presence/redaction is computed inside createApp so that tests can change process.env between runs.
 
 function createApp(opts = {}) {
 	const hasOverride = Object.prototype.hasOwnProperty.call(opts, "openRouterApiKey");
 	const OPENROUTER_API_KEY_OVERRIDE = opts.openRouterApiKey;
+	const QUIET =
+		opts.quiet || process.env.OPENROUTER_PROXY_QUIET === "1" || process.env.OPENROUTER_PROXY_QUIET === "true";
+	const ALLOW_CLIENT_KEY = opts.allowClientKey || process.env.DEV_ALLOW_CLIENT_KEY === "1";
+	const callOpenRouterFn = opts.callOpenRouter || null; // test override, we'll wire below
+
+	// compute server key presence and redaction dynamically so tests can mutate env
+	const serverKeyPresent = !!(hasOverride ? OPENROUTER_API_KEY_OVERRIDE : process.env.OPENROUTER_API_KEY);
+	const serverKeyRedacted = (hasOverride ? OPENROUTER_API_KEY_OVERRIDE : process.env.OPENROUTER_API_KEY)
+		? String(hasOverride ? OPENROUTER_API_KEY_OVERRIDE : process.env.OPENROUTER_API_KEY).length > 8
+			? `${String(hasOverride ? OPENROUTER_API_KEY_OVERRIDE : process.env.OPENROUTER_API_KEY).slice(
+					0,
+					4
+			  )}...${String(hasOverride ? OPENROUTER_API_KEY_OVERRIDE : process.env.OPENROUTER_API_KEY).slice(-4)}`
+			: "***"
+		: null;
+
+	if (!QUIET) {
+		if (!serverKeyPresent) {
+			console.warn(
+				"Warning: OPENROUTER_API_KEY is not set. Proxy will respond with 401 unless a key is provided or DEV_ALLOW_CLIENT_KEY is enabled for dev."
+			);
+		} else {
+			console.log(`OpenRouter proxy: using server key ${serverKeyRedacted}`);
+		}
+	}
 
 	const app = express();
 	app.use(cors());
@@ -70,6 +88,8 @@ function createApp(opts = {}) {
 		if (!app._isTest_callOpenRouter) app._isTest_callOpenRouter = msgs => callOpenRouter(msgs, model, apiKey);
 		const keyToUse = apiKey || (hasOverride ? OPENROUTER_API_KEY_OVERRIDE : process.env.OPENROUTER_API_KEY);
 		const retryUtil = require("../services/retry.cjs");
+
+		if (!keyToUse) throw new Error("OPENROUTER_API_KEY not configured");
 
 		const doFetch = async () => {
 			const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -126,7 +146,7 @@ function createApp(opts = {}) {
 			? parseInt(process.env.OPENROUTER_TIMEOUT_MS, 10)
 			: undefined;
 		const timeoutMs = typeof timeoutMsEnv === "number" && !Number.isNaN(timeoutMsEnv) ? timeoutMsEnv : 60000; // default 60s per attempt
-		if (process.env.DEBUG_OPENROUTER === "1") console.log(`OpenRouter call: timeoutMs=${timeoutMs}`);
+		if (process.env.DEBUG_OPENROUTER === "1" && !QUIET) console.log(`OpenRouter call: timeoutMs=${timeoutMs}`);
 		const result = await retryUtil.retry(doFetch, {
 			retries: 3,
 			baseDelayMs: 200,
@@ -142,14 +162,31 @@ function createApp(opts = {}) {
 
 	app.post("/openrouter/generate-mock", async (req, res) => {
 		const { path, context } = req.body || {};
-		// allow dev override: accept X-OpenRouter-Key if DEV_ALLOW_CLIENT_KEY=1
+		// Determine key: server override > env server key > client-provided header if explicitly allowed and not production
 		const keyFromHeader = req.get("x-openrouter-key");
+		let keyCandidate = null;
+		if (hasOverride) {
+			// explicit override provided by factory; allow null to mean "explicitly no key"
+			keyCandidate = OPENROUTER_API_KEY_OVERRIDE === null ? null : OPENROUTER_API_KEY_OVERRIDE;
+		} else {
+			keyCandidate = process.env.OPENROUTER_API_KEY || null;
+		}
 		const key =
-			OPENROUTER_API_KEY_OVERRIDE ||
-			process.env.OPENROUTER_API_KEY ||
-			(process.env.DEV_ALLOW_CLIENT_KEY === "1" && keyFromHeader ? keyFromHeader : null);
+			keyCandidate ||
+			(ALLOW_CLIENT_KEY && process.env.NODE_ENV !== "production" && keyFromHeader ? keyFromHeader : null);
 		if (!key) return res.status(401).json({ error: "OPENROUTER_API_KEY not configured" });
 		if (!path) return res.status(400).json({ error: "Missing path" });
+		if (
+			keyFromHeader &&
+			keyFromHeader === key &&
+			ALLOW_CLIENT_KEY &&
+			process.env.NODE_ENV !== "production" &&
+			!QUIET
+		) {
+			console.warn(
+				"OpenRouter proxy: using client-provided API key (DEV_ALLOW_CLIENT_KEY is enabled) — be careful not to expose your keys in production"
+			);
+		}
 
 		const userPrompt = [
 			"You are a backend developer helper. Generate a realistic JSON response body for the REST API endpoint.",
@@ -165,7 +202,9 @@ function createApp(opts = {}) {
 
 		try {
 			const messages = [{ role: "user", content: userPrompt }];
-			const result = await callOpenRouter(messages, undefined, key);
+			const result = callOpenRouterFn
+				? await callOpenRouterFn(messages, undefined, key)
+				: await callOpenRouter(messages, undefined, key);
 			if (result.status !== 200) return res.status(result.status).json({ error: result.body });
 
 			// Attempt to extract content text (compat with OpenRouter response shape)
@@ -179,7 +218,14 @@ function createApp(opts = {}) {
 				.replace(/```/g, "")
 				.trim();
 
-			res.json({ json: cleaned });
+			// Validate JSON output
+			try {
+				const parsed = JSON.parse(cleaned);
+				return res.json({ json: parsed });
+			} catch (err) {
+				if (!QUIET) console.warn("OpenRouter proxy: model returned invalid JSON for generate-mock");
+				return res.status(502).json({ error: "invalid_model_output", raw: cleaned });
+			}
 		} catch (e) {
 			console.error("OpenRouter proxy error (generate-mock):", e);
 			res.status(500).json({ error: "proxy_error", details: String(e) });
@@ -189,12 +235,29 @@ function createApp(opts = {}) {
 	app.post("/openrouter/generate-endpoint", async (req, res) => {
 		const { prompt } = req.body || {};
 		const keyFromHeader = req.get("x-openrouter-key");
+		let keyCandidate = null;
+		if (hasOverride) {
+			// explicit override provided by factory; allow null to mean "explicitly no key"
+			keyCandidate = OPENROUTER_API_KEY_OVERRIDE === null ? null : OPENROUTER_API_KEY_OVERRIDE;
+		} else {
+			keyCandidate = process.env.OPENROUTER_API_KEY || null;
+		}
 		const key =
-			OPENROUTER_API_KEY_OVERRIDE ||
-			process.env.OPENROUTER_API_KEY ||
-			(process.env.DEV_ALLOW_CLIENT_KEY === "1" && keyFromHeader ? keyFromHeader : null);
+			keyCandidate ||
+			(ALLOW_CLIENT_KEY && process.env.NODE_ENV !== "production" && keyFromHeader ? keyFromHeader : null);
 		if (!key) return res.status(401).json({ error: "OPENROUTER_API_KEY not configured" });
 		if (!prompt) return res.status(400).json({ error: "Missing prompt" });
+		if (
+			keyFromHeader &&
+			keyFromHeader === key &&
+			ALLOW_CLIENT_KEY &&
+			process.env.NODE_ENV !== "production" &&
+			!QUIET
+		) {
+			console.warn(
+				"OpenRouter proxy: using client-provided API key (DEV_ALLOW_CLIENT_KEY is enabled) — be careful not to expose your keys in production"
+			);
+		}
 
 		const systemPrompt = [
 			"You are an API Architect. Based on the user's description, generate a complete REST API endpoint configuration.",

@@ -229,17 +229,17 @@
 
 ---
 
-### [services/zipService.ts](../services/zipService.ts)
+### [services/zipService.ts](../services/zipService.ts) complete [x]
 
 -   Handles Blob/ArrayBuffer differences; added conservative size checks (per-entry and total) and clear `ZipSizeError` when limits are exceeded to avoid OOMs for very large exports. Consider future streaming/chunked generation for extremely large archives if needed.
 
 ---
 
-### [scripts/openrouter-proxy.cjs](../scripts/openrouter-proxy.cjs)
+### [scripts/openrouter-proxy.cjs](../scripts/openrouter-proxy.cjs) complete [x]
 
--   Accepting client-provided API keys when `DEV_ALLOW_CLIENT_KEY=1` is potentially unsafe (clients could use their keys or leak them); document and guard carefully.
--   Proxy strips code fences but still relies on model output formatting — validate model output strictly before returning to clients.
--   Logs endpoints and redacted key — be careful about logging in production (consider --quiet flag).
+-   Accepting client-provided API keys when `DEV_ALLOW_CLIENT_KEY=1` is potentially unsafe — now explicitly gated to non-production environments and documented; creating the app with `openRouterApiKey: null` forces an explicit "no-server-key" mode useful for tests.
+-   Proxy now validates model outputs strictly for `/openrouter/generate-mock` (parses and returns the JSON or returns `502 invalid_model_output` with the raw output), preventing accidental non-JSON responses from leaking to clients.
+-   Added a `quiet` / `OPENROUTER_PROXY_QUIET` option to suppress startup logs and warnings (useful for CI); logs about client-provided keys are now guarded with this flag.
 
 ---
 
