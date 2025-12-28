@@ -214,11 +214,11 @@
 
 ---
 
-### [services/socketClient.ts](../services/socketClient.ts)
+### [services/socketClient.ts](../services/socketClient.ts) complete [x]
 
--   Constructs URL using `window.location` and non-HTTPS default port; logging statements are present in production code which can be noisy.
--   No backoff policy visibility, and connect() silently does nothing if socket already exists (ok but could report status).
--   Event handlers are attached even before the socket exists (connect is triggered lazily) — good, but add tests for this behavior.
+-   URL construction now supports `VITE_SOCKET_URL` override and falls back to `window.location`/port; added an injectable `ioFactory` and a debug flag to gate logging (reduces noisy logs in production).
+-   `connect()` now returns the socket instance and reports status via `getStatus()`; calling `connect()` when a socket already exists returns the existing socket (and optionally logs under debug) instead of silently doing nothing.
+-   Event handlers can now be attached before the socket exists — handlers are queued and attached when `connect()` runs. Unit tests were added to verify queued handler attachment, baseUrl injection, and connect behavior.
 
 ---
 
