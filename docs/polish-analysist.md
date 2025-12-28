@@ -231,7 +231,7 @@
 
 ### [services/zipService.ts](../services/zipService.ts)
 
--   Handles Blob/ArrayBuffer differences but has no streaming option for very large payloads; consider size checks and memory considerations for large exports.
+-   Handles Blob/ArrayBuffer differences; added conservative size checks (per-entry and total) and clear `ZipSizeError` when limits are exceeded to avoid OOMs for very large exports. Consider future streaming/chunked generation for extremely large archives if needed.
 
 ---
 
