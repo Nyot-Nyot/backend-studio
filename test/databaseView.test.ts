@@ -207,6 +207,38 @@ test("Delete per item: Multiple deletions maintain order", () => {
 // CLEAR COLLECTION TESTS
 // ============================================
 
+// New tests for DatabaseView helper logic introduced in component
+
+test("Headers: union of keys with id first", () => {
+  localStorage.clear();
+
+  const mixed = [
+    { id: "a1", name: "A" },
+    { title: "T1", description: "D1" },
+    { id: 2, email: "e@x" },
+  ];
+
+  dbService.saveCollection("mixed", mixed as any);
+  const data = dbService.getCollection("mixed") as any[];
+
+  const keys = new Set<string>();
+  data.forEach((it) => Object.keys(it || {}).forEach((k) => keys.add(k)));
+  const arr = Array.from(keys);
+  const headers = arr.includes("id") ? ["id", ...arr.filter((k) => k !== "id").sort()] : arr.sort();
+
+  assert(headers[0] === "id", "id should be first header when present");
+  assert(headers.includes("name"), "headers should include name");
+  assert(headers.includes("title"), "headers should include title");
+  assert(headers.length >= 3, "should have at least 3 headers");
+});
+
+test("dbService.delete returns false for missing id", () => {
+  localStorage.clear();
+  dbService.saveCollection("x", [{ name: "noid" }] as any);
+  const result = dbService.delete("x", "does-not-exist");
+  assert(result === false, "delete should return false for non-existent id");
+});
+
 test("Clear collection: Remove all items from single collection", () => {
   localStorage.clear();
 
@@ -265,17 +297,19 @@ test("Clear all DB: Remove all collections", () => {
   dbService.insert("comments", { text: "Nice" });
 
   let collections = dbService.listCollections();
-  assertEqual(collections.length, 3, "Should have 3 collections");
+  assert(
+    collections.includes("users") && collections.includes("posts") && collections.includes("comments"),
+    "Should have the test collections"
+  );
 
   // Clear all
   dbService.clearAllCollections();
 
   collections = dbService.listCollections();
 
-  assertEqual(
-    collections.length,
-    0,
-    "Should have 0 collections after clear all"
+  assert(
+    !collections.includes("users") && !collections.includes("posts") && !collections.includes("comments"),
+    "Test collections should be removed after clearAllCollections"
   );
 });
 

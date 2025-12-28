@@ -116,7 +116,7 @@
 
 ---
 
-### [components/DatabaseView.tsx](../components/DatabaseView.tsx)
+### [components/DatabaseView.tsx](../components/DatabaseView.tsx) complete [x]
 
 -   Uses `any[]` for data; table headers are derived from the first row only which breaks for heterogeneous rows.
 -   Raw JSON editor allows arbitrary edits with minimal validation; saving invalid JSON is handled but UX could be improved with inline errors, diff view, or undo.

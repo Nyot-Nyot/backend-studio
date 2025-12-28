@@ -1,13 +1,18 @@
 import { Database, RefreshCw, Save, Table, Trash2, X } from "lucide-react";
-import { useEffect, useState } from "react";
-import { dbService } from "../services/dbService";
+import { useEffect, useMemo, useState } from "react";
+import { DbItem, dbService } from "../services/dbService";
 
 export const DatabaseView = () => {
 	const [collections, setCollections] = useState<string[]>([]);
 	const [activeCollection, setActiveCollection] = useState<string | null>(null);
-	const [data, setData] = useState<any[]>([]);
+	const [data, setData] = useState<DbItem[]>([]);
 	const [rawEditor, setRawEditor] = useState("");
+	const [prevRawEditor, setPrevRawEditor] = useState<string | null>(null);
 	const [isEditing, setIsEditing] = useState(false);
+	const [jsonError, setJsonError] = useState<string | null>(null);
+	const [showDiff, setShowDiff] = useState(false);
+	const [page, setPage] = useState(1);
+	const [pageSize, setPageSize] = useState(50);
 	const [error, setError] = useState<string | null>(null);
 
 	const loadCollections = () => {
@@ -20,16 +25,35 @@ export const DatabaseView = () => {
 
 	const handleSelectCollection = (name: string) => {
 		setActiveCollection(name);
-		const colData = dbService.getCollection(name);
+		const colData = dbService.getCollection(name) as DbItem[];
 		setData(colData);
 		setRawEditor(JSON.stringify(colData, null, 2));
+		setPrevRawEditor(null);
 		setIsEditing(false);
+		setJsonError(null);
+		setShowDiff(false);
+		setPage(1);
 		setError(null);
 	};
 
 	useEffect(() => {
 		loadCollections();
 	}, []);
+
+	const headers = useMemo(() => {
+		const keys = new Set<string>();
+		data.forEach(item => Object.keys(item || {}).forEach(k => keys.add(k)));
+		const arr = Array.from(keys);
+		if (arr.includes("id")) return ["id", ...arr.filter(k => k !== "id").sort()];
+		return arr.sort();
+	}, [data]);
+
+	const totalPages = Math.max(1, Math.ceil(data.length / pageSize));
+	const pageData = useMemo(() => data.slice((page - 1) * pageSize, page * pageSize), [data, page, pageSize]);
+
+	useEffect(() => {
+		setPage(p => Math.min(p, totalPages));
+	}, [totalPages]);
 
 	const handleRefresh = () => {
 		if (activeCollection) handleSelectCollection(activeCollection);
@@ -43,15 +67,49 @@ export const DatabaseView = () => {
 		}
 	};
 
+	const assignStableIds = (collection: string) => {
+		const newData = data.map((item, idx) => {
+			if (item.id === undefined || item.id === null) {
+				return {
+					...item,
+					id:
+						typeof crypto !== "undefined" && (crypto as any).randomUUID
+							? (crypto as any).randomUUID().split("-")[0]
+							: `id-${Date.now()}-${idx}`,
+				};
+			}
+			return item;
+		});
+		dbService.saveCollection(collection, newData);
+		setData(newData);
+		setRawEditor(JSON.stringify(newData, null, 2));
+	};
+
 	const handleDeleteItem = (index: number) => {
 		if (!activeCollection || !data[index]) return;
 
 		const item = data[index];
-		const itemId = item.id;
+		const itemId = (item as DbItem).id;
 
 		if (itemId === undefined || itemId === null) {
-			// Fallback to index-based deletion if item has no stable id
-			if (window.confirm(`Delete item (index ${index})?`)) {
+			const assign = window.confirm(
+				"This record does not have a stable `id`.\n\nOK = Assign stable IDs to all records (recommended).\nCancel = Delete by index (unsafe)."
+			);
+
+			if (assign) {
+				assignStableIds(activeCollection);
+				// After assigning ids, delete by id
+				const assigned = dbService.getCollection(activeCollection);
+				const idToDelete = assigned[index]?.id;
+				if (idToDelete !== undefined) {
+					dbService.delete(activeCollection, idToDelete as any);
+					setData(assigned.filter((_, i) => i !== index));
+				}
+				return;
+			}
+
+			// user chose to delete by index
+			if (window.confirm(`Delete item (index ${index})? This is index-based and may be fragile.`)) {
 				const newData = data.filter((_, i) => i !== index);
 				dbService.saveCollection(activeCollection, newData);
 				setData(newData);
@@ -60,14 +118,14 @@ export const DatabaseView = () => {
 		}
 
 		if (window.confirm(`Delete item ${String(itemId)}?`)) {
-			const deleted = dbService.delete(activeCollection, itemId);
+			const deleted = dbService.delete(activeCollection, itemId as any);
 			if (deleted) {
 				// Keep UI in sync by removing the item by id
 				setData(prev => prev.filter(d => d.id != itemId));
 			} else {
 				// As a safety fallback, reload collection from storage
 				const reloaded = dbService.getCollection(activeCollection);
-				setData(reloaded);
+				setData(reloaded as DbItem[]);
 			}
 		}
 	};
@@ -87,9 +145,14 @@ export const DatabaseView = () => {
 		try {
 			const parsed = JSON.parse(rawEditor);
 			if (!Array.isArray(parsed)) throw new Error("Data must be an array");
-			dbService.saveCollection(activeCollection, parsed);
-			setData(parsed);
+			// Ensure parsed items are objects
+			if (!parsed.every((p: any) => typeof p === "object" && p !== null && !Array.isArray(p)))
+				throw new Error("Each item must be an object");
+			dbService.saveCollection(activeCollection, parsed as DbItem[]);
+			setData(parsed as DbItem[]);
 			setIsEditing(false);
+			setPrevRawEditor(null);
+			setJsonError(null);
 			setError(null);
 		} catch (e) {
 			setError((e as Error).message);
@@ -164,9 +227,32 @@ export const DatabaseView = () => {
 									<span className="font-mono text-sm font-bold text-slate-700">
 										{activeCollection}
 									</span>
-									<span className="bg-slate-200 text-slate-600 text-[10px] px-2 py-0.5 rounded-full">
-										{data.length} records
-									</span>
+									<div className="flex items-center gap-2">
+										<span className="bg-slate-200 text-slate-600 text-[10px] px-2 py-0.5 rounded-full">
+											{data.length} records
+										</span>
+										{!isEditing && data.length > 0 && (
+											<>
+												<button
+													onClick={() => setPage(p => Math.max(1, p - 1))}
+													className="px-2 py-1 rounded bg-white border text-slate-600 text-xs"
+													disabled={page <= 1}
+												>
+													Prev
+												</button>
+												<span className="text-xs text-slate-500">
+													Page {page}/{totalPages}
+												</span>
+												<button
+													onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+													className="px-2 py-1 rounded bg-white border text-slate-600 text-xs"
+													disabled={page >= totalPages}
+												>
+													Next
+												</button>
+											</>
+										)}
+									</div>
 								</div>
 								<div className="flex items-center gap-2">
 									{isEditing ? (
@@ -191,7 +277,10 @@ export const DatabaseView = () => {
 									) : (
 										<>
 											<button
-												onClick={() => setIsEditing(true)}
+												onClick={() => {
+													setPrevRawEditor(rawEditor);
+													setIsEditing(true);
+												}}
 												className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
 											>
 												Edit Raw JSON
@@ -228,8 +317,8 @@ export const DatabaseView = () => {
 											<table className="w-full text-left border-collapse">
 												<thead className="bg-slate-50 sticky top-0 shadow-sm">
 													<tr>
-														{Object.keys(data[0] || {})
-															.slice(0, 5)
+														{headers
+															.slice(0, Math.max(1, Math.min(headers.length, 5)))
 															.map(key => (
 																<th
 																	key={key}
@@ -244,26 +333,26 @@ export const DatabaseView = () => {
 													</tr>
 												</thead>
 												<tbody className="text-sm">
-													{data.map((row, i) => (
+													{pageData.map((row, i) => (
 														<tr
-															key={i}
+															key={(row as any).id ?? (page - 1) * pageSize + i}
 															className="border-b border-slate-100 hover:bg-slate-50/50 font-mono text-xs"
 														>
-															{Object.keys(data[0] || {})
-																.slice(0, 5)
-																.map(key => (
-																	<td
-																		key={key}
-																		className="p-3 text-slate-600 truncate max-w-[200px]"
-																	>
-																		{typeof row[key] === "object"
-																			? JSON.stringify(row[key])
-																			: String(row[key])}
-																	</td>
-																))}
+															{headers.slice(0, 5).map(key => (
+																<td
+																	key={key}
+																	className="p-3 text-slate-600 truncate max-w-[200px]"
+																>
+																	{typeof row[key] === "object"
+																		? JSON.stringify(row[key])
+																		: String(row[key])}
+																</td>
+															))}
 															<td className="p-3 w-12">
 																<button
-																	onClick={() => handleDeleteItem(i)}
+																	onClick={() =>
+																		handleDeleteItem((page - 1) * pageSize + i)
+																	}
 																	className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded transition-colors"
 																	title="Delete item"
 																>
