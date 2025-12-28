@@ -185,12 +185,16 @@
 
 ---
 
-### [services/mockEngine.ts](../services/mockEngine.ts)
+### [services/mockEngine.ts](../services/mockEngine.ts) complete [x]
 
--   `processMockResponse` uses global regex replace for variable substitution — risk of accidental replacements inside string values and ordering conflicts; lack of token-parsing makes it brittle for nested templates.
--   Proxy handling tries to blacklist private IP ranges but relies on basic hostname checks; DNS rebinding or IPv6 obfuscation may bypass checks — add more robust validation or harden in server-side proxy.
--   Always sets `Content-Type: application/json` even when response may be plain text; may confuse clients.
--   Replacement of `{{$randomBool}}` returns strings 'true'/'false' (not boolean) — inconsistent typing in output.
+-   **Robust token replacement**: Replaced global regex-based replacement with a token-aware parser that:
+    -   Detects tokens like `{{my_var}}`, `{{@param.id}}`, `{{@query.page}}`, `{{@body.name}}`, and system tokens like `{{$uuid}}`.
+    -   Performs quoting-aware replacements so booleans/numbers/objects are embedded unquoted when used as bare JSON values (e.g., `{"ok": {{$randomBool}}}` produces `true`/`false` as booleans), while preserving string context when inside quotes.
+    -   Supports limited recursive token passes and preserves types when possible.
+    -   Added tests verifying boolean typing and safe substitutions.
+-   **Proxy validation hardened**: Improved proxy target validation to detect IPv6 loopback/link-local/unique-local addresses and `.local` hostnames. If a target resolves to a potentially private or local address it is rejected. Note: for full safety, prefer server-side proxy validation; this client-side check is a best-effort guard.
+-   **Content-Type inference**: When a mock does not explicitly set `Content-Type` header, the engine attempts to infer `application/json` vs `text/plain` from the final body and sets the header accordingly. Tests added to validate both cases.
+-   **Generator typing fixes**: `{{$randomBool}}` now returns a boolean (not a string). Other generators return number/strings as appropriate. This makes generated JSON types consistent.
 
 ---
 

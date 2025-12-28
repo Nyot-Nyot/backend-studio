@@ -246,31 +246,136 @@ export const processMockResponse = (
   }
 
   // 4. Dynamic Variables Replacement (System)
-  const replacements: Record<string, () => string | number> = {
-    '{{$uuid}}': () => crypto.randomUUID(),
-    '{{$randomInt}}': () => Math.floor(Math.random() * 1000),
-    '{{$timestamp}}': () => Date.now(),
-    '{{$isoDate}}': () => new Date().toISOString(),
-    '{{$randomName}}': () => {
+  const generators: Record<string, () => any> = {
+    '$uuid': () => (crypto?.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2, 10)),
+    '$randomInt': () => Math.floor(Math.random() * 1000),
+    '$timestamp': () => Date.now(),
+    '$isoDate': () => new Date().toISOString(),
+    '$randomName': () => {
       const names = ['Alice', 'Bob', 'Charlie', 'David', 'Eve', 'Frank', 'Grace', 'Heidi', 'Ivan'];
       return names[Math.floor(Math.random() * names.length)];
     },
-    '{{$randomCity}}': () => {
+    '$randomCity': () => {
       const cities = ['New York', 'London', 'Tokyo', 'Jakarta', 'Berlin', 'Paris', 'Sydney'];
       return cities[Math.floor(Math.random() * cities.length)];
     },
-    '{{$randomBool}}': () => Math.random() > 0.5 ? 'true' : 'false',
+    '$randomBool': () => Math.random() > 0.5,
 
-    // Faker-like aliases (no external dep): map to existing generators
-    '{{$fakerName}}': () => replacements['{{$randomName}}'](),
-    '{{$fakerCity}}': () => replacements['{{$randomCity}}']()
+    // Faker-like aliases
+    '$fakerName': () => generators['$randomName'](),
+    '$fakerCity': () => generators['$randomCity'](),
   };
 
-  Object.entries(replacements).forEach(([key, generator]) => {
-    // Regex allows exact match globally
-    const regex = new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
-    processedBody = processedBody.replace(regex, () => String(generator()));
-  });
+  const tokenRegex = /{{\s*([@$]?[^{}\s]+)\s*}}/g;
+
+  // Precompute route params for @param.* tokens
+  const routeMatch = matchRoute(routePattern, requestPath);
+  const routeParams = routeMatch.params || {};
+
+  const resolveToken = (token: string) => {
+    // token examples: $uuid, @param.id, @query.page, @body.user.name, my_var
+    if (token.startsWith('$')) return generators[token] ? generators[token]() : undefined;
+    if (token.startsWith('@')) {
+      const parts = token.substring(1).split('.');
+      const ns = parts[0];
+      const rest = parts.slice(1);
+      if (ns === 'param') {
+        return rest.length ? routeParams[rest.join('.')] : undefined;
+      }
+      if (ns === 'query') {
+        const val = new URLSearchParams(queryString || '').get(rest.join('.'));
+        return val;
+      }
+      if (ns === 'body') {
+        // walk parsedBody
+        let p: any = parsedBody;
+        for (const r of rest) {
+          if (!p || typeof p !== 'object') return undefined;
+          p = (p as any)[r];
+        }
+        return p;
+      }
+      return undefined;
+    }
+
+    // environment variable from envVars array
+    const v = envVars.find(e => e.key === token);
+    return v ? v.value : undefined;
+  };
+
+  const isInsideQuotes = (str: string, idx: number) => {
+    // naive check: count unescaped double quotes before idx
+    let count = 0;
+    for (let i = 0; i < idx; i++) {
+      if (str[i] === '"') {
+        // skip escaped
+        if (i > 0 && str[i - 1] === '\\') continue;
+        count++;
+      }
+    }
+    return (count % 2) === 1;
+  };
+
+  const replaceTokensInString = (s: string) => {
+    let out = s;
+    // avoid infinite loops; do up to 3 passes
+    for (let pass = 0; pass < 3; pass++) {
+      let changed = false;
+      out = out.replace(tokenRegex, (m, token, offset) => {
+        const val = resolveToken(token);
+        if (val === undefined) return m; // leave unchanged
+        const inside = isInsideQuotes(out, offset);
+        let rep: string;
+        if (inside) {
+          if (typeof val === 'object') rep = JSON.stringify(val);
+          else rep = String(val);
+        } else {
+          // place raw JSON for objects/arrays/booleans/numbers
+          if (typeof val === 'object') rep = JSON.stringify(val);
+          else if (typeof val === 'boolean') rep = val ? 'true' : 'false';
+          else rep = String(val);
+        }
+        changed = true;
+        return rep;
+      });
+      if (!changed) break;
+    }
+    return out;
+  };
+
+  // Apply replacements carefully depending if processedBody is JSON text or plain text
+  // Try to parse; if parse fails, run token replacement on string (with inside-quote awareness)
+  try {
+    const maybeJson = JSON.parse(processedBody);
+    // recursively replace tokens in object values
+    const walkReplace = (obj: any) => {
+      if (typeof obj === 'string') {
+        // if the entire string is exactly a token like "{{@body.name}}", and the token resolves to non-string, replace with typed value
+        const m = obj.match(/^{{\s*([@$]?[^{}\s]+)\s*}}$/);
+        if (m) {
+          const v = resolveToken(m[1]);
+          return v === undefined ? obj : v;
+        }
+        // otherwise do inline replacements and return string
+        return replaceTokensInString(obj);
+      }
+      if (Array.isArray(obj)) return obj.map(walkReplace);
+      if (obj && typeof obj === 'object') {
+        const keys = Object.keys(obj);
+        for (const k of keys) {
+          obj[k] = walkReplace(obj[k]);
+        }
+        return obj;
+      }
+      return obj;
+    };
+
+    const replaced = walkReplace(maybeJson);
+    processedBody = JSON.stringify(replaced, null, 2);
+  } catch (e) {
+    // not JSON -> replace tokens in string template
+    processedBody = replaceTokensInString(processedBody);
+  }
 
   return processedBody;
 };
@@ -397,26 +502,32 @@ export const simulateRequest = async (
           };
         }
 
-        // Disallow common local hostnames and IP ranges (basic IP pattern checks)
+        // Disallow common local hostnames and IP ranges (improved checks)
         const lowerHost = hostname.toLowerCase();
-        const isIp = /^\d+\.\d+\.\d+\.\d+$/.test(lowerHost);
-        if (
-          lowerHost === 'localhost' ||
-          lowerHost === '::1' ||
-          lowerHost === '127.0.0.1' ||
-          (isIp && (() => {
-            const parts = lowerHost.split('.').map(Number);
-            // 10.0.0.0/8
-            if (parts[0] === 10) return true;
-            // 172.16.0.0/12
-            if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
-            // 192.168.0.0/16
-            if (parts[0] === 192 && parts[1] === 168) return true;
-            // link-local 169.254.0.0/16
-            if (parts[0] === 169 && parts[1] === 254) return true;
-            return false;
-          })())
-        ) {
+        const isIpv4 = /^\d+\.\d+\.\d+\.\d+$/.test(lowerHost);
+        const isIpv6 = /^[0-9a-f:]+$/.test(lowerHost);
+
+        const isPrivateIpv4 = isIpv4 && (() => {
+          const parts = lowerHost.split('.').map(Number);
+          if (parts[0] === 10) return true; // 10/8
+          if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true; // 172.16/12
+          if (parts[0] === 192 && parts[1] === 168) return true; // 192.168/16
+          if (parts[0] === 169 && parts[1] === 254) return true; // link-local
+          if (parts[0] === 127) return true; // loopback
+          return false;
+        })();
+
+        const isPrivateIpv6 = isIpv6 && (() => {
+          // IPv6 loopback ::1, unique local fc00::/7, link-local fe80::/10
+          if (lowerHost === '::1') return true;
+          if (lowerHost.startsWith('fe80:')) return true;
+          if (lowerHost.startsWith('fc') || lowerHost.startsWith('fd')) return true;
+          return false;
+        })();
+
+        const hasLocalSuffix = lowerHost === 'localhost' || lowerHost.endsWith('.local');
+
+        if (isIpv4 && isPrivateIpv4 || isIpv6 && isPrivateIpv6 || hasLocalSuffix) {
           return {
             response: {
               status: 400,
@@ -584,10 +695,20 @@ export const simulateRequest = async (
     dynamicBody = processMockResponse(matchedMock.responseBody, requestPathWithQuery, matchedMock.path, envVars, body);
   }
 
-  // Merge headers
+  // Merge headers and determine sensible Content-Type when not provided by mock
+  const existingContentType = (matchedMock.headers || []).find(h => h.key.toLowerCase() === 'content-type');
+  let inferredContentType = 'text/plain';
+  try {
+    JSON.parse(dynamicBody);
+    inferredContentType = 'application/json';
+  } catch (e) {
+    inferredContentType = 'text/plain';
+  }
+
   const finalHeaders = [
     ...(matchedMock.headers || []),
-    { key: 'Content-Type', value: 'application/json' },
+    // Only add Content-Type if mock did not specify one
+    ...(existingContentType ? [] : [{ key: 'Content-Type', value: inferredContentType }]),
     { key: 'X-Powered-By', value: 'BackendStudio' }
   ];
 

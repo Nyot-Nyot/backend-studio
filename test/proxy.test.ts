@@ -280,6 +280,26 @@ test("Proxy forwards request headers to target", async () => {
   assertEqual(result.response.status, 200, 'Should return proxied status');
 });
 
+// Test 10: IPv6 localhost should be rejected
+test("Proxy rejects IPv6 localhost targets", async () => {
+  (global as any).fetch = async () => { throw new Error('should not be called'); };
+
+  const mock = createMockEndpoint({ proxy: { enabled: true, target: 'http://[::1]' } });
+
+  const result = await simulateRequest(
+    HttpMethod.GET,
+    'http://app.local/api/proxy',
+    {},
+    '',
+    [mock],
+    []
+  );
+
+  assertEqual(result.response.status, 400, 'Should reject IPv6 localhost target');
+  const parsed = JSON.parse(result.response.body);
+  assert(parsed.error === 'Invalid Proxy Target', 'Should return invalid proxy target error');
+});
+
 // Restore fetch
 (global as any).fetch = originalFetch;
 
