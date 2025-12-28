@@ -177,11 +177,11 @@
 
 ---
 
-### [services/indexedDbService.ts](../services/indexedDbService.ts)
+### [services/indexedDbService.ts](../services/indexedDbService.ts) complete [x]
 
--   Accesses `indexedDB` and `localStorage` without guarding for non-browser environments in some paths; tests/SSR may fail.
--   Migration helper swallows malformed data silently; consider reporting migrated keys and errors to the caller for visibility.
--   Basic ID generation duplicates logic from `dbService` — consider single source of truth to avoid inconsistent id strategies.
+-   **Environment guards / fallback**: Added detection for `indexedDB` and a small in-memory fallback store when `indexedDB` is not available (useful for SSR and Node tests). This prevents runtime errors in non-browser environments.
+-   **Migration reporting**: `migrateFromLocalStorage` now returns `{ migrated, migratedKeys, errors }` and reports malformed keys with error messages instead of silently ignoring them. Tests added to cover successful migration and malformed data reporting.
+-   **ID generation centralization**: Extracted `generateIdForCollection` into `services/idUtils.ts` and updated `indexedDbService` (and tests) to use the shared ID strategy (numeric or short UUID based on collection). Consider importing `idUtils` into `dbService` as well to remove duplicated logic (small follow-up suggested).
 
 ---
 

@@ -25,10 +25,15 @@ async function run() {
   await indexedDbService.init();
 
   // migrate existing localStorage entries
+  // add a broken key to test error reporting
+  localStorage.setItem('api_sim_db_broken', 'not-json');
   localStorage.setItem('api_sim_db_users', JSON.stringify([{ id: 1, name: 'Alice' }]));
   const mig = await indexedDbService.migrateFromLocalStorage('api_sim_db_');
   assert.equal(mig.migrated, true);
   assert.deepEqual(mig.migratedKeys, ['users']);
+  // errors should include the broken key
+  assert.ok(Array.isArray((mig as any).errors) && (mig as any).errors.length === 1, 'should report one error');
+  assert.equal((mig as any).errors[0].key, 'api_sim_db_broken');
 
   const users = await indexedDbService.getCollection('users');
   assert.equal(users.length, 1);
@@ -47,6 +52,10 @@ async function run() {
   assert.equal(deleted, true);
   const afterDel = await indexedDbService.getCollection('users');
   assert.equal(afterDel.length, 1);
+
+  // products collection should use short UUID for first id
+  const prod = await indexedDbService.insert('products', { name: 'Widget' });
+  assert.equal(typeof prod.id, 'string');
 
   console.log('indexedDbService tests passed');
 }

@@ -7,7 +7,13 @@
 const DEFAULT_DB_NAME = "backendStudioDB";
 const DEFAULT_STORE_NAME = "collections";
 
-const openDB = (dbName = DEFAULT_DB_NAME): Promise<IDBDatabase> => {
+import { generateIdForCollection } from './idUtils';
+
+const hasIndexedDB = typeof indexedDB !== 'undefined';
+const inMemoryStore: Record<string, any[]> = {};
+
+const openDB = (dbName = DEFAULT_DB_NAME): Promise<IDBDatabase | null> => {
+  if (!hasIndexedDB) return Promise.resolve(null);
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(dbName, 1);
 
@@ -23,7 +29,11 @@ const openDB = (dbName = DEFAULT_DB_NAME): Promise<IDBDatabase> => {
   });
 };
 
-const putRecord = async (db: IDBDatabase, name: string, data: any[]) => {
+const putRecord = async (db: IDBDatabase | null, name: string, data: any[]) => {
+  if (!hasIndexedDB || db === null) {
+    inMemoryStore[name] = data;
+    return;
+  }
   return new Promise<void>((resolve, reject) => {
     const tx = db.transaction(DEFAULT_STORE_NAME, "readwrite");
     const store = tx.objectStore(DEFAULT_STORE_NAME);
@@ -33,7 +43,10 @@ const putRecord = async (db: IDBDatabase, name: string, data: any[]) => {
   });
 };
 
-const getRecord = async (db: IDBDatabase, name: string): Promise<any[] | null> => {
+const getRecord = async (db: IDBDatabase | null, name: string): Promise<any[] | null> => {
+  if (!hasIndexedDB || db === null) {
+    return inMemoryStore[name] ?? null;
+  }
   return new Promise((resolve, reject) => {
     const tx = db.transaction(DEFAULT_STORE_NAME, "readonly");
     const store = tx.objectStore(DEFAULT_STORE_NAME);
@@ -43,7 +56,10 @@ const getRecord = async (db: IDBDatabase, name: string): Promise<any[] | null> =
   });
 };
 
-const getAllKeys = async (db: IDBDatabase): Promise<string[]> => {
+const getAllKeys = async (db: IDBDatabase | null): Promise<string[]> => {
+  if (!hasIndexedDB || db === null) {
+    return Object.keys(inMemoryStore);
+  }
   return new Promise((resolve, reject) => {
     const tx = db.transaction(DEFAULT_STORE_NAME, "readonly");
     const store = tx.objectStore(DEFAULT_STORE_NAME);
@@ -77,11 +93,21 @@ export const indexedDbService = {
 
   clearCollection: async (name: string): Promise<void> => {
     const db = await openDB();
+    if (!hasIndexedDB || db === null) {
+      delete inMemoryStore[name];
+      return;
+    }
     await putRecord(db, name, []);
   },
 
   clearAllCollections: async (): Promise<void> => {
     const db = await openDB();
+    if (!hasIndexedDB || db === null) {
+      // clear in-memory store
+      for (const k of Object.keys(inMemoryStore)) delete inMemoryStore[k];
+      return;
+    }
+
     return new Promise((resolve, reject) => {
       const tx = db.transaction(DEFAULT_STORE_NAME, "readwrite");
       const store = tx.objectStore(DEFAULT_STORE_NAME);
@@ -96,14 +122,8 @@ export const indexedDbService = {
     // simple id generation if needed
     if (item.id === undefined || item.id === null) {
       const existingIds = list.map((i: any) => i.id).filter((v: any) => v !== undefined && v !== null);
-      if (existingIds.length === 0) {
-        item.id = 1;
-      } else if (existingIds.every((v: any) => typeof v === "number")) {
-        const max = existingIds.reduce((a: number, b: number) => (b > a ? b : a), 0);
-        item.id = max + 1;
-      } else {
-        item.id = crypto.randomUUID().split("-")[0];
-      }
+      const generated = generateIdForCollection(existingIds, collection);
+      item.id = generated;
     }
     list.push(item);
     await indexedDbService.saveCollection(collection, list);
@@ -135,13 +155,17 @@ export const indexedDbService = {
   // Simple migration helper that moves `localStorage` keys with given prefix
   migrateFromLocalStorage: async (prefix = "api_sim_db_") => {
     // if no localStorage available, nothing to migrate
-    if (typeof localStorage === "undefined") return { migrated: false, migratedKeys: [] };
+    const hasLocalStorage = typeof (globalThis as any).localStorage !== 'undefined' && (globalThis as any).localStorage !== null;
+    if (!hasLocalStorage) return { migrated: false, migratedKeys: [], errors: [] } as const;
+
     const migratedKeys: string[] = [];
+    const errors: { key: string; message: string }[] = [];
 
     // Take a snapshot of existing keys to avoid issues if localStorage changes during iteration
     const keys: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
+    const ls = (globalThis as any).localStorage as Storage;
+    for (let i = 0; i < ls.length; i++) {
+      const k = ls.key(i);
       if (k !== null) keys.push(k);
     }
 
@@ -150,17 +174,17 @@ export const indexedDbService = {
 
       const name = key.replace(prefix, "");
       try {
-        const raw = localStorage.getItem(key);
+        const raw = ls.getItem(key);
         const data = raw ? JSON.parse(raw) : null;
         await indexedDbService.saveCollection(name, data || []);
         migratedKeys.push(name);
-      } catch (e) {
-        // ignore malformed data
-        // Do not abort migration for other keys
+      } catch (e: any) {
+        // Record malformed data and continue to next key
+        errors.push({ key, message: String(e?.message || e) });
         continue;
       }
     }
 
-    return { migrated: migratedKeys.length > 0, migratedKeys };
+    return { migrated: migratedKeys.length > 0, migratedKeys, errors } as const;
   },
 };
