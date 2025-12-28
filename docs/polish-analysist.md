@@ -222,10 +222,10 @@
 
 ---
 
-### [services/uploadService.ts](../services/uploadService.ts)
+### [services/uploadService.ts](../services/uploadService.ts) complete [x]
 
--   Uses hard-coded localhost endpoints and HTTP (no TLS); environment detection is inconsistent (import.meta vs process.env).
--   No timeouts or retry logic for uploads; errors are propagated with minimal context.
+-   `uploadTempFile` now resolves `EMAIL_HELPER` URL consistently (`opts.url` > `VITE_EMAIL_HELPER_URL` > `EMAIL_HELPER_URL` > port-based fallback) and respects TLS flags (`VITE_EMAIL_HELPER_TLS` / `EMAIL_HELPER_TLS`) so HTTPS can be used when configured.
+-   Upload attempts are performed with retries and per-attempt timeouts via `retry` util. Errors now throw typed `UploadFailedError` / `UploadTimeoutError` with structured details (status, body, noRetry) so callers can react appropriately; client errors (4xx except 429) are marked as no-retry.
 
 ---
 
