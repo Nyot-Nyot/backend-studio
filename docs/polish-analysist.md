@@ -146,10 +146,10 @@
 
 ---
 
-### [services/dataGenerator.ts](../services/dataGenerator.ts)
+### [services/dataGenerator.ts](../services/dataGenerator.ts) complete [x]
 
--   Nested/object/array generation is unimplemented (returns null) — feature gap listed in UI (Generator options include nested types but not supported).
--   Uses global randomness (non-deterministic) making tests harder; consider optional seed for deterministic test generation.
+-   Implemented nested `object` and `array` generation via `nestedSchemaId` and a `schemaMap` passed to `generateRecord`/`generateRecords`. Arrays produce 1–3 items by default and recursion is bounded by `maxDepth` (default 3). Added tests for nested object/array generation.
+-   Added an optional seed-based deterministic RNG (`{ seed }` option) so tests can generate repeatable data; `generateRecords(schema, count, { seed })` yields stable results. Tests were added to verify determinism.
 
 ---
 
