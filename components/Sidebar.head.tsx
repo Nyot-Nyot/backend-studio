@@ -26,11 +26,11 @@ interface SidebarProps {
 	onChangeView: (view: ViewState) => void;
 	onNewMock: () => void;
 	onMagicCreate: () => void;
-	projects: Project[];
-	activeProjectId: string;
-	onSelectProject: (id: string) => void;
-	onCreateProject: (name: string) => void;
-	onDeleteProject: (id: string) => void;
+	proyek: Project[];
+	proyekAktifId: string;
+	onPilihProyek: (id: string) => void;
+	onBuatProyek: (name: string) => void;
+	onHapusProyek: (id: string) => void;
 	onTriggerCommandPalette: () => void;
 	onDeploy: () => void;
 }
@@ -40,11 +40,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
 	onChangeView,
 	onNewMock,
 	onMagicCreate,
-	projects,
-	activeProjectId,
-	onSelectProject,
-	onCreateProject,
-	onDeleteProject,
+	proyek,
+	proyekAktifId,
+	onPilihProyek,
+	onBuatProyek,
+	onHapusProyek,
 	onTriggerCommandPalette,
 	onDeploy,
 }) => {
@@ -72,7 +72,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
 	const handleCreateSubmit = () => {
 		if (newProjectName.trim()) {
-			onCreateProject(newProjectName.trim());
+			onBuatProyek(newProjectName.trim());
 			setNewProjectName("");
 			setIsCreating(false);
 		}
@@ -127,9 +127,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 							<span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
 								Workspace
 							</span>
-							{projects.length > 1 && (
+							{proyek.length > 1 && (
 								<button
-									onClick={() => onDeleteProject(activeProjectId)}
+									onClick={() => onHapusProyek(proyekAktifId)}
 									className="text-slate-600 hover:text-red-400 transition-colors p-1 hover:bg-slate-800 rounded"
 									title="Delete current workspace"
 								>
@@ -140,11 +140,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
 						<div className="relative group mb-3">
 							<select
-								value={activeProjectId}
-								onChange={e => onSelectProject(e.target.value)}
+								value={proyekAktifId}
+								onChange={e => onPilihProyek(e.target.value)}
 								className="w-full appearance-none bg-slate-800 text-slate-200 border border-slate-700/50 group-hover:border-slate-600 rounded-xl py-2.5 pl-3.5 pr-10 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition-all cursor-pointer shadow-sm"
 							>
-								{projects.map(p => (
+								{proyek.map(p => (
 									<option key={p.id} value={p.id}>
 										{p.name}
 									</option>
@@ -168,7 +168,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 					</>
 				) : (
 					<div className="mb-6 w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center text-slate-400 font-bold border border-slate-700">
-						{projects.find(p => p.id === activeProjectId)?.name.charAt(0)}
+						{proyek.find(p => p.id === proyekAktifId)?.name.charAt(0)}
 					</div>
 				)}
 

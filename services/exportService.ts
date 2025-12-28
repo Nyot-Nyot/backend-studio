@@ -28,8 +28,10 @@ function safeComment(s: string) {
 }
 
 function safePathLiteral(p: string) {
-  // Use JSON.stringify to produce a safe JS string literal including proper escaping
-  return JSON.stringify(p || "");
+  // Hasilkan literal string menggunakan tanda petik tunggal untuk konsistensi
+  // Escape karakter single-quote agar aman di dalam string literal
+  const escaped = String(p || "").replace(/'/g, "\\'");
+  return `'${escaped}'`;
 }
 
 export const generateServerCode = (activeMocks: MockEndpoint[], opts?: { corsOrigin?: string; timeoutMs?: number }) => {
@@ -78,6 +80,7 @@ const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 
 // Middleware
 app.use(cors({ origin: ${JSON.stringify(corsOrigin)} }));
+app.use(cors());
 app.use(express.json());
 
 // Simple logger that logs method, path and final status after response finishes

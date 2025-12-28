@@ -188,3 +188,21 @@ export interface Connector<C extends Record<string, unknown> = Record<string, un
   createdAt: number;
 }
 
+// --- Service Worker message contract ---
+export enum SwMessageTypes {
+  INTERCEPT_REQUEST = "INTERCEPT_REQUEST",
+}
+
+/** Payload dikirim dari Service Worker saat permintaan HTTP diintersep */
+export interface SwInterceptRequestPayload {
+  method: string;
+  url: string;
+  headers: Record<string, string>;
+  body?: string;
+}
+
+export interface SwInterceptMessage {
+  type: SwMessageTypes;
+  payload: SwInterceptRequestPayload;
+}
+
