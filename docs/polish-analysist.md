@@ -140,7 +140,7 @@
 
 ---
 
-### [services/authUtils.ts](../services/authUtils.ts)
+### [services/authUtils.ts](../services/authUtils.ts) complete [x]
 
 -   `formatAuthPreview` renders raw token values in UI which may leak sensitive tokens in screenshots / screen sharing; consider masking or copy-to-clipboard with confirmation.
 
