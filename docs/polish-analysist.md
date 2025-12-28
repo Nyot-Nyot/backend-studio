@@ -206,11 +206,11 @@
 
 ---
 
-### [services/scenarioService.ts](../services/scenarioService.ts)
+### [services/scenarioService.ts](../services/scenarioService.ts) complete [x]
 
--   Templates are applied naively with simple path resolution which may fail on nested/array structures; no sandboxing for template expressions.
--   `runScenario` performs network calls and `window` usage directly — not easily testable on Node without mocks.
--   Error handling rethrows but does not provide structured error types; consider typed failures for consumers.
+-   Templates now support dotted and bracket path resolution (e.g., `response.items[0].name`) and `applyTemplate` is conservative on resolution failures; unit tests were added to cover nested/array templates.
+-   `runScenario` now accepts optional injected dependencies (`fetchFn`, `eventTarget`, `uuidFn`, `nowFn`) so it can be tested in Node without global mocks and is easier to stub in UI tests.
+-   Error handling uses typed error classes (`ScenarioNotFoundError`, `StepFailedError`, `TemplateError`) so callers can handle specific failure modes; tests verify thrown error types and persisted failed runs.
 
 ---
 

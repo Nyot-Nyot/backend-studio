@@ -1,6 +1,7 @@
 import { Connector, Scenario, ScenarioRun, ScenarioStepLog } from '../types';
 import { fetchRandomUser } from './apiService';
 import { indexedDbService } from './indexedDbService';
+import { ScenarioNotFoundError, StepFailedError, TemplateError } from './scenarioErrors';
 
 const SCENARIO_STORE = 'scenarios';
 const RUNS_STORE = 'runs';
@@ -12,12 +13,28 @@ export const ScenarioBus = new EventTarget();
 function now() { return Date.now(); }
 
 function resolvePath(obj: unknown, path: string): unknown {
+  // Supports dotted paths and bracket indices, e.g. "response.items[0].name" or "response.items.0.name"
   try {
+    if (typeof path !== 'string' || path.length === 0) return undefined;
     if (typeof obj !== 'object' || obj === null) return undefined;
+    const segs: string[] = [];
+    const re = /([^.[\]]+)|\[(\d+)\]/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(path)) !== null) {
+      segs.push(m[1] ?? m[2]);
+    }
     let acc: unknown = obj;
-    for (const k of path.split('.')) {
-      if (typeof acc === 'object' && acc !== null && (k in (acc as Record<string, unknown>))) {
-        acc = (acc as Record<string, unknown>)[k];
+    for (const s of segs) {
+      if (acc === undefined || acc === null) return undefined;
+      if (Array.isArray(acc)) {
+        const idx = Number(s);
+        if (!Number.isNaN(idx) && idx in acc as any) {
+          acc = (acc as any)[idx];
+          continue;
+        }
+      }
+      if (typeof acc === 'object' && acc !== null && (s in (acc as Record<string, unknown>))) {
+        acc = (acc as Record<string, unknown>)[s];
       } else {
         return undefined;
       }
@@ -31,8 +48,13 @@ function resolvePath(obj: unknown, path: string): unknown {
 function applyTemplate(input: unknown, ctx: unknown): unknown {
   if (typeof input === 'string') {
     return input.replace(/{{\s*([^}]+)\s*}}/g, (_m: string, key: string) => {
-      const val = resolvePath(ctx, key.trim());
-      return (val === undefined || val === null) ? '' : String(val);
+      try {
+        const val = resolvePath(ctx, key.trim());
+        return (val === undefined || val === null) ? '' : String(val);
+      } catch (e) {
+        // Be conservative: on template resolution failure, return empty string but record nothing else
+        return '';
+      }
     });
   }
   if (Array.isArray(input)) return input.map(i => applyTemplate(i, ctx));
@@ -70,14 +92,24 @@ export class ScenarioService {
   }
 
   // Run a scenario by id. Emits events on ScenarioBus about run progress.
-  static async runScenario(scenarioId: string): Promise<ScenarioRun> {
+  static async runScenario(scenarioId: string, opts?: {
+    fetchFn?: (input: string, init?: RequestInit) => Promise<Response>;
+    eventTarget?: EventTarget;
+    uuidFn?: () => string;
+    nowFn?: () => number;
+  }): Promise<ScenarioRun> {
     const scenario = await this.getScenario(scenarioId);
-    if (!scenario) throw new Error('Scenario not found');
+    if (!scenario) throw new ScenarioNotFoundError(scenarioId);
+
+    const fetchFn = opts?.fetchFn ?? (typeof fetch !== 'undefined' ? fetch.bind(globalThis) : async () => { throw new Error('fetch not available'); });
+    const eventTarget = opts?.eventTarget ?? (typeof window !== 'undefined' ? window : ScenarioBus);
+    const uuidFn = opts?.uuidFn ?? (() => (typeof crypto !== 'undefined' && typeof (crypto as any).randomUUID === 'function' ? (crypto as any).randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`));
+    const nowFn = opts?.nowFn ?? (() => Date.now());
 
     const run: ScenarioRun = {
-      id: crypto.randomUUID(),
+      id: uuidFn(),
       scenarioId: scenario.id,
-      startedAt: now(),
+      startedAt: nowFn(),
       status: 'running',
       stepLogs: []
     };
@@ -91,7 +123,7 @@ export class ScenarioService {
       for (const step of scenario.steps) {
         const stepLog: ScenarioStepLog = {
           stepId: step.id,
-          startedAt: now(),
+          startedAt: nowFn(),
           status: 'running'
         };
         run.stepLogs.push(stepLog);
@@ -102,7 +134,12 @@ export class ScenarioService {
           if (step.delay) await new Promise(r => setTimeout(r, step.delay));
 
           // Ensure templates in payload are applied with context
-          const payload = applyTemplate(step.payload || {}, { response: lastOutput });
+          let payload: unknown;
+          try {
+            payload = applyTemplate(step.payload || {}, { response: lastOutput });
+          } catch (e) {
+            throw new TemplateError('Failed to apply templates');
+          }
           const payloadObj = (payload as unknown) as Record<string, unknown>;
 
           // Handle step types
@@ -112,7 +149,7 @@ export class ScenarioService {
             if (typeof payloadObj?.mock === 'string' && payloadObj.mock === 'randomUser') {
               output = await fetchRandomUser();
             } else if (typeof payloadObj?.url === 'string') {
-              const res = await fetch(payloadObj.url, { method: (typeof payloadObj.method === 'string' ? payloadObj.method : 'GET') });
+              const res = await fetchFn(payloadObj.url as string, { method: (typeof payloadObj.method === 'string' ? payloadObj.method : 'GET') });
               output = { status: res.status, body: await res.text() } as const;
             }
             stepLog.output = output;
@@ -121,8 +158,8 @@ export class ScenarioService {
 
           } else if (step.type === 'emitSocket') {
             const payloadData = payloadObj || {};
-            // Emit a custom DOM event that UI SocketConsole can listen for
-            window.dispatchEvent(new CustomEvent('scenario:socket', { detail: payloadData }));
+            // Emit a custom event that UI SocketConsole can listen for (injectable for tests)
+            eventTarget.dispatchEvent(new CustomEvent('scenario:socket', { detail: payloadData }));
             stepLog.output = payloadData;
             stepLog.status = 'success';
             lastOutput = stepLog.output;
@@ -137,28 +174,29 @@ export class ScenarioService {
             lastOutput = stepLog.output;
           }
         } catch (err: unknown) {
+          const wrapped = new StepFailedError(step.id, (err as Error)?.message || String(err), (err as Error) || undefined);
           stepLog.status = 'failed';
-          stepLog.error = (err as Error)?.message || String(err);
+          stepLog.error = wrapped.message;
           run.status = 'failed';
           // record and rethrow to stop scenario
           await indexedDbService.update(RUNS_STORE, run.id, run as any);
           ScenarioBus.dispatchEvent(new CustomEvent('run:update', { detail: { run } }));
-          throw err;
+          throw wrapped;
         }
 
-        stepLog.endedAt = now();
+        stepLog.endedAt = nowFn();
         // persist intermediate run
         await indexedDbService.update(RUNS_STORE, run.id, run as any);
         ScenarioBus.dispatchEvent(new CustomEvent('run:step:done', { detail: { run, step, stepLog } }));
       }
-      run.endedAt = now();
+      run.endedAt = nowFn();
       run.status = 'completed';
       await indexedDbService.update(RUNS_STORE, run.id, run);
       ScenarioBus.dispatchEvent(new CustomEvent('run:complete', { detail: { run } }));
 
       return run;
     } catch (err) {
-      run.endedAt = now();
+      run.endedAt = nowFn();
       run.status = 'failed';
       await indexedDbService.update(RUNS_STORE, run.id, run);
       ScenarioBus.dispatchEvent(new CustomEvent('run:complete', { detail: { run } }));
