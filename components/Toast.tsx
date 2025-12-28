@@ -54,9 +54,9 @@ const ToastItem: React.FC<{ toast: ToastMessage; onRemove: () => void }> = ({ to
 	}, [onRemove, duration]);
 
 	const bgColors = {
-		success: "bg-white border-green-200",
-		error: "bg-white border-red-200",
-		info: "bg-white border-blue-200",
+		success: "theme-surface theme-border border-green-200",
+		error: "theme-surface theme-border border-red-200",
+		info: "theme-surface theme-border border-blue-200",
 	};
 
 	const icons = {

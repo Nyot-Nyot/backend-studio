@@ -160,7 +160,10 @@ export const DatabaseView = () => {
 	};
 
 	return (
-		<div className="p-8 max-w-6xl mx-auto h-full flex flex-col animate-in fade-in">
+		<div
+			className="max-w-6xl mx-auto h-full flex flex-col animate-in fade-in"
+			style={{ padding: "var(--space-6)" }}
+		>
 			<div className="flex items-center justify-between mb-8">
 				<div>
 					<h1 className="text-2xl font-bold text-slate-900 flex items-center">
@@ -172,14 +175,16 @@ export const DatabaseView = () => {
 				<div className="flex items-center gap-2">
 					<button
 						onClick={handleRefresh}
-						className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-brand-600 transition-colors"
+						className="hover:bg-slate-100 rounded-lg text-slate-500 hover:text-brand-600 transition-colors"
+						style={{ padding: "var(--space-1)" }}
 						title="Refresh"
 					>
 						<RefreshCw className="w-5 h-5" />
 					</button>
 					<button
 						onClick={handleClearAllDB}
-						className="p-2 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-600 transition-colors"
+						className="hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-600 transition-colors"
+						style={{ padding: "var(--space-1)" }}
 						title="Clear all collections"
 					>
 						<Trash2 className="w-5 h-5" />
@@ -190,12 +195,12 @@ export const DatabaseView = () => {
 			<div className="grid grid-cols-12 gap-6 flex-1 min-h-0">
 				{/* Sidebar List */}
 				<div className="col-span-3 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col overflow-hidden">
-					<div className="p-4 border-b border-slate-100 bg-slate-50/50">
+					<div className="border-b border-slate-100 bg-slate-50/50" style={{ padding: "var(--space-2)" }}>
 						<h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Collections</h3>
 					</div>
 					<div className="flex-1 overflow-y-auto p-2">
 						{collections.length === 0 ? (
-							<div className="p-4 text-center text-slate-400 text-sm">
+							<div className="text-center text-slate-400 text-sm" style={{ padding: "var(--space-2)" }}>
 								No active data buckets. Enable "Stateful" on an endpoint to create one.
 							</div>
 						) : (
@@ -203,11 +208,12 @@ export const DatabaseView = () => {
 								<button
 									key={col}
 									onClick={() => handleSelectCollection(col)}
-									className={`w-full text-left px-4 py-3 rounded-xl mb-1 text-sm font-medium transition-all flex items-center justify-between ${
+									className={`w-full text-left rounded-xl mb-1 text-sm font-medium transition-all flex items-center justify-between ${
 										activeCollection === col
 											? "bg-brand-50 text-brand-700 shadow-sm ring-1 ring-brand-100"
 											: "text-slate-600 hover:bg-slate-50"
 									}`}
+									style={{ padding: "var(--space-3) var(--space-4)" }}
 								>
 									<span className="truncate">{col}</span>
 									{activeCollection === col && <div className="w-2 h-2 rounded-full bg-brand-500" />}
@@ -235,7 +241,8 @@ export const DatabaseView = () => {
 											<>
 												<button
 													onClick={() => setPage(p => Math.max(1, p - 1))}
-													className="px-2 py-1 rounded bg-white border text-slate-600 text-xs"
+													className="rounded bg-white border text-slate-600 text-xs"
+													style={{ padding: "var(--space-1) var(--space-2)" }}
 													disabled={page <= 1}
 												>
 													Prev
@@ -245,7 +252,8 @@ export const DatabaseView = () => {
 												</span>
 												<button
 													onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-													className="px-2 py-1 rounded bg-white border text-slate-600 text-xs"
+													className="rounded bg-white border text-slate-600 text-xs"
+													style={{ padding: "var(--space-1) var(--space-2)" }}
 													disabled={page >= totalPages}
 												>
 													Next

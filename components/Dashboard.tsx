@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { HttpMethod, MockEndpoint } from "../types";
+import Button from "./Button";
 import { ToastType } from "./Toast";
 
 interface DashboardProps {
@@ -149,7 +150,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
 		METHOD_STYLE_MAP[method] ?? "bg-slate-50 text-slate-700 border-slate-200 ring-slate-500/10";
 
 	return (
-		<div className="p-8 max-w-[1600px] mx-auto space-y-10 animate-enter pb-20 relative">
+		<div
+			className="max-w-[1600px] mx-auto space-y-10 animate-enter relative"
+			style={{ padding: "var(--space-6)", paddingBottom: "calc(var(--space-6) * 2)" }}
+		>
 			{/* Header & Stats */}
 			<div className="space-y-6">
 				<div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -237,10 +241,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
 								}`}
 							/>
 
-							<div className="p-5 flex-1 flex flex-col relative">
+							<div className="flex-1 flex flex-col relative" style={{ padding: "var(--space-4)" }}>
 								{/* Selection Checkbox */}
 								<div
-									className={`absolute top-4 left-4 z-20 transition-opacity duration-200 ${
+									className={`absolute z-20 transition-opacity duration-200 checkbox-offset ${
 										isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
 									}`}
 								>
@@ -254,7 +258,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
 										className="w-5 h-5 rounded border-gray-300 text-brand-600 focus:ring-2 focus:ring-brand-500 cursor-pointer accent-brand-600"
 									/>
 								</div>
-								<div className="flex justify-between items-start mb-4 pl-6">
+								<div
+									className="flex justify-between items-start mb-4"
+									style={{ paddingLeft: "var(--space-5)" }}
+								>
 									<div className="flex flex-col gap-1.5 min-w-0 pr-12">
 										<h3 className="font-bold text-slate-800 truncate text-base group-hover:text-brand-600 transition-colors">
 											{mock.name}
@@ -327,7 +334,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
 							</div>
 
 							{/* Footer Stats */}
-							<div className="px-5 py-3 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between text-xs text-slate-500">
+							<div
+								className="border-t border-slate-100 bg-slate-50/50 flex items-center justify-between text-xs text-slate-500"
+								style={{
+									paddingLeft: "var(--space-4)",
+									paddingRight: "var(--space-4)",
+									paddingTop: "var(--space-3)",
+									paddingBottom: "var(--space-3)",
+								}}
+							>
 								<div className="flex items-center space-x-4">
 									<div className="flex items-center" title="Response Delay">
 										<Clock className="w-3.5 h-3.5 mr-1.5 text-slate-400" />
@@ -438,7 +453,7 @@ const ActionButton = ({
 	color: string;
 	title: string;
 }) => (
-	<button onClick={onClick} className={`p-1.5 rounded-md transition-all active:scale-90 ${color}`} title={title}>
+	<Button variant="icon" onClick={onClick} className={`transition-all active:scale-90 ${color}`} title={title}>
 		{icon}
-	</button>
+	</Button>
 );

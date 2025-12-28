@@ -1,6 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { applyStoredOrPreferredTheme } from "./theme/themeUtils";
+import "./theme/tokens.css";
 
 import { FEATURES } from "./config/featureFlags";
 
@@ -26,6 +28,9 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 
 import { dbService } from "./services/dbService";
+
+// Apply stored or preferred theme early (non-blocking, additive)
+applyStoredOrPreferredTheme();
 
 (async () => {
 	try {

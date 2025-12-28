@@ -116,13 +116,14 @@ const FieldRow: React.FC<{
 		>
 			<div
 				className={`
-                group flex items-center gap-3 bg-white p-2 pr-3 rounded-lg border mb-2 transition-all duration-200
+                group flex items-center gap-3 bg-white rounded-lg border mb-2 transition-all duration-200
                 ${
 					isTarget
 						? "border-brand-500 ring-1 ring-brand-500 bg-brand-50/30 translate-x-2 shadow-md"
 						: "border-slate-200 hover:border-brand-300 hover:shadow-sm"
 				}
             `}
+				style={{ padding: "var(--space-1) var(--space-2)" }}
 			>
 				{/* Drag Handle */}
 				<button
@@ -132,10 +133,10 @@ const FieldRow: React.FC<{
 						if (e.key === "ArrowUp") ctx.onMoveField?.(field.id, "up");
 						if (e.key === "ArrowDown") ctx.onMoveField?.(field.id, "down");
 					}}
-					className={`
-                    p-1 flex-shrink-0 cursor-grab active:cursor-grabbing transition-colors
-                    ${isTarget ? "text-brand-400" : "text-slate-300 group-hover:text-slate-500"}
-                `}
+					className={`flex-shrink-0 cursor-grab active:cursor-grabbing transition-colors ${
+						isTarget ? "text-brand-400" : "text-slate-300 group-hover:text-slate-500"
+					}`}
+					style={{ padding: "var(--space-1)" }}
 				>
 					<GripVertical className="w-5 h-5" />
 				</button>
@@ -145,7 +146,8 @@ const FieldRow: React.FC<{
 					<button
 						type="button"
 						onClick={() => ctx.onToggleCollapse(field.id)}
-						className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-brand-600 transition-colors -ml-1"
+						className="rounded hover:bg-slate-100 text-slate-400 hover:text-brand-600 transition-colors -ml-1"
+						style={{ padding: "var(--space-1)" }}
 					>
 						{field.isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
 					</button>
@@ -161,9 +163,10 @@ const FieldRow: React.FC<{
 							placeholder="key_name"
 							value={field.key}
 							onChange={e => ctx.onUpdateField(field.id, { key: e.target.value })}
-							className={`w-full text-sm font-semibold text-slate-700 bg-slate-50 focus:bg-white border border-transparent focus:border-brand-500 rounded-md py-1.5 px-2.5 outline-none transition-colors ${
+							className={`w-full text-sm font-semibold text-slate-700 bg-slate-50 focus:bg-white border border-transparent rounded-md outline-none transition-colors ${
 								field.key === "" ? "border-red-200 bg-red-50" : ""
 							}`}
+							style={{ padding: "var(--space-1) var(--space-2)" }}
 						/>
 					</div>
 
@@ -173,7 +176,8 @@ const FieldRow: React.FC<{
 							<select
 								value={field.type}
 								onChange={e => ctx.onUpdateField(field.id, { type: e.target.value as any })}
-								className="w-full appearance-none text-xs font-medium text-slate-600 bg-slate-50 border border-slate-200 rounded-md py-2 px-2.5 pl-8 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none cursor-pointer"
+								className="w-full appearance-none text-xs font-medium text-slate-600 bg-slate-50 border border-slate-200 rounded-md outline-none cursor-pointer"
+								style={{ padding: "var(--space-2)", paddingLeft: "var(--space-4)" }}
 							>
 								<option value="string">String</option>
 								<option value="number">Number</option>
@@ -206,13 +210,14 @@ const FieldRow: React.FC<{
 								type="button"
 								aria-label="Add property"
 								onClick={() => ctx.onAddField(field.id)}
-								className="flex items-center space-x-2 text-xs font-bold text-brand-600 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-md border border-brand-200 transition-colors w-full justify-center"
+								className="flex items-center space-x-2 text-xs font-bold text-brand-600 bg-brand-50 hover:bg-brand-100 rounded-md border border-brand-200 transition-colors w-full justify-center"
+								style={{ padding: "var(--space-1) var(--space-3)" }}
 							>
 								<Plus className="w-3.5 h-3.5" />
 								<span>Add Property</span>
 							</button>
 						) : field.type === "boolean" ? (
-							<div className="flex items-center h-9">
+							<div className="flex items-center h-9" style={{ padding: "var(--space-1) var(--space-3)" }}>
 								<button
 									type="button"
 									onClick={() =>
@@ -220,7 +225,7 @@ const FieldRow: React.FC<{
 											value: field.value === "true" ? "false" : "true",
 										})
 									}
-									className={`flex items-center space-x-2 px-3 py-1.5 rounded-md border text-xs font-bold transition-all ${
+									className={`flex items-center space-x-2 rounded-md border text-xs font-bold transition-all ${
 										field.value === "true"
 											? "bg-emerald-50 text-emerald-600 border-emerald-200"
 											: "bg-slate-50 text-slate-500 border-slate-200"
@@ -235,7 +240,10 @@ const FieldRow: React.FC<{
 								</button>
 							</div>
 						) : field.type === "null" ? (
-							<div className="text-xs text-slate-400 italic py-2 px-2 bg-slate-50 rounded border border-slate-100">
+							<div
+								className="text-xs text-slate-400 italic bg-slate-50 rounded border border-slate-100"
+								style={{ padding: "var(--space-2)" }}
+							>
 								null
 							</div>
 						) : (
@@ -246,9 +254,10 @@ const FieldRow: React.FC<{
 									value={field.value}
 									onChange={e => ctx.onUpdateField(field.id, { value: e.target.value })}
 									disabled={field.type === "array"} // Arrays handled as strings in basic input for now
-									className={`w-full text-sm text-slate-600 bg-white border border-slate-200 rounded-md py-1.5 px-2.5 pr-8 font-mono focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition-colors ${
+									className={`w-full text-sm text-slate-600 bg-white border border-slate-200 rounded-md font-mono focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition-colors ${
 										field.value.includes("{{") ? "text-brand-600 font-bold" : ""
 									} ${field.type === "array" ? "bg-slate-100 text-slate-500" : ""}`}
+									style={{ padding: "var(--space-1) var(--space-2)", paddingRight: "var(--space-3)" }}
 								/>
 								{field.error && <div className="text-xs text-rose-500 mt-1">{field.error}</div>}
 								{field.type === "array" && (
@@ -264,9 +273,10 @@ const FieldRow: React.FC<{
 												ctx.activeGeneratorDropdown === field.id ? null : field.id
 											)
 										}
-										className={`absolute right-1.5 p-1 rounded hover:bg-slate-100 transition-colors ${
+										className={`absolute right-1.5 rounded hover:bg-slate-100 transition-colors ${
 											field.value.includes("{{") ? "text-brand-500" : "text-slate-400"
 										}`}
+										style={{ padding: "var(--space-1)" }}
 										title="Insert Generator"
 										aria-label="Insert generator"
 									>
@@ -277,7 +287,10 @@ const FieldRow: React.FC<{
 								{/* Generator Dropdown */}
 								{ctx.activeGeneratorDropdown === field.id && (
 									<div className="absolute top-full right-0 mt-1 w-48 bg-white rounded-lg shadow-xl border border-slate-200 z-50 animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
-										<div className="bg-slate-50 px-3 py-2 border-b border-slate-100 flex justify-between items-center">
+										<div
+											className="bg-slate-50 border-b border-slate-100 flex justify-between items-center"
+											style={{ padding: "var(--space-1) var(--space-2)" }}
+										>
 											<span className="text-[10px] font-bold text-slate-500 uppercase">
 												Generators
 											</span>
@@ -288,13 +301,14 @@ const FieldRow: React.FC<{
 												<X className="w-3 h-3 text-slate-400" />
 											</button>
 										</div>
-										<div className="max-h-48 overflow-y-auto p-1">
+										<div className="max-h-48 overflow-y-auto" style={{ padding: "var(--space-1)" }}>
 											{MOCK_VARIABLES_HELP.map(v => (
 												<button
 													type="button"
 													key={v.label}
 													onClick={() => ctx.onInsertVariable(v.label)}
-													className="w-full text-left px-3 py-2 hover:bg-brand-50 rounded-md flex flex-col group/item"
+													className="w-full text-left hover:bg-brand-50 rounded-md flex flex-col group/item"
+													style={{ padding: "var(--space-1) var(--space-2)" }}
 												>
 													<span className="text-xs font-mono font-medium text-brand-600">
 														{v.label}
@@ -315,7 +329,8 @@ const FieldRow: React.FC<{
 				<button
 					type="button"
 					onClick={() => ctx.onRemoveFieldRequest(field.id)}
-					className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors opacity-0 group-hover:opacity-100"
+					className="text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors opacity-0 group-hover:opacity-100"
+					style={{ padding: "var(--space-1)" }}
 					title="Delete Field"
 					aria-label="Delete field"
 				>
@@ -325,7 +340,10 @@ const FieldRow: React.FC<{
 
 			{/* Render Children if Object */}
 			{field.type === "object" && hasChildren && !field.isCollapsed && (
-				<div className="pl-6 ml-5 border-l-2 border-slate-100 relative">
+				<div
+					className="border-l-2 border-slate-100 relative"
+					style={{ paddingLeft: "var(--space-5)", marginLeft: "var(--space-5)" }}
+				>
 					{/* Connector visual fix */}
 					<div className="absolute -top-3 left-0 w-4 h-4 border-l-2 border-b-2 border-slate-100 rounded-bl-lg -z-10" />
 
@@ -335,10 +353,18 @@ const FieldRow: React.FC<{
 				</div>
 			)}
 			{field.type === "object" && !field.isCollapsed && (!field.children || field.children.length === 0) && (
-				<div className="pl-12 pb-2 text-[10px] text-slate-400 italic">Empty object</div>
+				<div
+					className="text-[10px] text-slate-400 italic"
+					style={{ paddingLeft: "calc(var(--space-5) * 2)", paddingBottom: "var(--space-2)" }}
+				>
+					Empty object
+				</div>
 			)}
 			{field.type === "object" && field.isCollapsed && (
-				<div className="pl-12 pb-2 text-[10px] text-slate-400 italic flex items-center gap-2">
+				<div
+					className="text-[10px] text-slate-400 italic flex items-center gap-2"
+					style={{ paddingLeft: "var(--space-4)", paddingBottom: "var(--space-2)" }}
+				>
 					<span className="w-1 h-1 rounded-full bg-slate-300"></span>
 					<span>{field.children?.length || 0} hidden properties</span>
 				</div>
@@ -353,8 +379,13 @@ const JsonHighlightOverlay = ({ code, fontSize }: { code: string; fontSize: numb
 	const tokens = code.split(/(".*?"|:|\d+|true|false|null)/g);
 	return (
 		<pre
-			className="absolute inset-0 pointer-events-none p-5 pl-4 font-mono leading-relaxed whitespace-pre-wrap break-all"
-			style={{ fontSize: `${fontSize}px`, lineHeight: "1.6" }}
+			className="absolute inset-0 pointer-events-none font-mono leading-relaxed whitespace-pre-wrap break-all"
+			style={{
+				fontSize: `${fontSize}px`,
+				lineHeight: "1.6",
+				padding: "var(--space-3)",
+				paddingLeft: "var(--space-2)",
+			}}
 			aria-hidden="true"
 		>
 			{tokens.map((token, i) => {
@@ -1063,13 +1094,17 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 	};
 
 	return (
-		<div className="max-w-7xl mx-auto p-6 md:p-8 animate-enter h-full flex flex-col relative">
+		<div
+			className="max-w-7xl mx-auto md:p-8 animate-enter h-full flex flex-col relative"
+			style={{ padding: "var(--space-3)" }}
+		>
 			<div className="flex items-center justify-between mb-6 flex-shrink-0">
 				<div className="flex items-center space-x-4">
 					<button
 						type="button"
 						onClick={onCancel}
-						className="p-2.5 hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-200 rounded-xl transition-all group"
+						className="hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-200 rounded-xl transition-all group"
+						style={{ padding: "var(--space-2)" }}
 					>
 						<ArrowLeft className="w-5 h-5 text-slate-500 group-hover:text-slate-800" />
 					</button>
@@ -1085,7 +1120,8 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 						<button
 							type="button"
 							onClick={() => onDelete(formData.id)}
-							className="px-4 py-2.5 rounded-xl text-red-500 font-medium hover:bg-red-50 transition-colors text-sm border border-transparent hover:border-red-100 mr-2"
+							className="rounded-xl text-red-500 font-medium hover:bg-red-50 transition-colors text-sm border border-transparent hover:border-red-100 mr-2"
+							style={{ padding: "var(--space-2) var(--space-4)" }}
 						>
 							<Trash2 className="w-4 h-4 inline-block mr-2" />
 							Delete
@@ -1094,7 +1130,8 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 					<button
 						type="button"
 						onClick={onCancel}
-						className="px-5 py-2.5 rounded-xl text-slate-600 font-medium hover:bg-slate-200/50 transition-colors text-sm"
+						className="rounded-xl text-slate-600 font-medium hover:bg-slate-200/50 transition-colors text-sm"
+						style={{ padding: "var(--space-2) var(--space-5)" }}
 					>
 						Cancel
 					</button>
@@ -1102,11 +1139,12 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 						type="submit"
 						onClick={handleSubmit}
 						disabled={!!jsonError || !!conflictError}
-						className={`flex items-center space-x-2 px-6 py-2.5 rounded-xl text-white font-bold text-sm transition-all shadow-lg active:scale-95 ${
+						className={`flex items-center space-x-2 rounded-xl text-white font-bold text-sm transition-all shadow-lg active:scale-95 ${
 							jsonError || conflictError
 								? "bg-slate-400 cursor-not-allowed shadow-none"
 								: "bg-brand-600 hover:bg-brand-50 shadow-brand-500/25"
 						}`}
+						style={{ padding: "var(--space-2) var(--space-5)" }}
 					>
 						<Save className="w-4 h-4" />
 						<span>Save Route</span>
@@ -1118,7 +1156,10 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 				{/* Left Column: Config */}
 				<div className="lg:col-span-4 flex flex-col gap-6 overflow-y-auto pr-2 custom-scrollbar pb-10">
 					{/* Main Info Card */}
-					<div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+					<div
+						className="bg-white rounded-2xl border border-slate-200 shadow-sm space-y-6"
+						style={{ padding: "var(--space-3)" }}
+					>
 						<h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 pb-2 border-b border-slate-100">
 							<Settings className="w-4 h-4 text-brand-500" /> General Settings
 						</h3>
@@ -1157,6 +1198,7 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 												: "border-slate-200 focus:ring-brand-500/20 focus:border-brand-500"
 										}`}
 										placeholder="/api/v1/resource/:id"
+										style={{ padding: "var(--space-3) var(--space-4)" }}
 									/>
 								</div>
 								{conflictError ? (
@@ -1177,7 +1219,8 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 									type="text"
 									value={formData.name}
 									onChange={e => handleChange("name", e.target.value)}
-									className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all placeholder:text-slate-400"
+									className="w-full bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all placeholder:text-slate-400"
+									style={{ padding: "var(--space-3) var(--space-4)" }}
 									placeholder="e.g. Fetch User Profile"
 								/>
 							</div>
@@ -1234,7 +1277,10 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 					</div>
 
 					{/* Security & Auth Config */}
-					<div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5">
+					<div
+						className="bg-white rounded-2xl border border-slate-200 shadow-sm space-y-5"
+						style={{ padding: "var(--space-3)" }}
+					>
 						<h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 pb-2 border-b border-slate-100">
 							<Shield className="w-4 h-4 text-rose-500" /> Authentication & Security
 						</h3>
@@ -1280,7 +1326,10 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 						</div>
 
 						{formData.authConfig?.type === "BEARER_TOKEN" && (
-							<div className="space-y-4 p-4 bg-rose-50 border border-rose-200 rounded-lg animate-in fade-in slide-in-from-top-2">
+							<div
+								className="space-y-4 bg-rose-50 border border-rose-200 rounded-lg animate-in fade-in slide-in-from-top-2"
+								style={{ padding: "var(--space-2)" }}
+							>
 								<div>
 									<Label>Bearer Token Value</Label>
 									<div className="relative">
@@ -1332,7 +1381,10 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 						)}
 
 						{formData.authConfig?.type === "API_KEY" && (
-							<div className="space-y-4 p-4 bg-rose-50 border border-rose-200 rounded-lg animate-in fade-in slide-in-from-top-2">
+							<div
+								className="space-y-4 bg-rose-50 border border-rose-200 rounded-lg animate-in fade-in slide-in-from-top-2"
+								style={{ padding: "var(--space-2)" }}
+							>
 								<div>
 									<Label>Header Name</Label>
 									<input
@@ -1408,7 +1460,10 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 						)}
 
 						{formData.authConfig?.type === "NONE" && (
-							<div className="p-4 bg-slate-50 border border-slate-200 rounded-lg">
+							<div
+								className="bg-slate-50 border border-slate-200 rounded-lg"
+								style={{ padding: "var(--space-2)" }}
+							>
 								<p className="text-xs text-slate-600 flex items-start gap-2">
 									<span className="text-lg leading-none">🌐</span>
 									<span>
@@ -1419,7 +1474,10 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 						)}
 
 						{FEATURES.PROXY() && (
-							<div className="bg-white p-4 rounded-lg border border-slate-200">
+							<div
+								className="bg-white rounded-lg border border-slate-200"
+								style={{ padding: "var(--space-2)" }}
+							>
 								<Label>Proxy / Passthrough</Label>
 								<div className="flex items-center gap-3 mb-2">
 									<button
@@ -1443,7 +1501,10 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 								</div>
 
 								{formData.proxy?.enabled && (
-									<div className="space-y-3 p-2 border border-slate-100 rounded-md bg-emerald-50">
+									<div
+										className="space-y-3 border border-slate-100 rounded-md bg-emerald-50"
+										style={{ padding: "var(--space-1)" }}
+									>
 										<div>
 											<Label>Proxy Target (Base URL)</Label>
 											<input
@@ -1527,7 +1588,10 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 					</div>
 
 					{/* Response Config Card */}
-					<div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+					<div
+						className="bg-white rounded-2xl border border-slate-200 shadow-sm space-y-6"
+						style={{ padding: "var(--space-3)" }}
+					>
 						<h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 pb-2 border-b border-slate-100">
 							<Gauge className="w-4 h-4 text-brand-500" /> Response Behavior
 						</h3>
@@ -1598,7 +1662,8 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 										<button
 											type="button"
 											onClick={() => removeHeader(index)}
-											className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+											className="text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+											style={{ padding: "var(--space-1)" }}
 										>
 											<Trash2 className="w-3.5 h-3.5" />
 										</button>
@@ -1623,7 +1688,10 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 								<Database className="w-4 h-4 text-brand-500" /> Response Schema
 							</h3>
 
-							<div className="bg-slate-100 p-1 rounded-lg flex items-center border border-slate-200">
+							<div
+								className="bg-slate-100 rounded-lg flex items-center border border-slate-200"
+								style={{ padding: "var(--space-1)" }}
+							>
 								<button
 									type="button"
 									onClick={() => handleModeSwitch("visual")}
@@ -1667,7 +1735,10 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 					<div className="relative flex-1 bg-white flex overflow-hidden">
 						{editorMode === "visual" ? (
 							<div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-50/50">
-								<div className="flex-1 overflow-y-auto p-4 space-y-0.5 custom-scrollbar">
+								<div
+									className="flex-1 overflow-y-auto space-y-0.5 custom-scrollbar"
+									style={{ padding: "var(--space-2)" }}
+								>
 									{visualFields.length > 0 && (
 										<div className="grid grid-cols-12 gap-3 px-10 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
 											<div className="col-span-4">Field Name</div>
@@ -1695,13 +1766,19 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 									))}
 								</div>
 
-								<div className="p-4 border-t border-slate-200 bg-white">
+								<div
+									className="border-t border-slate-200 bg-white"
+									style={{ padding: "var(--space-2)" }}
+								>
 									<button
 										type="button"
 										onClick={() => handleAddField()}
 										className="w-full py-3 border-2 border-dashed border-slate-200 hover:border-brand-400 hover:bg-brand-50/50 text-slate-500 hover:text-brand-600 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 group active:scale-[0.99]"
 									>
-										<div className="bg-slate-100 group-hover:bg-brand-100 rounded-full p-0.5 transition-colors">
+										<div
+											className="bg-slate-100 group-hover:bg-brand-100 rounded-full transition-colors"
+											style={{ padding: "calc(var(--space-1) / 2)" }}
+										>
 											<Plus className="w-4 h-4" />
 										</div>
 										<span>Add New Root Field</span>
@@ -1745,8 +1822,13 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 											onKeyDown={handleKeyDown}
 											value={formData.responseBody}
 											onChange={e => handleChange("responseBody", e.target.value)}
-											className="absolute inset-0 w-full h-full p-5 pl-4 font-mono text-transparent bg-transparent resize-none outline-none focus:ring-0 leading-relaxed selection:bg-brand-500/30 caret-white z-10"
-											style={{ fontSize: `${fontSize}px`, lineHeight: "1.6" }}
+											className="absolute inset-0 w-full h-full font-mono text-transparent bg-transparent resize-none outline-none focus:ring-0 leading-relaxed selection:bg-brand-500/30 caret-white z-10"
+											style={{
+												fontSize: `${fontSize}px`,
+												lineHeight: "1.6",
+												padding: "var(--space-3)",
+												paddingLeft: "var(--space-2)",
+											}}
 											spellCheck={false}
 										/>
 									</div>
@@ -1756,7 +1838,7 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 					</div>
 
 					<div
-						className={`px-5 py-2.5 text-xs flex items-center border-t justify-between font-medium ${
+						className={`text-xs flex items-center border-t justify-between font-medium token-footer-padding ${
 							jsonError
 								? "bg-red-50 text-red-600 border-red-200"
 								: "bg-slate-50 text-slate-500 border-slate-200"
@@ -1805,9 +1887,13 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 			</form>
 
 			{fieldToDelete && (
-				<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+				<div
+					className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200"
+					style={{ padding: "var(--space-2)" }}
+				>
 					<div
-						className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 animate-in zoom-in-95 duration-200 border border-slate-200"
+						className="bg-white rounded-2xl shadow-2xl max-w-sm w-full animate-in zoom-in-95 duration-200 border border-slate-200"
+						style={{ padding: "var(--space-3)" }}
 						onClick={e => e.stopPropagation()}
 					>
 						<div className="flex flex-col items-center text-center">

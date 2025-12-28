@@ -91,7 +91,7 @@ test('generate-mock validates JSON output', async () => {
   await startServerWithEnv({ OPENROUTER_API_KEY: 'server' });
   const res = await fetch(baseUrl + '/openrouter/generate-mock', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: '/test' }) });
   assert(res.status === 502, 'expected 502 when model output is not JSON');
-  const jb = await res.json();
+  const jb: any = await res.json();
   assert(jb.error === 'invalid_model_output');
   await stopServer();
 
@@ -100,7 +100,7 @@ test('generate-mock validates JSON output', async () => {
   await startServerWithEnv({ OPENROUTER_API_KEY: 'server' });
   const res2 = await fetch(baseUrl + '/openrouter/generate-mock', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: '/test' }) });
   assert(res2.status === 200, 'expected 200 when model output is valid JSON');
-  const jb2 = await res2.json();
+  const jb2: any = await res2.json();
   assert(jb2.json && jb2.json.ok === true && jb2.json.n === 3, 'expected parsed JSON match');
   await stopServer();
 });

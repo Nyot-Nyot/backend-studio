@@ -757,7 +757,8 @@ function App() {
 		}
 		if (files.length === 0) return [];
 		if (files.length > 1) {
-			const zipBlob = await (await import("./services/zipService")).createZipBlob(files);
+			const { createZipBlob } = await import("./services/zipService");
+			const zipBlob = (await createZipBlob(files)) as Blob;
 			return [{ name: `backend-studio-export-${new Date().toISOString().slice(0, 10)}.zip`, size: zipBlob.size }];
 		}
 		return files.map(f => ({ name: f.name, size: f.blob.size || 0 }));
@@ -810,14 +811,15 @@ function App() {
 			// If multiple files are selected, bundle into a ZIP (keeps a single attachment)
 			let filesToSend = files;
 			if (files.length > 1) {
-				const zipBlob = await (await import("./services/zipService")).createZipBlob(files);
+				const { createZipBlob } = await import("./services/zipService");
+				const zipBlob = (await createZipBlob(files)) as Blob;
 				filesToSend = [
 					{ name: `backend-studio-export-${new Date().toISOString().slice(0, 10)}.zip`, blob: zipBlob },
 				];
 			}
 
 			// Size check: fail early if larger than 20MB
-			const totalBytes = filesToSend.reduce((s, f) => s + (f.blob.size || 0), 0);
+			const totalBytes = filesToSend.reduce((s, f) => s + ((f.blob as Blob).size || 0), 0);
 			if (totalBytes > 20 * 1024 * 1024)
 				throw new Error("Attachments exceed 20 MB limit. Reduce attachment size.");
 

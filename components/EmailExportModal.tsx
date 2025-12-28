@@ -1,4 +1,8 @@
 import React, { useState } from "react";
+import Button from "./Button";
+import Input from "./Input";
+import Modal from "./Modal";
+import Textarea from "./Textarea";
 
 export type EmailExportParams = {
 	recipients: string; // comma or newline separated
@@ -55,9 +59,6 @@ export default function EmailExportModal({ isOpen, onClose, onSend, sending, get
 	const [previewLoading, setPreviewLoading] = useState(false);
 	const [previewError, setPreviewError] = useState<string | null>(null);
 
-	const dialogRef = React.useRef<HTMLDivElement | null>(null);
-	const previouslyFocusedRef = React.useRef<HTMLElement | null>(null);
-
 	const fetchPreview = React.useCallback(async () => {
 		if (!getAttachmentPreview) return setPreview(null);
 		setPreviewError(null);
@@ -78,74 +79,6 @@ export default function EmailExportModal({ isOpen, onClose, onSend, sending, get
 		fetchPreview();
 	}, [isOpen, fetchPreview]);
 
-	React.useEffect(() => {
-		if (!isOpen) return;
-		previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
-		const el = dialogRef.current;
-		// focus the first focusable element inside the dialog
-		setTimeout(() => {
-			if (!el) return;
-			const focusable = el.querySelectorAll<HTMLElement>(
-				'button, [href], input, textarea, select, [tabindex]:not([tabindex="-1"])'
-			);
-			if (focusable.length) focusable[0].focus();
-			else el.focus();
-		}, 0);
-
-		// make overlay clickable to close if clicked outside the dialog
-		const onOverlayClick = (ev: MouseEvent) => {
-			if (!dialogRef.current) return;
-			if (!dialogRef.current.contains(ev.target as Node)) {
-				onClose();
-			}
-		};
-		document.addEventListener("mousedown", onOverlayClick);
-		const removeOverlayListener = () => document.removeEventListener("mousedown", onOverlayClick);
-
-		const onKeyDown = (e: KeyboardEvent) => {
-			if (e.key === "Escape") {
-				e.preventDefault();
-				onClose();
-				return;
-			}
-			if (e.key === "Tab") {
-				const dialog = dialogRef.current;
-				if (!dialog) return;
-				const focusable = Array.from(
-					dialog.querySelectorAll<HTMLElement>(
-						'button, [href], input, textarea, select, [tabindex]:not([tabindex="-1"])'
-					)
-				).filter(f => !f.hasAttribute("disabled"));
-				if (focusable.length === 0) {
-					e.preventDefault();
-					return;
-				}
-				const first = focusable[0];
-				const last = focusable[focusable.length - 1];
-				if (e.shiftKey) {
-					if (document.activeElement === first) {
-						e.preventDefault();
-						last.focus();
-					}
-				} else {
-					if (document.activeElement === last) {
-						e.preventDefault();
-						first.focus();
-					}
-				}
-			}
-		};
-
-		document.addEventListener("keydown", onKeyDown);
-		// remove overlay click listener and keydown on cleanup
-		return () => {
-			document.removeEventListener("keydown", onKeyDown);
-			removeOverlayListener();
-			if (previouslyFocusedRef.current && document.contains(previouslyFocusedRef.current))
-				previouslyFocusedRef.current.focus();
-		};
-	}, [isOpen, onClose]);
-
 	if (!isOpen) return null;
 
 	const handleSend = async () => {
@@ -162,160 +95,117 @@ export default function EmailExportModal({ isOpen, onClose, onSend, sending, get
 	};
 
 	return (
-		<div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-			<div
-				ref={dialogRef}
-				role="dialog"
-				aria-modal="true"
-				aria-labelledby={titleId}
-				aria-describedby={descId}
-				className="bg-[#0f172a] rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-700 overflow-hidden"
-			>
-				<div className="p-6 border-b border-slate-800 flex items-center justify-between">
-					<div>
-						<h2 id={titleId} className="text-lg font-bold text-white">
-							Send Project via Email
-						</h2>
-						<p id={descId} className="text-slate-400 text-sm mt-1">
-							Send your workspace and related files to chosen recipients.
-						</p>
-					</div>
-					<button
-						onClick={onClose}
-						aria-label="Close dialog"
-						type="button"
-						className="text-slate-500 hover:text-white"
-					>
-						×
-					</button>
+		<Modal
+			isOpen={isOpen}
+			onClose={onClose}
+			title={<span id={titleId}>Send Project via Email</span>}
+			description={<span id={descId}>Send your workspace and related files to chosen recipients.</span>}
+			ariaLabelledBy={titleId}
+			ariaDescribedBy={descId}
+		>
+			<div className="space-y-4">
+				{/* Recipients */}
+				<div>
+					<Textarea
+						label="Recipients"
+						rows={3}
+						placeholder="recipient@example.com, another@example.com"
+						value={recipients}
+						onChange={e => setRecipients(e.target.value)}
+					/>
+					<p className="text-xs text-slate-500 mt-1">
+						Separate multiple addresses with commas, semicolons, or new lines. Max 10 recipients.
+					</p>
 				</div>
 
-				<div className="p-6 space-y-4">
+				{/* Subject & Message */}
+				<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
 					<div>
-						<label className="block text-xs text-slate-300 mb-2">Recipients</label>
-						<textarea
-							className="w-full rounded-lg bg-slate-900 border border-slate-800 p-3 text-slate-200 text-sm resize-none"
-							rows={3}
-							placeholder="recipient@example.com, another@example.com"
-							value={recipients}
-							onChange={e => setRecipients(e.target.value)}
-						/>
-						<p className="text-xs text-slate-500 mt-1">
-							Separate multiple addresses with commas, semicolons, or new lines. Max 10 recipients.
-						</p>
+						<Input label="Subject" value={subject} onChange={e => setSubject(e.target.value)} />
 					</div>
-
-					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-						<div>
-							<label className="block text-xs text-slate-300 mb-2">Subject</label>
-							<input
-								className="w-full rounded-lg bg-slate-900 border border-slate-800 p-3 text-slate-200 text-sm"
-								value={subject}
-								onChange={e => setSubject(e.target.value)}
-							/>
-						</div>
-
-						<div>
-							<label className="block text-xs text-slate-300 mb-2">Message</label>
-							<input
-								className="w-full rounded-lg bg-slate-900 border border-slate-800 p-3 text-slate-200 text-sm"
-								value={message}
-								onChange={e => setMessage(e.target.value)}
-							/>
-						</div>
-					</div>
-
 					<div>
-						<label className="block text-xs text-slate-300 mb-2">Attachments</label>
-						<div className="flex flex-col gap-2">
-							<label className="flex items-center gap-2 text-sm">
-								<input
-									type="checkbox"
-									checked={includeWorkspace}
-									onChange={() => setIncludeWorkspace(s => !s)}
-								/>
-								<span>Workspace JSON</span>
-							</label>
-							<label className="flex items-center gap-2 text-sm">
-								<input
-									type="checkbox"
-									checked={includeOpenApi}
-									onChange={() => setIncludeOpenApi(s => !s)}
-								/>
-								<span>OpenAPI JSON</span>
-							</label>
-							<label className="flex items-center gap-2 text-sm">
-								<input
-									type="checkbox"
-									checked={includeServer}
-									onChange={() => setIncludeServer(s => !s)}
-								/>
-								<span>server.js</span>
-							</label>
-						</div>
-
-						<div className="mt-3 p-3 bg-amber-50 text-amber-800 text-xs rounded-md border border-amber-100">
-							<strong>Warning:</strong> Attachments may contain sensitive data or credentials. Verify the
-							recipients before sending.
-						</div>
-					</div>
-
-					{error && <div className="text-red-400 text-sm">{error}</div>}
-
-					<div className="p-3 bg-slate-800/30 rounded-lg text-sm text-slate-300">
-						<div className="font-medium mb-1">Attachment preview</div>
-						{previewLoading ? (
-							<div className="text-slate-500 text-xs">Calculating size…</div>
-						) : previewError ? (
-							<div className="text-amber-200 text-xs">
-								<div className="mb-2">{previewError}</div>
-								<button
-									type="button"
-									onClick={() => fetchPreview()}
-									className="px-3 py-1 rounded bg-amber-600 text-white text-xs"
-								>
-									Retry
-								</button>
-							</div>
-						) : preview && preview.length > 0 ? (
-							<div className="text-slate-400 text-xs">
-								<ul className="list-disc pl-4 space-y-1">
-									{preview.map(p => (
-										<li key={p.name} className="flex justify-between">
-											<span>{p.name}</span>
-											<span className="text-slate-500">{(p.size / 1024).toFixed(1)} KB</span>
-										</li>
-									))}
-								</ul>{" "}
-								<div className="mt-2 text-slate-500 text-xs">
-									Note: attachments will be uploaded to a temporary server and a short-lived download
-									link will be included in the email body.
-								</div>{" "}
-							</div>
-						) : (
-							<div className="text-slate-500 text-xs">No attachments selected.</div>
-						)}
+						<Input label="Message" value={message} onChange={e => setMessage(e.target.value)} />
 					</div>
 				</div>
 
-				<div className="p-6 bg-slate-900 border-t border-slate-800 flex justify-end space-x-3">
-					<button
-						onClick={onClose}
-						className="px-5 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white transition-all"
-						disabled={sending}
-					>
-						Cancel
-					</button>
-					<button
-						type="button"
-						onClick={handleSend}
-						className="px-5 py-2.5 rounded-xl bg-white text-slate-900 font-bold hover:bg-slate-200 transition-colors"
-						disabled={sending}
-					>
-						{sending ? "Sending…" : "Send Email"}
-					</button>
+				{/* Attachments */}
+				<div>
+					<label className="block text-xs text-slate-300 mb-2">Attachments</label>
+					<div className="flex flex-col gap-2">
+						<label className="flex items-center gap-2 text-sm">
+							<input
+								type="checkbox"
+								checked={includeWorkspace}
+								onChange={() => setIncludeWorkspace(s => !s)}
+							/>
+							<span>Workspace JSON</span>
+						</label>
+						<label className="flex items-center gap-2 text-sm">
+							<input
+								type="checkbox"
+								checked={includeOpenApi}
+								onChange={() => setIncludeOpenApi(s => !s)}
+							/>
+							<span>OpenAPI JSON</span>
+						</label>
+						<label className="flex items-center gap-2 text-sm">
+							<input type="checkbox" checked={includeServer} onChange={() => setIncludeServer(s => !s)} />
+							<span>server.js</span>
+						</label>
+					</div>
+					<div className="mt-3 p-3 bg-amber-50 text-amber-800 text-xs rounded-md border border-amber-100">
+						<strong>Warning:</strong> Attachments may contain sensitive data or credentials. Verify the
+						recipients before sending.
+					</div>
+				</div>
+
+				{/* Error */}
+				{error && <div className="text-red-400 text-sm">{error}</div>}
+
+				{/* Attachment preview */}
+				<div className="p-3 bg-slate-800/30 rounded-lg text-sm text-slate-300">
+					<div className="font-medium mb-1">Attachment preview</div>
+					{previewLoading ? (
+						<div className="text-slate-500 text-xs">Calculating size…</div>
+					) : previewError ? (
+						<div className="text-amber-200 text-xs">
+							<div className="mb-2">{previewError}</div>
+							<button
+								type="button"
+								onClick={() => fetchPreview()}
+								className="px-3 py-1 rounded bg-amber-600 text-white text-xs"
+							>
+								Retry
+							</button>
+						</div>
+					) : preview && preview.length > 0 ? (
+						<div className="text-slate-400 text-xs">
+							<ul className="list-disc pl-4 space-y-1">
+								{preview.map(p => (
+									<li key={p.name} className="flex justify-between">
+										<span>{p.name}</span>
+										<span className="text-slate-500">{(p.size / 1024).toFixed(1)} KB</span>
+									</li>
+								))}
+							</ul>
+							<div className="mt-2 text-slate-500 text-xs">
+								Note: attachments will be uploaded to a temporary server and a short-lived download link
+								will be included in the email body.
+							</div>
+						</div>
+					) : (
+						<div className="text-slate-500 text-xs">No attachments selected.</div>
+					)}
 				</div>
 			</div>
-		</div>
+			<footer>
+				<Button variant="ghost" onClick={onClose} disabled={sending}>
+					Cancel
+				</Button>
+				<Button variant="primary" onClick={handleSend} disabled={sending}>
+					{sending ? "Sending…" : "Send Email"}
+				</Button>
+			</footer>
+		</Modal>
 	);
 }
