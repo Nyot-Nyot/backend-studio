@@ -243,7 +243,7 @@
 
 ---
 
-### [scripts/socket-server.cjs](../scripts/socket-server.cjs)
+### [scripts/socket-server.cjs](../scripts/socket-server.cjs) complete [x]
 
 -   Accepts `origin: '*'` in socket.io CORS config — ok for local dev but not for production; add environment-based hardening.
 -   `log:publish` handler broadcasts arbitrary payloads without validation or rate-limiting — consider validating shape and size to avoid abuse.

@@ -23,6 +23,17 @@ This document describes the lightweight socket-based log streaming feature used 
 -   If `SOCKET_AUTH_TOKEN` is set in the env, the server requires the same token on handshake (query param or `auth.token` for socket.io clients).
 -   For multi-instance deployments, use a socket.io adapter such as `socket.io-redis` to broadcast events between instances.
 
+## Configuration
+
+The socket server exposes several environment variables to control behavior and hardening. These are intended primarily for development and local test servers, but can be tuned for restricted production-like environments if needed:
+
+-   **SOCKET_RATE_LIMIT** — Maximum messages allowed _per socket_ during a rate window. Default: `5`.
+-   **SOCKET_RATE_WINDOW_MS** — Length of the rate-limit window in milliseconds. Default: `5000` (5 seconds).
+-   **SOCKET_ALLOWED_ORIGINS** — Comma-separated list of allowed origins for CORS (e.g. `https://app.example.com,https://ci.example.com`). If set, only requests from these origins are accepted; in production, leaving this empty will block cross-origin requests by default.
+-   **SOCKET_SERVER_QUIET** — Set to `1` or `true` to suppress console logs from the socket server (useful in CI). Default: `false`.
+
+These settings help protect the lightweight socket server from noisy or malformed clients and make it safer to run in CI or shared development environments.
+
 ## Tests
 
 -   Unit test: `test/socketClient.test.ts` validates that a client receives `log:new` when `POST /emit-log` is called.

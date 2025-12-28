@@ -18,10 +18,11 @@ function assert(cond: any, msg: string) {
 console.log('🧪 socketClient integration tests\n');
 
 // Start a socket-server process on a random port
-const PORT = 9210;
+const PORT = 9200 + Math.floor(Math.random() * 200);
 let srv: any;
 
 async function startServer() {
+  const PORT = 9200 + Math.floor(Math.random() * 200);
   return new Promise<void>((resolve, reject) => {
     srv = spawn(process.execPath, ['scripts/socket-server.cjs'], {
       env: { ...process.env, SOCKET_PORT: String(PORT) },
@@ -39,13 +40,14 @@ async function startServer() {
     srv.on('error', reject);
     // safety timeout
     setTimeout(() => reject(new Error('server failed to start')), 5000);
-  });
+  }).then(() => ({ port: PORT }));
 }
 
 async function stopServer() {
   if (srv) {
     srv.kill('SIGINT');
-    await wait(200);
+    await wait(400);
+    srv = null;
   }
 }
 
@@ -56,8 +58,8 @@ async function fetchJson(url: string, body: any) {
 
 
 test('socket server emits log:new and client receives it', async () => {
-  await startServer();
-  const client = new SocketClient(`http://localhost:${PORT}`);
+  const started = await startServer();
+  const client = new SocketClient(`http://localhost:${started.port}`);
   client.connect();
 
   // wait for socket to connect (max 2s)
@@ -75,7 +77,7 @@ test('socket server emits log:new and client receives it', async () => {
   client.on('log:new', handler);
 
   const payload = { id: 't1', ts: Date.now(), method: 'GET', path: '/api/test', statusCode: 200, workspaceId: 'w1' };
-  await fetchJson(`http://localhost:${PORT}/emit-log`, payload);
+  await fetchJson(`http://localhost:${started.port}/emit-log`, payload);
 
   // wait for message to arrive
   await wait(500);
@@ -84,5 +86,72 @@ test('socket server emits log:new and client receives it', async () => {
 
   client.off('log:new', handler);
   client.disconnect();
+  await stopServer();
+});
+
+// Test publish from client using socket.emit('log:publish')
+test('client can publish logs and others receive them', async () => {
+  const started = await startServer();
+  const sender = new SocketClient(`http://localhost:${started.port}`);
+  const receiver = new SocketClient(`http://localhost:${started.port}`);
+  sender.connect();
+  receiver.connect();
+
+  const start = Date.now();
+  while ((!sender.isConnected() || !receiver.isConnected()) && Date.now() - start < 2000) {
+    await wait(50);
+  }
+  if (!sender.isConnected() || !receiver.isConnected()) throw new Error('sockets did not connect');
+
+  let received: any = null;
+  const handler = (payload: any) => { received = payload; };
+  receiver.on('log:new', handler);
+  // join logs:all to receive broadcasted messages
+  receiver.join('logs:all');
+
+  const payload = { id: 'pub1', ts: Date.now(), message: 'hello world' };
+  sender.emit('log:publish', payload);
+
+  await wait(500);
+  if (!received || received.id !== 'pub1') throw new Error('receiver did not get published log');
+
+  receiver.off('log:new', handler);
+  sender.disconnect();
+  receiver.disconnect();
+  await stopServer();
+});
+
+// Rate limit behavior for socket publish
+test('socket publish is rate limited per socket', async () => {
+  // configure server to only allow 1 message per window
+  process.env.SOCKET_RATE_LIMIT = '1';
+  process.env.SOCKET_RATE_WINDOW_MS = '5000';
+  const started = await startServer();
+
+  const client = new SocketClient(`http://localhost:${started.port}`);
+  client.connect();
+  const start = Date.now();
+  while (!client.isConnected() && Date.now() - start < 2000) {
+    await wait(50);
+  }
+  if (!client.isConnected()) throw new Error('socket did not connect');
+
+  let ack = false;
+  let err: any = null;
+  client.on('log:ack', () => { ack = true; });
+  client.on('error', (e) => { err = e; });
+
+  // emit twice
+  client.emit('log:publish', { id: 'r1' });
+  client.emit('log:publish', { id: 'r2' });
+
+  await wait(500);
+  if (!ack) throw new Error('expected ack for first publish');
+  if (!err || err.error !== 'rate_limited') throw new Error('expected rate_limited error for second publish');
+
+  client.disconnect();
+  // cleanup env overrides
+  delete process.env.SOCKET_RATE_LIMIT;
+  delete process.env.SOCKET_RATE_WINDOW_MS;
   await stopServer();
 });

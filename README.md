@@ -39,6 +39,17 @@ Optional: running the OpenRouter proxy locally
 -   Enable `DEBUG_OPENROUTER=1` or `DEBUG_RETRY=1` for verbose logs that show timeout values and retry attempts to help troubleshoot slow or failing requests.
 -   Rate limits: the OpenRouter service may return `429 Too Many Requests` when your account or the free tier quota is exhausted. The proxy now surfaces 429 errors directly (including `Retry-After` when provided) and will not retry those requests. If you encounter 429s, either add credits/upgrade the plan or wait for the window to reset. You can also set `DEV_ALLOW_CLIENT_KEY=1` and provide your own `X-OpenRouter-Key` to test with a different account during development.
 
+### Socket server (dev) configuration
+
+The bundled socket server (`scripts/socket-server.cjs`) is a convenience dev tool. It supports a few environment variables that control CORS, rate limits, and logging:
+
+-   **SOCKET_RATE_LIMIT** — Maximum messages allowed _per socket_ during the rate window. Default: `5`.
+-   **SOCKET_RATE_WINDOW_MS** — Length of the rate-limit window in milliseconds. Default: `5000` (5 seconds).
+-   **SOCKET_ALLOWED_ORIGINS** — Comma-separated allowlist for CORS (e.g. `https://allowed.example.com`). When set, only requests from these origins will receive CORS headers; in production, leaving this unset will block cross-origin requests by default.
+-   **SOCKET_SERVER_QUIET** — Set to `1` or `true` to suppress console logs from the socket server (useful in CI). Default: `false`.
+
+For convenience, `SOCKET_PORT` and `SOCKET_AUTH_TOKEN` are also supported (see `docs/fitur-penilaian/log-stream.md` for more detail). These settings are intended to make the dev socket server safer to run in shared or CI environments.
+
 ```
 ![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)
 ```
