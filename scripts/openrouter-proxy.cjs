@@ -82,7 +82,41 @@ function createApp(opts = {}) {
 			});
 
 			if (!response) throw new Error("no response from fetch");
-			if (response.status >= 500) throw new Error("server_error:" + response.status);
+
+			// Parse body for non-success statuses so we can include messages
+			if (response.status >= 400) {
+				let body = null;
+				try {
+					body = await response.json();
+				} catch (e) {
+					// ignore parse errors
+				}
+
+				if (response.status === 429) {
+					const msg = body?.message || body?.error || JSON.stringify(body) || "rate limit";
+					const retryAfter =
+						response.headers && typeof response.headers.get === "function"
+							? response.headers.get("retry-after")
+							: null;
+					const err = new Error(`rate_limit:${msg}`);
+					err.status = 429;
+					err.noRetry = true; // don't retry rate-limit errors
+					err.retryAfter = retryAfter;
+					throw err;
+				}
+
+				// For other 4xx client errors, surface the message and don't retry
+				if (response.status >= 400 && response.status < 500) {
+					const err = new Error(`client_error:${response.status}:${JSON.stringify(body)}`);
+					err.status = response.status;
+					err.noRetry = true;
+					throw err;
+				}
+
+				// For 5xx, throw to trigger retry logic
+				if (response.status >= 500) throw new Error("server_error:" + response.status);
+			}
+
 			const json = await response.json();
 			return { status: response.status, body: json };
 		};
@@ -91,7 +125,7 @@ function createApp(opts = {}) {
 		const timeoutMsEnv = process.env.OPENROUTER_TIMEOUT_MS
 			? parseInt(process.env.OPENROUTER_TIMEOUT_MS, 10)
 			: undefined;
-		const timeoutMs = typeof timeoutMsEnv === "number" && !Number.isNaN(timeoutMsEnv) ? timeoutMsEnv : 8000;
+		const timeoutMs = typeof timeoutMsEnv === "number" && !Number.isNaN(timeoutMsEnv) ? timeoutMsEnv : 60000; // default 60s per attempt
 		if (process.env.DEBUG_OPENROUTER === "1") console.log(`OpenRouter call: timeoutMs=${timeoutMs}`);
 		const result = await retryUtil.retry(doFetch, {
 			retries: 3,

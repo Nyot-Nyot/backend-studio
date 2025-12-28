@@ -198,7 +198,7 @@
 
 ---
 
-### [services/openApiService.ts](../services/openApiService.ts)
+### [services/openApiService.ts](../services/openApiService.ts) skipped [x]
 
 -   Infers request schema from response JSON which is likely incorrect and can produce misleading OpenAPI specs.
 -   Treats null responses as strings in schema inference which is inconsistent; examples and schema should match correctly.

@@ -35,6 +35,9 @@ Optional: running the OpenRouter proxy locally
 
 -   Start dev proxy that forwards requests to OpenRouter (reads `OPENROUTER_API_KEY`): `OPENROUTER_API_KEY=<your_key> npm run dev:openrouter-proxy` (runs on port 3002 by default). This keeps your API key server-side and out of the browser.
 -   For convenience during development only, you can allow client-provided keys by setting `DEV_ALLOW_CLIENT_KEY=1` when starting the proxy. This lets the UI send an `X-OpenRouter-Key` header for ad-hoc testing (NOT recommended for production): `DEV_ALLOW_CLIENT_KEY=1 npm run dev:openrouter-proxy`.
+-   To adjust how long the proxy waits per attempt, set `OPENROUTER_TIMEOUT_MS` (milliseconds). The default is `60000` (60s).
+-   Enable `DEBUG_OPENROUTER=1` or `DEBUG_RETRY=1` for verbose logs that show timeout values and retry attempts to help troubleshoot slow or failing requests.
+-   Rate limits: the OpenRouter service may return `429 Too Many Requests` when your account or the free tier quota is exhausted. The proxy now surfaces 429 errors directly (including `Retry-After` when provided) and will not retry those requests. If you encounter 429s, either add credits/upgrade the plan or wait for the window to reset. You can also set `DEV_ALLOW_CLIENT_KEY=1` and provide your own `X-OpenRouter-Key` to test with a different account during development.
 
 ```
 ![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)
