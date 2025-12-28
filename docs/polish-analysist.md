@@ -125,7 +125,7 @@
 
 ---
 
-### [components/TestConsole.tsx](../components/TestConsole.tsx)
+### [components/TestConsole.tsx](../components/TestConsole.tsx) complete [x]
 
 -   `JsonViewer` splitting logic is naive and can break for nested strings containing colons; fragile small parser — consider a real highlighter or safer tokenization.
 -   Headers displayed with numeric keys in mapping (`key={i}`) — use stable keys where possible.

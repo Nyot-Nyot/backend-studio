@@ -9,44 +9,18 @@ interface TestConsoleProps {
   setState: (state: TestConsoleState) => void;
 }
 
-// Lightweight syntax highlighter for JSON
-const JsonViewer = ({ json }: { json: string }) => {
-    try {
-        const lines = json.split('\n');
-        return (
-            <pre className="font-mono text-sm leading-relaxed whitespace-pre-wrap break-all">
-                {lines.map((line, i) => {
-                    const parts = line.split(/(".*?"|:|\d+|true|false|null)/g).filter(Boolean);
-                    
-                    return (
-                        <div key={i}>
-                            {parts.map((part, j) => {
-                                let className = "text-slate-400"; 
-                                
-                                if (part.startsWith('"')) {
-                                    if (part.endsWith('":') || (parts[j+1] && parts[j+1].trim().startsWith(':'))) {
-                                         className = "text-sky-300 font-bold"; 
-                                    } else {
-                                         className = "text-emerald-300"; 
-                                    }
-                                } else if (/^\d+/.test(part)) {
-                                    className = "text-amber-300"; 
-                                } else if (/^true|false/.test(part)) {
-                                    className = "text-rose-300 font-bold"; 
-                                } else if (part === 'null') {
-                                    className = "text-slate-500 italic"; 
-                                }
+import { highlightJson } from "../utils/jsonHighlighter";
 
-                                return <span key={j} className={className}>{part}</span>
-                            })}
-                        </div>
-                    )
-                })}
-            </pre>
-        )
-    } catch {
-        return <pre className="text-slate-300">{json}</pre>;
-    }
+// Lightweight, safe JSON viewer using highlightJson
+const JsonViewer = ({ json }: { json: string }) => {
+  try {
+    const html = highlightJson(json);
+    return (
+      <pre className="font-mono text-sm leading-relaxed whitespace-pre-wrap break-all" dangerouslySetInnerHTML={{ __html: html }} />
+    );
+  } catch {
+    return <pre className="text-slate-300">{json}</pre>;
+  }
 };
 
 export const TestConsole: React.FC<TestConsoleProps> = ({ mocks, state, setState }) => {
@@ -57,7 +31,9 @@ export const TestConsole: React.FC<TestConsoleProps> = ({ mocks, state, setState
       setState({ ...state, ...updates });
   };
 
-  const handleSend = async (override?: { method?: HttpMethod; path?: string; body?: string }) => {
+  type SendOptions = { method?: HttpMethod; path?: string; body?: string; _retryCount?: number };
+
+  const handleSend = async (override?: SendOptions) => {
     const method = override?.method ?? state.method;
     const path = override?.path ?? state.path;
     const body = override?.body ?? state.body;
@@ -125,15 +101,28 @@ export const TestConsole: React.FC<TestConsoleProps> = ({ mocks, state, setState
         });
 
     } catch (error) {
+        const errMsg = (error as Error).message || 'Unknown error';
         updateState({
             response: {
               status: 0,
-              body: JSON.stringify({ error: "Network Error", details: (error as Error).message }, null, 2),
+              body: JSON.stringify({ error: "Network Error", details: errMsg }, null, 2),
               time: Date.now() - startTime,
               headers: [],
               error: "Network connection failed"
             }
         });
+
+        // Automatic simple retry with exponential backoff up to 2 retries for transient errors
+        const shouldRetry = true; // keep this conservative; could add heuristics later
+        if (shouldRetry && !override?._retryCount) {
+            const retryAttempt = 1;
+            const backoff = Math.min(2000, 200 * Math.pow(2, retryAttempt));
+            setTimeout(() => handleSend({...override, _retryCount: retryAttempt}), backoff);
+        } else if (shouldRetry && override?._retryCount && override._retryCount < 2) {
+            const retryAttempt = override._retryCount + 1;
+            const backoff = Math.min(2000, 200 * Math.pow(2, retryAttempt));
+            setTimeout(() => handleSend({...override, _retryCount: retryAttempt}), backoff);
+        }
     } finally {
         setIsLoading(false);
     }
@@ -285,8 +274,8 @@ export const TestConsole: React.FC<TestConsoleProps> = ({ mocks, state, setState
                         <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Response Headers</span>
                      </div>
                      <div className="p-2">
-                        {state.response.headers.map((h, i) => (
-                            <div key={i} className="flex flex-col py-2 px-3 hover:bg-slate-50 rounded-lg transition-colors border-b border-dashed border-slate-100 last:border-0">
+                        {state.response.headers.map((h) => (
+                            <div key={`${h.key}:${h.value}`} className="flex flex-col py-2 px-3 hover:bg-slate-50 rounded-lg transition-colors border-b border-dashed border-slate-100 last:border-0">
                                 <span className="text-[11px] font-bold text-slate-700 mb-0.5">{h.key}</span>
                                 <span className="text-xs text-slate-500 font-mono break-all">{h.value}</span>
                             </div>
