@@ -442,9 +442,9 @@ function App() {
 	}, [activeProjectId]);
 
 	// --- HELPERS ---
-	const addToast = (message: string, type: ToastType) => {
+	const addToast = (message: string, type: ToastType, opts?: { duration?: number }) => {
 		const id = crypto.randomUUID();
-		setToasts(prev => [...prev, { id, message, type }]);
+		setToasts(prev => [...prev, { id, message, type, duration: opts?.duration }]);
 	};
 
 	const removeToast = (id: string) => {

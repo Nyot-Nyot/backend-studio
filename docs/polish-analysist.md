@@ -133,7 +133,7 @@
 
 ---
 
-### [components/Toast.tsx](../components/Toast.tsx)
+### [components/Toast.tsx](../components/Toast.tsx) complete [x]
 
 -   Toast container is `pointer-events-none` with children `pointer-events-auto` — subtle but may interfere with expected mobile interactions; ensure accessibility (announcements for screen readers).
 -   Toast timing (4s) is fixed; consider exposing to callers or allowing longer durations for important errors.
