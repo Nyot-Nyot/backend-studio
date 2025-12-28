@@ -89,7 +89,7 @@
 
 ---
 
-### Tests (multiple files) e.g. [test/openApiService.test.ts](../test/openApiService.test.ts)
+### Tests (multiple files) e.g. [test/openApiService.test.ts](../test/openApiService.test.ts) skipped [x]
 
 -   Tests contain many `console.log` statements used for human-readable output — noisy in CI; prefer assertion frameworks and minimal logs.
 -   Several test files mock `crypto` globally and modify global objects with `any` casts — fragile and may cause cross-test pollution.
@@ -98,7 +98,7 @@
 
 ---
 
-### [components/Sidebar.tsx](../components/Sidebar.tsx)
+### [components/Sidebar.tsx](../components/Sidebar.tsx) complete [x]
 
 -   Navigation items use `div` with `onClick` rather than semantic `button` elements — keyboard and screen-reader accessibility suffers (no role, tabIndex, or key handlers).
 -   Collapse/expand control and some action buttons don't have ARIA labels or focus outlines; collapsed project avatar may throw if `projects` is empty.

@@ -17,7 +17,7 @@ import {
 	Trash2,
 	X,
 } from "lucide-react";
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import { FEATURES } from "../config/featureFlags";
 import { Project, ViewState } from "../types";
 
@@ -52,27 +52,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 	const [newProjectName, setNewProjectName] = useState("");
 	const [isCollapsed, setIsCollapsed] = useState(false);
 
-	// Memoize feature flag evaluations so they don't run every render and are easier to test
-	const features = useMemo(
-		() => ({
-			ai: FEATURES.AI(),
-			logs: FEATURES.LOG_VIEWER(),
-			exportServer: FEATURES.EXPORT_SERVER(),
-		}),
-		[]
-	);
-
-	const handleDeleteProject = (id: string) => {
-		if (!id) return;
-		if (confirm("Delete this workspace? This action cannot be undone.")) {
-			onDeleteProject(id);
-		}
-	};
-
 	const navItemClass = (view: ViewState) =>
 		`relative flex items-center ${
 			isCollapsed ? "justify-center px-2" : "space-x-3 px-4"
-		} py-3 rounded-xl transition-all duration-200 cursor-pointer group focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 ${
+		} py-3 rounded-xl transition-all duration-200 cursor-pointer group ${
 			currentView === view
 				? "bg-slate-800 text-white shadow-lg shadow-black/20"
 				: "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
@@ -112,9 +95,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 			{/* Toggle Button */}
 			<button
 				onClick={() => setIsCollapsed(!isCollapsed)}
-				aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-				aria-expanded={!isCollapsed}
-				className="absolute -right-3 top-8 bg-slate-800 text-slate-400 border border-slate-700 rounded-full p-1 hover:text-white hover:bg-slate-700 transition-colors shadow-sm z-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50"
+				className="absolute -right-3 top-8 bg-slate-800 text-slate-400 border border-slate-700 rounded-full p-1 hover:text-white hover:bg-slate-700 transition-colors shadow-sm z-50"
 			>
 				{isCollapsed ? <PanelLeftOpen className="w-3 h-3" /> : <PanelLeftClose className="w-3 h-3" />}
 			</button>
@@ -148,9 +129,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 							</span>
 							{projects.length > 1 && (
 								<button
-									onClick={() => handleDeleteProject(activeProjectId)}
-									aria-label="Delete current workspace"
-									className="text-slate-600 hover:text-red-400 transition-colors p-1 hover:bg-slate-800 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/60"
+									onClick={() => onDeleteProject(activeProjectId)}
+									className="text-slate-600 hover:text-red-400 transition-colors p-1 hover:bg-slate-800 rounded"
 									title="Delete current workspace"
 								>
 									<Trash2 className="w-3.5 h-3.5" />
@@ -177,9 +157,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
 						<button
 							onClick={onTriggerCommandPalette}
-							aria-label="Open command palette"
-							aria-keyshortcuts="Meta+K"
-							className="w-full flex items-center space-x-2 bg-slate-800/50 hover:bg-slate-800 text-slate-400 hover:text-slate-200 py-2 px-3 rounded-lg text-xs transition-colors border border-slate-800 hover:border-slate-700 mb-4 group focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50"
+							className="w-full flex items-center space-x-2 bg-slate-800/50 hover:bg-slate-800 text-slate-400 hover:text-slate-200 py-2 px-3 rounded-lg text-xs transition-colors border border-slate-800 hover:border-slate-700 mb-4 group"
 						>
 							<Search className="w-3.5 h-3.5" />
 							<span>Search...</span>
@@ -190,7 +168,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 					</>
 				) : (
 					<div className="mb-6 w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center text-slate-400 font-bold border border-slate-700">
-						{projects.find(p => p.id === activeProjectId)?.name?.charAt(0) ?? "?"}
+						{projects.find(p => p.id === activeProjectId)?.name.charAt(0)}
 					</div>
 				)}
 
@@ -208,16 +186,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
 						<div className="flex items-center space-x-2">
 							<button
 								onClick={handleCreateSubmit}
-								aria-label="Create workspace"
 								disabled={!newProjectName.trim()}
-								className="flex-1 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-medium py-1.5 rounded-lg transition-all shadow-sm active:scale-95 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50"
+								className="flex-1 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-medium py-1.5 rounded-lg transition-all shadow-sm active:scale-95 flex items-center justify-center"
 							>
 								<Check className="w-3.5 h-3.5 mr-1.5" /> Create
 							</button>
 							<button
 								onClick={() => setIsCreating(false)}
-								aria-label="Cancel workspace creation"
-								className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/40"
+								className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-xs transition-colors"
 							>
 								<X className="w-3.5 h-3.5" />
 							</button>
@@ -227,8 +203,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 					!isCollapsed && (
 						<button
 							onClick={() => setIsCreating(true)}
-							aria-label="Create new workspace"
-							className="w-full flex items-center justify-center space-x-2 bg-transparent hover:bg-slate-800 text-slate-500 hover:text-slate-300 py-2 px-3 rounded-lg text-xs font-medium transition-all border border-dashed border-slate-700 hover:border-slate-600 group focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50"
+							className="w-full flex items-center justify-center space-x-2 bg-transparent hover:bg-slate-800 text-slate-500 hover:text-slate-300 py-2 px-3 rounded-lg text-xs font-medium transition-all border border-dashed border-slate-700 hover:border-slate-600 group"
 						>
 							<FolderPlus className="w-3.5 h-3.5 transition-transform group-hover:scale-110" />
 							<span>New Workspace</span>
@@ -242,24 +217,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
 				<div className="space-y-3">
 					<button
 						onClick={onNewMock}
-						aria-label="Design Route"
 						title={isCollapsed ? "Design Route" : ""}
 						className={`w-full flex items-center ${
 							isCollapsed ? "justify-center" : "justify-center space-x-3"
-						} bg-slate-800 hover:bg-slate-700 text-white py-3 px-4 rounded-xl transition-all shadow-sm hover:shadow-md border border-slate-700 hover:border-slate-600 group active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50`}
+						} bg-slate-800 hover:bg-slate-700 text-white py-3 px-4 rounded-xl transition-all shadow-sm hover:shadow-md border border-slate-700 hover:border-slate-600 group active:scale-95`}
 					>
 						<PenTool className="w-4 h-4 text-brand-400 group-hover:text-brand-300" />
 						{!isCollapsed && <span className="font-medium text-sm">Design Route</span>}
 					</button>
 
-					{features.ai && (
+					{FEATURES.AI() && (
 						<button
 							onClick={onMagicCreate}
-							aria-label="AI Architect"
 							title={isCollapsed ? "AI Architect" : ""}
 							className={`w-full flex items-center ${
 								isCollapsed ? "justify-center" : "justify-center space-x-3"
-							} bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white py-3 px-4 rounded-xl transition-all shadow-lg shadow-indigo-900/20 hover:shadow-indigo-900/40 group relative overflow-hidden active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60`}
+							} bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white py-3 px-4 rounded-xl transition-all shadow-lg shadow-indigo-900/20 hover:shadow-indigo-900/40 group relative overflow-hidden active:scale-95`}
 						>
 							<div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
 							<Sparkles className="w-4 h-4 text-violet-200 group-hover:text-white transition-colors" />
@@ -279,14 +252,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 					)}
 					<nav className="space-y-1">
 						<div
-							role="button"
-							tabIndex={0}
 							onClick={() => onChangeView("dashboard")}
-							onKeyDown={e =>
-								e.key === "Enter" || e.key === " " ? onChangeView("dashboard") : undefined
-							}
-							aria-pressed={currentView === "dashboard"}
-							aria-label="Overview"
 							className={navItemClass("dashboard")}
 							title="Overview"
 						>
@@ -301,12 +267,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 							{!isCollapsed && <span className="font-medium">Overview</span>}
 						</div>
 						<div
-							role="button"
-							tabIndex={0}
 							onClick={() => onChangeView("test")}
-							onKeyDown={e => (e.key === "Enter" || e.key === " " ? onChangeView("test") : undefined)}
-							aria-pressed={currentView === "test"}
-							aria-label="Prototype Lab"
 							className={navItemClass("test")}
 							title="Prototype Lab"
 						>
@@ -321,12 +282,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 							{!isCollapsed && <span className="font-medium">Prototype Lab</span>}
 						</div>
 						<div
-							role="button"
-							tabIndex={0}
 							onClick={() => onChangeView("database")}
-							onKeyDown={e => (e.key === "Enter" || e.key === " " ? onChangeView("database") : undefined)}
-							aria-pressed={currentView === "database"}
-							aria-label="Database"
 							className={navItemClass("database")}
 							title="Database"
 						>
@@ -340,14 +296,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 							/>
 							{!isCollapsed && <span className="font-medium">Database</span>}
 						</div>
-						{features.logs && (
+						{FEATURES.LOG_VIEWER() && (
 							<div
-								role="button"
-								tabIndex={0}
 								onClick={() => onChangeView("logs")}
-								onKeyDown={e => (e.key === "Enter" || e.key === " " ? onChangeView("logs") : undefined)}
-								aria-pressed={currentView === "logs"}
-								aria-label="Traffic Monitor"
 								className={navItemClass("logs")}
 								title="Traffic Monitor"
 							>
@@ -363,12 +314,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 							</div>
 						)}
 						<div
-							role="button"
-							tabIndex={0}
 							onClick={() => onChangeView("settings")}
-							onKeyDown={e => (e.key === "Enter" || e.key === " " ? onChangeView("settings") : undefined)}
-							aria-pressed={currentView === "settings"}
-							aria-label="Configuration"
 							className={navItemClass("settings")}
 							title="Configuration"
 						>
@@ -386,15 +332,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
 				</div>
 
 				{/* Deploy Button Area */}
-				{features.exportServer && (
+				{FEATURES.EXPORT_SERVER() && (
 					<div className="mt-auto pt-6">
 						<button
 							onClick={onDeploy}
-							aria-label="Export Server"
 							title={isCollapsed ? "Export Server" : ""}
 							className={`w-full flex items-center ${
 								isCollapsed ? "justify-center" : "space-x-3 px-4"
-							} py-3 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-500 border border-emerald-500/20 hover:border-emerald-500/40 rounded-xl transition-all group focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/40`}
+							} py-3 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-500 border border-emerald-500/20 hover:border-emerald-500/40 rounded-xl transition-all group`}
 						>
 							<Rocket className="w-5 h-5 text-emerald-500" />
 							{!isCollapsed && (
