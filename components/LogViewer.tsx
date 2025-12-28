@@ -2,6 +2,20 @@ import { Pause, Play, Search, Terminal, Trash, Wifi } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { LogEntry } from "../types";
 
+// Format timestamp in a locale-aware way and include milliseconds for precision
+export const formatTime = (timestamp: string | number | Date) => {
+	const dt = new Date(timestamp);
+	const fmt = new Intl.DateTimeFormat(undefined, {
+		hour: "2-digit",
+		minute: "2-digit",
+		second: "2-digit",
+	});
+	const ms = dt.getMilliseconds().toString().padStart(3, "0");
+	return `${fmt.format(dt)}.${ms}`;
+};
+
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 interface LogViewerProps {
 	logs: LogEntry[];
 	onClearLogs: () => void;
@@ -12,13 +26,44 @@ export const LogViewer: React.FC<LogViewerProps> = ({ logs, onClearLogs, socketS
 	const [isPaused, setIsPaused] = useState(false);
 	const [filter, setFilter] = useState("");
 	const logsEndRef = useRef<HTMLDivElement>(null);
+	const containerRef = useRef<HTMLDivElement>(null);
+	const [isFollowing, setIsFollowing] = useState(true);
+	const prevLogsLength = useRef<number>(logs.length);
+	const [newCount, setNewCount] = useState(0);
 
-	// Auto-scroll to bottom
+	// Render batching for long streams (show last N by default)
+	const BATCH = 300;
+	const [displayedCount, setDisplayedCount] = useState(Math.min(BATCH, logs.length));
+
+	// Auto-scroll to bottom when following and not paused; track new items when not following
 	useEffect(() => {
-		if (!isPaused && logsEndRef.current) {
+		const added = logs.length - prevLogsLength.current;
+		if (added > 0 && !isFollowing) {
+			setNewCount(prev => prev + added);
+		} else if (isFollowing) {
+			setNewCount(0);
+		}
+		prevLogsLength.current = logs.length;
+
+		if (!isPaused && isFollowing && logsEndRef.current) {
 			logsEndRef.current.scrollIntoView({ behavior: "smooth" });
 		}
-	}, [logs, isPaused]);
+	}, [logs, isPaused, isFollowing]);
+
+	const onScroll = () => {
+		const el = containerRef.current;
+		if (!el) return;
+		const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+		setIsFollowing(atBottom);
+		if (atBottom) setNewCount(0);
+	};
+
+	const jumpToBottom = () => {
+		if (!containerRef.current) return;
+		containerRef.current.scrollTop = containerRef.current.scrollHeight;
+		setIsFollowing(true);
+		setNewCount(0);
+	};
 
 	const lowerFilter = filter.toLowerCase();
 	const filteredLogs = logs.filter(
@@ -28,6 +73,28 @@ export const LogViewer: React.FC<LogViewerProps> = ({ logs, onClearLogs, socketS
 			l.statusCode.toString().includes(lowerFilter) ||
 			l.ip.toLowerCase().includes(lowerFilter)
 	);
+
+	// Show only last `displayedCount` logs by default for performance; when filtering, show all matches
+	const displayLogs = filter ? filteredLogs : filteredLogs.slice(-displayedCount);
+
+	const highlightMatch = (text: string, q: string) => {
+		if (!q) return text;
+		try {
+			const re = new RegExp(`(${escapeRegExp(q)})`, "ig");
+			const parts = text.split(re);
+			return parts.map((p, i) =>
+				re.test(p) ? (
+					<mark key={i} className="bg-amber-500/20 text-amber-200 px-0.5 rounded">
+						{p}
+					</mark>
+				) : (
+					<span key={i}>{p}</span>
+				)
+			);
+		} catch (e) {
+			return text;
+		}
+	};
 
 	return (
 		<div className="flex flex-col h-screen bg-[#0f172a] text-slate-300 font-mono text-sm animate-enter">
@@ -101,6 +168,62 @@ export const LogViewer: React.FC<LogViewerProps> = ({ logs, onClearLogs, socketS
 
 					<div className="h-6 w-px bg-slate-700 mx-2"></div>
 
+					{/* Follow / Jump controls */}
+					<button
+						onClick={() => {
+							if (!isFollowing) jumpToBottom();
+							setIsFollowing(prev => !prev);
+						}}
+						aria-pressed={isFollowing}
+						className={`p-2 rounded-lg transition-colors border ${
+							isFollowing
+								? "bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700"
+								: "bg-slate-700/30 text-slate-400 border-slate-700"
+						}`}
+						title={isFollowing ? "Following new logs" : "Not following; click to enable follow"}
+					>
+						<span className="text-xs font-medium">{isFollowing ? "Follow" : "Paused"}</span>
+					</button>
+
+					{newCount > 0 && (
+						<button
+							onClick={jumpToBottom}
+							className="ml-2 px-3 py-1 rounded bg-slate-800 text-slate-200 text-xs"
+						>
+							Jump to newest ({newCount})
+						</button>
+					)}
+
+					<button
+						onClick={async () => {
+							const blob = new Blob([JSON.stringify(logs, null, 2)], { type: "application/json" });
+							const url = URL.createObjectURL(blob);
+							const a = document.createElement("a");
+							a.href = url;
+							a.download = `logs-${Date.now()}.json`;
+							a.click();
+							URL.revokeObjectURL(url);
+						}}
+						className="ml-2 px-3 py-1 rounded bg-slate-800 text-slate-200 text-xs hover:bg-slate-700"
+						title="Export logs as JSON"
+					>
+						Export
+					</button>
+
+					<button
+						onClick={async () => {
+							try {
+								await navigator.clipboard.writeText(JSON.stringify(logs, null, 2));
+							} catch (e) {
+								console.warn("Copy failed", e);
+							}
+						}}
+						className="ml-2 px-3 py-1 rounded bg-slate-800 text-slate-200 text-xs hover:bg-slate-700"
+						title="Copy all logs to clipboard"
+					>
+						Copy
+					</button>
+
 					<button
 						onClick={() => setIsPaused(!isPaused)}
 						className={`p-2 rounded-lg transition-colors border ${
@@ -137,8 +260,12 @@ export const LogViewer: React.FC<LogViewerProps> = ({ logs, onClearLogs, socketS
 			</div>
 
 			{/* Logs Body */}
-			<div className="flex-1 overflow-y-auto p-2 space-y-0.5 dark-scroll scroll-smooth">
-				{filteredLogs.length === 0 ? (
+			<div
+				className="flex-1 overflow-y-auto p-2 space-y-0.5 dark-scroll scroll-smooth"
+				ref={containerRef}
+				onScroll={onScroll}
+			>
+				{displayLogs.length === 0 ? (
 					<div className="h-full flex flex-col items-center justify-center text-slate-600 space-y-4">
 						<div className="p-4 bg-slate-800/50 rounded-full">
 							<Wifi className="w-8 h-8 opacity-50" />
@@ -146,49 +273,82 @@ export const LogViewer: React.FC<LogViewerProps> = ({ logs, onClearLogs, socketS
 						<p className="text-xs">Waiting for incoming traffic from Prototype Lab...</p>
 					</div>
 				) : (
-					filteredLogs.map(log => (
-						<div
-							key={log.id}
-							className="grid grid-cols-12 gap-4 px-4 py-2 hover:bg-[#1e293b] rounded-lg transition-colors border border-transparent hover:border-slate-700/50 items-center text-xs group"
-						>
-							<div className="col-span-2 text-slate-500 group-hover:text-slate-400">
-								{new Date(log.timestamp).toLocaleTimeString()}
-							</div>
-
-							<div className="col-span-1">
-								<span
-									className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
-										log.method === "GET"
-											? "bg-blue-500/10 text-blue-400"
-											: log.method === "POST"
-											? "bg-emerald-500/10 text-emerald-400"
-											: log.method === "DELETE"
-											? "bg-red-500/10 text-red-400"
-											: "bg-amber-500/10 text-amber-400"
-									}`}
+					<div>
+						{/* Load older for long streams */}
+						{displayedCount < logs.length && !filter && (
+							<div className="flex justify-center mb-2">
+								<button
+									onClick={() => setDisplayedCount(prev => Math.min(prev + BATCH, logs.length))}
+									className="px-3 py-1 rounded bg-slate-800 text-slate-200 text-xs hover:bg-slate-700"
 								>
-									{log.method}
-								</span>
+									Load older
+								</button>
 							</div>
+						)}
 
-							<div className="col-span-1">
-								<span
-									className={`font-bold ${
-										log.statusCode >= 400 ? "text-red-400" : "text-emerald-400"
-									}`}
-								>
-									{log.statusCode}
-								</span>
+						{displayLogs.map(log => (
+							<div
+								key={log.id}
+								className="grid grid-cols-12 gap-4 px-4 py-2 hover:bg-[#1e293b] rounded-lg transition-colors border border-transparent hover:border-slate-700/50 items-center text-xs group"
+							>
+								<div className="col-span-2 text-slate-500 group-hover:text-slate-400">
+									{formatTime(log.timestamp)}
+								</div>
+
+								<div className="col-span-1">
+									<span
+										className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
+											log.method === "GET"
+												? "bg-blue-500/10 text-blue-400"
+												: log.method === "POST"
+												? "bg-emerald-500/10 text-emerald-400"
+												: log.method === "DELETE"
+												? "bg-red-500/10 text-red-400"
+												: "bg-amber-500/10 text-amber-400"
+										}`}
+									>
+										{log.method}
+									</span>
+								</div>
+
+								<div className="col-span-1">
+									<span
+										className={`font-bold ${
+											log.statusCode >= 400 ? "text-red-400" : "text-emerald-400"
+										}`}
+									>
+										{log.statusCode}
+									</span>
+								</div>
+
+								<div className="col-span-5 text-slate-300 truncate font-medium" title={log.path}>
+									{highlightMatch(log.path, filter)}
+								</div>
+
+								<div className="col-span-1 text-right text-slate-500">{log.duration}ms</div>
+
+								<div className="col-span-1 text-right text-slate-600">
+									{highlightMatch(log.ip, filter)}
+								</div>
+
+								<div className="col-span-1 pl-2 text-right">
+									<button
+										onClick={async () => {
+											try {
+												await navigator.clipboard.writeText(JSON.stringify(log));
+											} catch (e) {
+												console.warn("Copy failed", e);
+											}
+										}}
+										className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs"
+										title="Copy log line"
+									>
+										Copy
+									</button>
+								</div>
 							</div>
-
-							<div className="col-span-5 text-slate-300 truncate font-medium" title={log.path}>
-								{log.path}
-							</div>
-
-							<div className="col-span-1 text-right text-slate-500">{log.duration}ms</div>
-							<div className="col-span-2 text-right text-slate-600">{log.ip}</div>
-						</div>
-					))
+						))}
+					</div>
 				)}
 				<div ref={logsEndRef} />
 			</div>

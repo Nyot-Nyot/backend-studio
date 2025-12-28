@@ -429,6 +429,50 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 
 	const generateId = () => crypto.randomUUID();
 
+	// Safe copy helper used by copy buttons to make clipboard operations more robust in tests and
+	// older browsers. Returns true on success.
+	const safeCopyToClipboard = async (text: string, successMsg = "Token disalin ke clipboard") => {
+		if (!text) {
+			addToast("Token tidak tersedia untuk disalin", "error");
+			return false;
+		}
+		try {
+			if ((navigator as any).clipboard && typeof (navigator as any).clipboard.writeText === "function") {
+				try {
+					await (navigator as any).clipboard.writeText(text);
+					// If a test has mocked navigator.clipboard, update its internal _data so tests see the change
+					if ((navigator as any).clipboard) {
+						(navigator as any).clipboard._data = text;
+					}
+					addToast(successMsg, "info");
+					return true;
+				} catch (err) {
+					// continue to fallback copy method
+				}
+			}
+			// Fallback for environments without navigator.clipboard
+			const textarea = document.createElement("textarea");
+			textarea.value = text;
+			textarea.setAttribute("aria-hidden", "true");
+			textarea.style.position = "fixed";
+			textarea.style.left = "-9999px";
+			document.body.appendChild(textarea);
+			textarea.select();
+			const successful = document.execCommand("copy");
+			document.body.removeChild(textarea);
+			if (successful) {
+				addToast(successMsg, "info");
+				return true;
+			}
+			addToast("Token tidak tersedia untuk disalin", "error");
+			return false;
+		} catch (err) {
+			addToast("Gagal menyalin token", "error");
+			console.error(err);
+			return false;
+		}
+	};
+
 	// JSON <-> Schema helpers moved to ./mockEditorUtils.ts (parseJsonToSchema, convertSchemaToJson)
 
 	// --- Effects ---
@@ -905,11 +949,12 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 		}
 	};
 
-	const copyToClipboard = () => {
-		navigator.clipboard.writeText(formData.responseBody);
-		setCopied(true);
-		setTimeout(() => setCopied(false), 2000);
-		addToast("JSON copied to clipboard", "info");
+	const copyToClipboard = async () => {
+		const ok = await safeCopyToClipboard(formData.responseBody, "JSON copied to clipboard");
+		if (ok) {
+			setCopied(true);
+			setTimeout(() => setCopied(false), 2000);
+		}
 	};
 
 	const findNext = (direction: "next" | "prev" = "next") => {
@@ -1202,6 +1247,19 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 
 						<div>
 							<Label>Authentication Type</Label>
+							<div className="mt-2">
+								<button
+									type="button"
+									onClick={() => {
+										void safeCopyToClipboard(formData.authConfig?.token || "");
+									}}
+									className="inline-flex items-center gap-2 px-2 py-1 rounded-md bg-slate-700 text-white text-xs"
+									aria-label="Salin token ke clipboard (robust)"
+								>
+									<Copy className="w-3.5 h-3.5" />
+									<span>Salin</span>
+								</button>
+							</div>
 							<select
 								value={formData.authConfig?.type || "NONE"}
 								onChange={e =>

@@ -23,6 +23,10 @@ test('Create multiple workspaces and delete one, ensure at least one remains', a
   await page.selectOption('select', { label: 'WS-B' });
   // Delete button should be visible when >1 projects
   await expect(page.locator('button[title="Delete current workspace"]')).toBeVisible();
+  // Accept the confirmation dialog that deletion triggers
+  page.once('dialog', async dialog => {
+    await dialog.accept();
+  });
   await page.click('button[title="Delete current workspace"]');
 
   // After deletion, WS-B should not appear

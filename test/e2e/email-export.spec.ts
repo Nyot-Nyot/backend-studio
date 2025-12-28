@@ -2,21 +2,23 @@ import { expect, test } from '@playwright/test';
 
 test('email export modal validation', async ({ page }) => {
   await page.goto(process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3001');
-  // Open the Export & Deploy modal via the sidebar
-  await page.click('button:has-text("Export & Deploy Hub")', { timeout: 5000 }).catch(() => { });
+  // Ensure feature flags for export/email are enabled in localStorage for test
+  await page.evaluate(() => {
+    try {
+      localStorage.setItem('feature_export', 'true');
+      localStorage.setItem('feature_email', 'true');
+    } catch (e) {
+      // ignore
+    }
+  });
+  await page.reload();
 
-  // If the Deploy button not directly exposed, click via the Export menu in the UI
-  // Open the Export & Deploy Hub via the header action (fallback)
-  const deployButton = page.locator('button:has-text("Open Export Hub")');
-  if (await deployButton.count() > 0) {
-    await deployButton.first().click();
-  } else {
-    // If not found, open via the settings/deploy button in sidebar
-    await page.click('button:has-text("Export & Deploy Hub")', { timeout: 5000 }).catch(() => { });
-  }
+  // Click any button that opens the Export/Deploy UI (robust against label changes)
+  const exportButton = page.getByRole('button', { name: /export/i }).first();
+  await exportButton.click();
 
-  // Wait for modal to open and click 'Send via Email'
-  await page.waitForSelector('text=Export & Deploy Hub');
+  // Wait for modal to open and click 'Send via Email' (allow animation time)
+  await page.waitForSelector('text=Export & Deploy Hub', { timeout: 15000 });
   await page.click('button:has-text("Send via Email")');
 
   // Click send without recipients

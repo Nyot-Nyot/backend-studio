@@ -107,7 +107,7 @@
 
 ---
 
-### [components/LogViewer.tsx](../components/LogViewer.tsx)
+### [components/LogViewer.tsx](../components/LogViewer.tsx) complete [x]
 
 -   Auto-scroll behaviour can be jarring when users pause the feed; there is no option to page or virtualize long logs (memory/performant issues for long streams).
 -   `toLocaleTimeString()` used without locale or format considerations — inconsistent display across environments.
