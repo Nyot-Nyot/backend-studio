@@ -161,11 +161,11 @@
 
 ---
 
-### [services/exportService.ts](../services/exportService.ts)
+### [services/exportService.ts](../services/exportService.ts) complete [x]
 
--   `renderBodyLiteral` falls back to JSON-stringifying a raw string which embeds a quoted string into generated server code — this can surprise consumers expecting valid JSON responses.
--   Generated server code concatenates route bodies and paths without sanitization / escaping — can break or introduce syntax errors for certain characters in names or paths.
--   Server template uses `require('express')` twice and lacks configurable CORS/timeouts; consider a safer template with escaping and options.
+-   `renderBodyLiteral` now distinguishes JSON payloads and plain text. JSON bodies are rendered as pretty-printed object/array literals and the generated server uses `res.json(body)`. Plain text bodies are sent as `text/plain` (via `res.type('text/plain').send(body)`) to avoid surprising consumers expecting non-JSON responses.
+-   Route paths and names are safely escaped using `JSON.stringify` and comment-sanitization to prevent injection and syntax errors in generated code. Tests added to verify path escaping and body rendering behaviour.
+-   Server template cleaned up to avoid double `require('express')` calls, and exposes (env-driven) CORS origin and server timeout (`CORS_ORIGIN` and `SERVER_TIMEOUT_MS`) for safer defaults and configurability.
 
 ---
 
