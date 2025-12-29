@@ -15,7 +15,7 @@
 -   [ ] [components/MockEditor.tsx](./components/MockEditor.tsx)
 -   [ ] [components/MockEditor.tsx.bak](./components/MockEditor.tsx.bak)
 -   [ ] [components/Modal.tsx](./components/Modal.tsx)
--   [ ] [components/Sidebar.tsx](./components/Sidebar.tsx)
+-   [x] [components/Sidebar.tsx](./components/Sidebar.tsx)
 -   [ ] [components/Sidebar.head.tsx](./components/Sidebar.head.tsx)
 -   [ ] [components/TestConsole.tsx](./components/TestConsole.tsx)
 -   [ ] [components/Textarea.tsx](./components/Textarea.tsx)

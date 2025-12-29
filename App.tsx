@@ -1131,20 +1131,20 @@ function Aplikasi() {
 	return (
 		<div className="flex h-screen bg-slate-50 overflow-hidden font-sans text-slate-900">
 			<Sidebar
-				currentView={tampilanAktif}
-				onChangeView={setTampilanAktif}
-				onNewMock={() => {
+				tampilanSaatIni={tampilanAktif}
+				padaUbahTampilan={setTampilanAktif}
+				padaMockBaru={() => {
 					setMockYangDiedit(null);
 					setTampilanAktif("editor");
 				}}
-				onMagicCreate={handlePembuatanOtomatis}
-				projects={daftarProyek}
-				activeProjectId={idProyekAktif}
-				onSelectProject={setIdProyekAktif}
-				onCreateProject={handleBuatProyek}
-				onDeleteProject={handleHapusProyek}
-				onTriggerCommandPalette={() => tampilkanToast("Command Palette akan segera hadir", "info")}
-				onDeploy={() => setApakahModalDeployTerbuka(true)}
+				padaPembuatanAjaib={handlePembuatanOtomatis}
+				daftarProyek={daftarProyek}
+				idProyekAktif={idProyekAktif}
+				padaPilihProyek={setIdProyekAktif}
+				padaBuatProyek={handleBuatProyek}
+				padaHapusProyek={handleHapusProyek}
+				padaTriggerPaletPerintah={() => tampilkanToast("Command Palette akan segera hadir", "info")}
+				padaDeploy={() => setApakahModalDeployTerbuka(true)}
 			/>
 
 			<main className="flex-1 overflow-auto relative bg-[#f8fafc]">
