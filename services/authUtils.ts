@@ -8,14 +8,15 @@ export function maskToken(token?: string) {
 }
 
 export function formatAuthPreview(authConfig?: AuthConfig) {
-  const type = authConfig?.type || "NONE";
-  if (type === "BEARER_TOKEN") {
-    const token = authConfig?.token;
+  // Support both `jenis` (Bahasa Indonesia) and legacy `type` for compatibility
+  const tipe = (authConfig as any)?.jenis ?? (authConfig as any)?.type ?? "NONE";
+  if (tipe === "BEARER_TOKEN") {
+    const token = (authConfig as any)?.token;
     return `Authorization: Bearer ${maskToken(token)}`;
   }
-  if (type === "API_KEY") {
-    const header = authConfig?.headerKey || "x-api-key";
-    const token = authConfig?.token;
+  if (tipe === "API_KEY") {
+    const header = (authConfig as any)?.headerKey || "x-api-key";
+    const token = (authConfig as any)?.token;
     return `${header}: ${maskToken(token)}`;
   }
   return "Public";

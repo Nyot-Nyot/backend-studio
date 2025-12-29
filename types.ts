@@ -182,6 +182,8 @@ export type StateTampilan = 'dashboard' | 'editor' | 'logs' | 'settings' | 'test
 // Menyediakan alias membuat perubahan ini kecil dan aman.
 export { MetodeHttp as HttpMethod };
 export type { Proyek as Project, StateTampilan as ViewState };
+// Alias untuk konfigurasi autentikasi (kompatibilitas)
+export type AuthConfig = KonfigurasiAutentikasi;
 
 /**
  * Tipe untuk toast notifikasi.

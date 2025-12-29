@@ -1,3 +1,4 @@
+// MockEditor.tsx
 import {
 	AlertCircle,
 	AlertTriangle,
@@ -33,80 +34,80 @@ import { formatAuthPreview } from "../services/authUtils";
 import { MOCK_VARIABLES_HELP, patternsConflict } from "../services/mockEngine";
 import { HttpMethod, MockEndpoint } from "../types";
 import { ToastType } from "./Toast";
-import {
-	SchemaField,
-	convertSchemaToJson,
-	deepClone,
-	parseJsonToSchema,
-	validateJsonStructure,
-} from "./mockEditorUtils";
+import { klonDalam, konversiSkemaKeJson, parseJsonKeSkema, SchemaField, validasiStrukturJson } from "./mockEditorUtils";
 
+// Properti untuk komponen MockEditor
 interface MockEditorProps {
-	initialData?: MockEndpoint | null;
-	existingMocks?: MockEndpoint[]; // List of other mocks to check conflicts against
-	onSave: (mock: MockEndpoint) => void;
-	onDelete: (id: string) => void;
-	onCancel: () => void;
-	addToast: (message: string, type: ToastType) => void;
+	initialData?: MockEndpoint | null; // Data mock yang akan diedit (null untuk membuat baru)
+	existingMocks?: MockEndpoint[]; // Daftar mock lain untuk mendeteksi konflik
+	onSave: (mock: MockEndpoint) => void; // Handler untuk menyimpan mock
+	onDelete: (id: string) => void; // Handler untuk menghapus mock
+	onCancel: () => void; // Handler untuk membatalkan edit
+	addToast: (message: string, type: ToastType) => void; // Handler untuk menampilkan toast
 }
 
+// Data default untuk mock baru
 const DEFAULT_MOCK: MockEndpoint = {
 	id: "",
 	projectId: "",
-	name: "New Route",
+	nama: "Route Baru",
 	path: "/api/v1/resource",
-	method: HttpMethod.GET,
+	metode: HttpMethod.GET,
 	statusCode: 200,
 	delay: 0,
 	responseBody: '{\n  "id": "{{$uuid}}",\n  "name": "{{$randomName}}",\n  "createdAt": "{{$isoDate}}"\n}',
 	isActive: true,
-	version: "1.0",
+	versi: "1.0",
 	createdAt: Date.now(),
 	requestCount: 0,
 	headers: [],
 	storeName: "",
-	authConfig: { type: "NONE" },
+	authConfig: { jenis: "NONE" },
 	proxy: { enabled: false, target: "", timeout: 5000, fallbackToMock: false },
 };
 
+// Komponen Label untuk form
 const Label = ({ children, className }: { children?: React.ReactNode; className?: string }) => (
 	<label className={`block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ${className || ""}`}>
 		{children}
 	</label>
 );
 
-// Schema types & helpers moved to ./mockEditorUtils.ts
-
+// Interface untuk konteks FieldRow (untuk visual editor)
 interface FieldRowContextProps {
-	dragSourceId: string | null;
-	dragTargetId: string | null;
-	activeGeneratorDropdown: string | null;
+	idSumberDrag: string | null;
+	idTargetDrag: string | null;
+	dropdownGeneratorAktif: string | null;
 	onDragStart: (e: React.DragEvent, id: string) => void;
 	onDragEnter: (e: React.DragEvent, id: string) => void;
 	onDragOver: (e: React.DragEvent) => void;
 	onDragEnd: (e: React.DragEvent) => void;
 	onUpdateField: (id: string, updates: Partial<SchemaField>) => void;
 	onAddField: (parentId: string | null) => void;
-	onRemoveFieldRequest: (id: string) => void; // Renamed to request
+	onRemoveFieldRequest: (id: string) => void; // Permintaan penghapusan field
 	onSetActiveGeneratorDropdown: (id: string | null) => void;
 	onInsertVariable: (variable: string) => void;
 	onToggleCollapse: (id: string) => void;
 	onMoveField?: (id: string, direction: "up" | "down") => void;
 }
 
+/**
+ * Komponen FieldRow untuk menampilkan dan mengelola field dalam visual editor
+ * Menangani drag & drop, editing, dan struktur data bertingkat
+ */
 const FieldRow: React.FC<{
 	field: SchemaField;
 	depth?: number;
 	ctx: FieldRowContextProps;
 }> = ({ field, depth = 0, ctx }) => {
-	const isDragging = ctx.dragSourceId === field.id;
-	const isTarget = ctx.dragTargetId === field.id;
-	const hasChildren = field.type === "object" && field.children && field.children.length > 0;
+	const sedangDrag = ctx.idSumberDrag === field.id;
+	const adalahTarget = ctx.idTargetDrag === field.id;
+	const memilikiAnak = field.type === "object" && field.children && field.children.length > 0;
 
 	return (
 		<div
 			className={`relative transition-all duration-300 ease-out transform ${
-				isDragging ? "opacity-40 scale-[0.98] z-0" : "opacity-100 scale-100 z-10"
+				sedangDrag ? "opacity-40 scale-[0.98] z-0" : "opacity-100 scale-100 z-10"
 			}`}
 			draggable
 			onDragStart={e => ctx.onDragStart(e, field.id)}
@@ -118,14 +119,14 @@ const FieldRow: React.FC<{
 				className={`
                 group flex items-center gap-3 bg-white rounded-lg border mb-2 transition-all duration-200
                 ${
-					isTarget
+					adalahTarget
 						? "border-brand-500 ring-1 ring-brand-500 bg-brand-50/30 translate-x-2 shadow-md"
 						: "border-slate-200 hover:border-brand-300 hover:shadow-sm"
 				}
             `}
 				style={{ padding: "var(--space-1) var(--space-2)" }}
 			>
-				{/* Drag Handle */}
+				{/* Handle untuk drag & drop */}
 				<button
 					type="button"
 					aria-label="Drag field"
@@ -134,14 +135,14 @@ const FieldRow: React.FC<{
 						if (e.key === "ArrowDown") ctx.onMoveField?.(field.id, "down");
 					}}
 					className={`flex-shrink-0 cursor-grab active:cursor-grabbing transition-colors ${
-						isTarget ? "text-brand-400" : "text-slate-300 group-hover:text-slate-500"
+						adalahTarget ? "text-brand-400" : "text-slate-300 group-hover:text-slate-500"
 					}`}
 					style={{ padding: "var(--space-1)" }}
 				>
 					<GripVertical className="w-5 h-5" />
 				</button>
 
-				{/* Collapse Toggle for Objects */}
+				{/* Tombol collapse untuk tipe object */}
 				{field.type === "object" ? (
 					<button
 						type="button"
@@ -156,11 +157,11 @@ const FieldRow: React.FC<{
 				)}
 
 				<div className="flex-1 grid grid-cols-12 gap-3 items-center">
-					{/* Key Input */}
+					{/* Input untuk nama field */}
 					<div className="col-span-4 flex items-center">
 						<input
 							type="text"
-							placeholder="key_name"
+							placeholder="nama_field"
 							value={field.key}
 							onChange={e => ctx.onUpdateField(field.id, { key: e.target.value })}
 							className={`w-full text-sm font-semibold text-slate-700 bg-slate-50 focus:bg-white border border-transparent rounded-md outline-none transition-colors ${
@@ -170,7 +171,7 @@ const FieldRow: React.FC<{
 						/>
 					</div>
 
-					{/* Type Selector */}
+					{/* Selektor tipe data */}
 					<div className="col-span-3">
 						<div className="relative">
 							<select
@@ -183,7 +184,7 @@ const FieldRow: React.FC<{
 								<option value="number">Number</option>
 								<option value="boolean">Boolean</option>
 								<option value="object">Object</option>
-								<option value="array">Array (Simple)</option>
+								<option value="array">Array (Sederhana)</option>
 								<option value="null">Null</option>
 							</select>
 							<div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
@@ -203,7 +204,7 @@ const FieldRow: React.FC<{
 						</div>
 					</div>
 
-					{/* Value Input or Add Property Button */}
+					{/* Input nilai atau tombol tambah properti */}
 					<div className="col-span-5 relative">
 						{field.type === "object" ? (
 							<button
@@ -214,7 +215,7 @@ const FieldRow: React.FC<{
 								style={{ padding: "var(--space-1) var(--space-3)" }}
 							>
 								<Plus className="w-3.5 h-3.5" />
-								<span>Add Property</span>
+								<span>Tambah Properti</span>
 							</button>
 						) : field.type === "boolean" ? (
 							<div className="flex items-center h-9" style={{ padding: "var(--space-1) var(--space-3)" }}>
@@ -253,7 +254,7 @@ const FieldRow: React.FC<{
 									placeholder={field.type === "array" ? '["item1", "item2"]' : "Value"}
 									value={field.value}
 									onChange={e => ctx.onUpdateField(field.id, { value: e.target.value })}
-									disabled={field.type === "array"} // Arrays handled as strings in basic input for now
+									disabled={field.type === "array"} // Array ditangani sebagai string untuk input dasar
 									className={`w-full text-sm text-slate-600 bg-white border border-slate-200 rounded-md font-mono focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition-colors ${
 										field.value.includes("{{") ? "text-brand-600 font-bold" : ""
 									} ${field.type === "array" ? "bg-slate-100 text-slate-500" : ""}`}
@@ -270,7 +271,7 @@ const FieldRow: React.FC<{
 										type="button"
 										onClick={() =>
 											ctx.onSetActiveGeneratorDropdown(
-												ctx.activeGeneratorDropdown === field.id ? null : field.id
+												ctx.dropdownGeneratorAktif === field.id ? null : field.id
 											)
 										}
 										className={`absolute right-1.5 rounded hover:bg-slate-100 transition-colors ${
@@ -284,8 +285,8 @@ const FieldRow: React.FC<{
 									</button>
 								)}
 
-								{/* Generator Dropdown */}
-								{ctx.activeGeneratorDropdown === field.id && (
+								{/* Dropdown untuk generator variabel */}
+								{ctx.dropdownGeneratorAktif === field.id && (
 									<div className="absolute top-full right-0 mt-1 w-48 bg-white rounded-lg shadow-xl border border-slate-200 z-50 animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
 										<div
 											className="bg-slate-50 border-b border-slate-100 flex justify-between items-center"
@@ -338,13 +339,13 @@ const FieldRow: React.FC<{
 				</button>
 			</div>
 
-			{/* Render Children if Object */}
-			{field.type === "object" && hasChildren && !field.isCollapsed && (
+			{/* Render children jika tipe object */}
+			{field.type === "object" && memilikiAnak && !field.isCollapsed && (
 				<div
 					className="border-l-2 border-slate-100 relative"
 					style={{ paddingLeft: "var(--space-5)", marginLeft: "var(--space-5)" }}
 				>
-					{/* Connector visual fix */}
+					{/* Visual connector */}
 					<div className="absolute -top-3 left-0 w-4 h-4 border-l-2 border-b-2 border-slate-100 rounded-bl-lg -z-10" />
 
 					{field.children?.map(child => (
@@ -357,7 +358,7 @@ const FieldRow: React.FC<{
 					className="text-[10px] text-slate-400 italic"
 					style={{ paddingLeft: "calc(var(--space-5) * 2)", paddingBottom: "var(--space-2)" }}
 				>
-					Empty object
+					Object kosong
 				</div>
 			)}
 			{field.type === "object" && field.isCollapsed && (
@@ -366,15 +367,16 @@ const FieldRow: React.FC<{
 					style={{ paddingLeft: "var(--space-4)", paddingBottom: "var(--space-2)" }}
 				>
 					<span className="w-1 h-1 rounded-full bg-slate-300"></span>
-					<span>{field.children?.length || 0} hidden properties</span>
+					<span>{field.children?.length || 0} properti tersembunyi</span>
 				</div>
 			)}
 		</div>
 	);
 };
 
-// ... (Rest of imports and helpers same as original) ...
-
+/**
+ * Komponen untuk overlay highlight JSON (syntax highlighting)
+ */
 const JsonHighlightOverlay = ({ code, fontSize }: { code: string; fontSize: number }) => {
 	const tokens = code.split(/(".*?"|:|\d+|true|false|null)/g);
 	return (
@@ -414,8 +416,9 @@ const JsonHighlightOverlay = ({ code, fontSize }: { code: string; fontSize: numb
 	);
 };
 
-// JSON validation helpers moved to ./mockEditorUtils.ts
-
+/**
+ * Komponen utama MockEditor untuk membuat dan mengedit mock endpoint
+ */
 export const MockEditor: React.FC<MockEditorProps> = ({
 	initialData,
 	existingMocks = [],
@@ -424,79 +427,83 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 	onCancel,
 	addToast,
 }) => {
-	const [formData, setFormData] = useState<MockEndpoint>(DEFAULT_MOCK);
-	const [jsonError, setJsonError] = useState<string | null>(null);
-	const [jsonErrorLine, setJsonErrorLine] = useState<number | null>(null);
-	const [conflictError, setConflictError] = useState<string | null>(null);
-	const [isGenerating, setIsGenerating] = useState(false);
+	// State untuk data form
+	const [dataForm, setDataForm] = useState<MockEndpoint>(DEFAULT_MOCK);
+	const [errorJson, setErrorJson] = useState<string | null>(null);
+	const [barisErrorJson, setBarisErrorJson] = useState<number | null>(null);
+	const [errorKonflik, setErrorKonflik] = useState<string | null>(null);
+	const [sedangGenerate, setSedangGenerate] = useState(false);
 
-	// Editor State
-	const [editorMode, setEditorMode] = useState<"code" | "visual">("visual");
-	const [visualFields, setVisualFields] = useState<SchemaField[]>([]);
-	const [isRootArray, setIsRootArray] = useState(false); // NEW: Track if root is array
-	const [showVariables, setShowVariables] = useState(false);
-	const [activeGeneratorDropdown, setActiveGeneratorDropdown] = useState<string | null>(null);
-	const [copied, setCopied] = useState(false);
-	const [fontSize, setFontSize] = useState(14);
-	const [showSearch, setShowSearch] = useState(false);
-	const [searchTerm, setSearchTerm] = useState("");
-	const [matchCount, setMatchCount] = useState({ current: 0, total: 0 });
-	const [fieldToDelete, setFieldToDelete] = useState<{
+	// State untuk editor
+	const [modeEditor, setModeEditor] = useState<"code" | "visual">("visual");
+	const [fieldVisual, setFieldVisual] = useState<SchemaField[]>([]);
+	const [adalahRootArray, setAdalahRootArray] = useState(false); // Menandakan apakah root adalah array
+	const [tampilkanVariabel, setTampilkanVariabel] = useState(false);
+	const [dropdownGeneratorAktif, setDropdownGeneratorAktif] = useState<string | null>(null);
+	const [terkopi, setTerkopi] = useState(false);
+	const [ukuranFont, setUkuranFont] = useState(14);
+	const [tampilkanPencarian, setTampilkanPencarian] = useState(false);
+	const [istilahPencarian, setIstilahPencarian] = useState("");
+	const [jumlahKecocokan, setJumlahKecocokan] = useState({ saatIni: 0, total: 0 });
+	const [fieldUntukDihapus, setFieldUntukDihapus] = useState<{
 		id: string;
 		type: string;
-		childrenCount: number;
+		jumlahAnak: number;
 	} | null>(null);
 
-	// Drag and Drop State
-	const [dragSourceId, setDragSourceId] = useState<string | null>(null);
-	const [dragTargetId, setDragTargetId] = useState<string | null>(null);
+	// State untuk drag & drop
+	const [idSumberDrag, setIdSumberDrag] = useState<string | null>(null);
+	const [idTargetDrag, setIdTargetDrag] = useState<string | null>(null);
 
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const lineNumbersRef = useRef<HTMLDivElement>(null);
 	const searchInputRef = useRef<HTMLInputElement>(null);
 
-	const STATUS_PRESETS = [200, 201, 204, 400, 401, 404, 500];
-	const LATENCY_PRESETS = [0, 150, 500, 1000, 2500];
+	// Preset konfigurasi
+	const PRESET_STATUS = [200, 201, 204, 400, 401, 404, 500];
+	const PRESET_LATENSI = [0, 150, 500, 1000, 2500];
 
+	/**
+	 * Fungsi untuk menghasilkan ID unik
+	 */
 	const generateId = () => crypto.randomUUID();
 
-	// Safe copy helper used by copy buttons to make clipboard operations more robust in tests and
-	// older browsers. Returns true on success.
-	const safeCopyToClipboard = async (text: string, successMsg = "Token disalin ke clipboard") => {
-		if (!text) {
+	/**
+	 * Fungsi helper untuk menyalin teks ke clipboard dengan fallback
+	 * @param teks - Teks yang akan disalin
+	 * @param pesanSukses - Pesan toast untuk sukses
+	 * @returns Promise<boolean> - True jika berhasil
+	 */
+	// Helper kecil untuk kompatibilitas property autentikasi
+	const getAuthType = (cfg?: any) => (cfg as any)?.jenis ?? (cfg as any)?.type ?? "NONE";
+	const salinKeClipboard = async (teks: string, pesanSukses = "Token disalin ke clipboard") => {
+		if (!teks) {
 			addToast("Token tidak tersedia untuk disalin", "error");
 			return false;
 		}
 		try {
-			if ((navigator as any).clipboard && typeof (navigator as any).clipboard.writeText === "function") {
-				try {
-					await (navigator as any).clipboard.writeText(text);
-					// If a test has mocked navigator.clipboard, update its internal _data so tests see the change
-					if ((navigator as any).clipboard) {
-						(navigator as any).clipboard._data = text;
-					}
-					addToast(successMsg, "info");
-					return true;
-				} catch (err) {
-					// continue to fallback copy method
-				}
-			}
-			// Fallback for environments without navigator.clipboard
-			const textarea = document.createElement("textarea");
-			textarea.value = text;
-			textarea.setAttribute("aria-hidden", "true");
-			textarea.style.position = "fixed";
-			textarea.style.left = "-9999px";
-			document.body.appendChild(textarea);
-			textarea.select();
-			const successful = document.execCommand("copy");
-			document.body.removeChild(textarea);
-			if (successful) {
-				addToast(successMsg, "info");
+			if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+				await navigator.clipboard.writeText(teks);
+				addToast(pesanSukses, "info");
 				return true;
+			} else {
+				// Fallback untuk browser lama
+				const textarea = document.createElement("textarea");
+				textarea.value = teks;
+				textarea.setAttribute("aria-hidden", "true");
+				textarea.style.position = "fixed";
+				textarea.style.left = "-9999px";
+				document.body.appendChild(textarea);
+				textarea.select();
+				const berhasil = document.execCommand("copy");
+				document.body.removeChild(textarea);
+				if (berhasil) {
+					addToast(pesanSukses, "info");
+					return true;
+				}
+				addToast("Token tidak tersedia untuk disalin", "error");
+				return false;
 			}
-			addToast("Token tidak tersedia untuk disalin", "error");
-			return false;
 		} catch (err) {
 			addToast("Gagal menyalin token", "error");
 			console.error(err);
@@ -504,39 +511,37 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 		}
 	};
 
-	// JSON <-> Schema helpers moved to ./mockEditorUtils.ts (parseJsonToSchema, convertSchemaToJson)
-
-	// --- Effects ---
+	// --- Efek Samping ---
 
 	useEffect(() => {
 		if (initialData) {
-			setFormData({
+			setDataForm({
 				...initialData,
 				headers: initialData.headers ? initialData.headers.map(h => ({ ...h })) : [],
-				authConfig: initialData.authConfig || { type: "NONE" },
+				authConfig: initialData.authConfig || { jenis: "NONE" },
 				proxy: initialData.proxy || { enabled: false, target: "", timeout: 5000, fallbackToMock: false },
 			});
-			// Strict check for initial load
-			const structureError = validateJsonStructure(initialData.responseBody);
-			if (!structureError) {
+			// Validasi struktur JSON untuk inisialisasi
+			const errorStruktur = validasiStrukturJson(initialData.responseBody);
+			if (!errorStruktur) {
 				try {
 					const parsed = JSON.parse(initialData.responseBody);
-					setVisualFields(parseJsonToSchema(parsed, generateId));
-					setIsRootArray(Array.isArray(parsed));
+					setFieldVisual(parseJsonKeSkema(parsed, generateId));
+					setAdalahRootArray(Array.isArray(parsed));
 				} catch (e) {
-					setEditorMode("code");
+					setModeEditor("code");
 				}
 			} else {
-				setEditorMode("code");
+				setModeEditor("code");
 			}
 		} else {
-			setFormData({
+			setDataForm({
 				...DEFAULT_MOCK,
 				id: crypto.randomUUID(),
 				createdAt: Date.now(),
 			});
-			setIsRootArray(false);
-			setVisualFields([
+			setAdalahRootArray(false);
+			setFieldVisual([
 				{ id: generateId(), key: "id", value: "{{$uuid}}", type: "string" },
 				{
 					id: generateId(),
@@ -562,99 +567,105 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 		}
 	}, [initialData]);
 
-	// Conflict Detection Effect
+	// Efek untuk mendeteksi konflik rute
 	useEffect(() => {
-		if (formData.path && formData.method) {
-			const isConflict = (existingMocks || []).some(
+		if (dataForm.path && (dataForm as any).metode) {
+			const adaKonflik = (existingMocks || []).some(
 				m =>
-					m.id !== formData.id && // Don't match self
-					m.method === formData.method &&
-					patternsConflict(m.path, formData.path)
+					m.id !== dataForm.id && // Jangan cocokkan dengan diri sendiri
+					m.metode === (dataForm as any).metode &&
+					patternsConflict(m.path, dataForm.path)
 			);
 
-			if (isConflict) {
-				setConflictError(`Route conflict: ${formData.method} ${formData.path} already exists.`);
+			if (adaKonflik) {
+				setErrorKonflik(`Konflik rute: ${(dataForm as any).metode} ${dataForm.path} sudah ada.`);
 			} else {
-				setConflictError(null);
+				setErrorKonflik(null);
 			}
 		}
-	}, [formData.method, formData.path, formData.id, existingMocks]);
+	}, [(dataForm as any).metode, dataForm.path, dataForm.id, existingMocks]);
 
-	// Sync Visual -> JSON
+	// Sinkronisasi visual -> JSON
 	useEffect(() => {
-		if (editorMode === "visual") {
+		if (modeEditor === "visual") {
 			try {
-				const finalJson = convertSchemaToJson(visualFields, isRootArray);
-				setFormData(prev => ({
+				const jsonAkhir = konversiSkemaKeJson(fieldVisual, adalahRootArray);
+				setDataForm(prev => ({
 					...prev,
-					responseBody: JSON.stringify(finalJson, null, 2),
+					responseBody: JSON.stringify(jsonAkhir, null, 2),
 				}));
-				setJsonError(null);
-				setJsonErrorLine(null);
+				setErrorJson(null);
+				setBarisErrorJson(null);
 			} catch (e) {
-				setJsonError((e as Error).message);
-				setJsonErrorLine(null);
+				setErrorJson((e as Error).message);
+				setBarisErrorJson(null);
 			}
 		}
-	}, [visualFields, editorMode, isRootArray]);
+	}, [fieldVisual, modeEditor, adalahRootArray]);
 
 	useEffect(() => {
-		if (showSearch && searchInputRef.current) searchInputRef.current.focus();
-		if (!showSearch) {
-			setSearchTerm("");
-			setMatchCount({ current: 0, total: 0 });
+		if (tampilkanPencarian && searchInputRef.current) searchInputRef.current.focus();
+		if (!tampilkanPencarian) {
+			setIstilahPencarian("");
+			setJumlahKecocokan({ saatIni: 0, total: 0 });
 		}
-	}, [showSearch]);
+	}, [tampilkanPencarian]);
 
-	const handleChange = (field: keyof MockEndpoint, value: any) => {
+	/**
+	 * Handler untuk perubahan data form
+	 */
+	const handlePerubahan = (field: keyof MockEndpoint, value: any) => {
 		if (field === "path") {
 			value = value.toString().replace(/\s+/g, "");
 		}
-		setFormData(prev => ({ ...prev, [field]: value }));
+		setDataForm(prev => ({ ...prev, [field]: value }));
 
 		if (field === "responseBody") {
-			const structure = validateJsonStructure(value);
-			setJsonError(structure ? structure.message : null);
-			setJsonErrorLine(structure ? structure.line ?? null : null);
+			const struktur = validasiStrukturJson(value);
+			setErrorJson(struktur ? struktur.message : null);
+			setBarisErrorJson(struktur ? struktur.line ?? null : null);
 		}
 	};
 
-	const handleModeSwitch = (mode: "code" | "visual") => {
+	/**
+	 * Handler untuk berpindah mode editor
+	 */
+	const handleGantiMode = (mode: "code" | "visual") => {
 		if (mode === "visual") {
-			// Strict Validation before switching
-			const structureError = validateJsonStructure(formData.responseBody);
-			if (structureError) {
-				addToast(structureError.message, "error");
-				setJsonError(structureError.message);
-				setJsonErrorLine(structureError.line ?? null);
+			// Validasi ketat sebelum berpindah
+			const errorStruktur = validasiStrukturJson(dataForm.responseBody);
+			if (errorStruktur) {
+				addToast(errorStruktur.message, "error");
+				setErrorJson(errorStruktur.message);
+				setBarisErrorJson(errorStruktur.line ?? null);
 				return;
 			}
 
 			try {
-				const parsed = JSON.parse(formData.responseBody);
-				setVisualFields(parseJsonToSchema(parsed, generateId));
-				setIsRootArray(Array.isArray(parsed));
-				setEditorMode("visual");
+				const parsed = JSON.parse(dataForm.responseBody);
+				setFieldVisual(parseJsonKeSkema(parsed, generateId));
+				setAdalahRootArray(Array.isArray(parsed));
+				setModeEditor("visual");
 			} catch {
-				addToast("Unexpected error parsing JSON", "error");
+				addToast("Error tak terduga saat parsing JSON", "error");
 			}
 		} else {
-			setEditorMode("code");
+			setModeEditor("code");
 		}
 	};
 
-	// --- Handlers (Drag & Drop Fixed) ---
+	// --- Handlers untuk Drag & Drop ---
 
 	const handleDragStart = (e: React.DragEvent, id: string) => {
 		e.stopPropagation();
-		setDragSourceId(id);
+		setIdSumberDrag(id);
 		e.dataTransfer.effectAllowed = "move";
 	};
 
 	const handleDragEnter = (e: React.DragEvent, id: string) => {
 		e.stopPropagation();
-		if (dragSourceId && dragSourceId !== id) {
-			setDragTargetId(id);
+		if (idSumberDrag && idSumberDrag !== id) {
+			setIdTargetDrag(id);
 		}
 	};
 
@@ -667,90 +678,97 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 		e.preventDefault();
 		e.stopPropagation();
 
-		if (dragSourceId && dragTargetId && dragSourceId !== dragTargetId) {
-			setVisualFields(prevFields => {
-				const newFields = deepClone(prevFields);
-				let sourceNode: SchemaField | null = null;
-				const removeNode = (list: SchemaField[]): boolean => {
-					const idx = list.findIndex(f => f.id === dragSourceId);
+		if (idSumberDrag && idTargetDrag && idSumberDrag !== idTargetDrag) {
+			setFieldVisual(fieldSebelumnya => {
+				const fieldBaru = klonDalam(fieldSebelumnya);
+				let nodeSumber: SchemaField | null = null;
+				const hapusNode = (list: SchemaField[]): boolean => {
+					const idx = list.findIndex(f => f.id === idSumberDrag);
 					if (idx !== -1) {
-						sourceNode = list[idx];
+						nodeSumber = list[idx];
 						list.splice(idx, 1);
 						return true;
 					}
 					for (const item of list) {
-						if (item.children && removeNode(item.children)) return true;
+						if (item.children && hapusNode(item.children)) return true;
 					}
 					return false;
 				};
-				if (!removeNode(newFields) || !sourceNode) return prevFields;
-				const insertNode = (list: SchemaField[]): boolean => {
-					const idx = list.findIndex(f => f.id === dragTargetId);
+				if (!hapusNode(fieldBaru) || !nodeSumber) return fieldSebelumnya;
+				const sisipkanNode = (list: SchemaField[]): boolean => {
+					const idx = list.findIndex(f => f.id === idTargetDrag);
 					if (idx !== -1) {
-						list.splice(idx + 1, 0, sourceNode!);
+						list.splice(idx + 1, 0, nodeSumber!);
 						return true;
 					}
 					for (const item of list) {
-						if (item.children && insertNode(item.children)) return true;
+						if (item.children && sisipkanNode(item.children)) return true;
 					}
 					return false;
 				};
-				insertNode(newFields);
-				return newFields;
+				sisipkanNode(fieldBaru);
+				return fieldBaru;
 			});
 		}
-		setDragSourceId(null);
-		setDragTargetId(null);
+		setIdSumberDrag(null);
+		setIdTargetDrag(null);
 	};
 
-	// --- Field Manipulation ---
+	// --- Manipulasi Field ---
 
+	/**
+	 * Mengupdate field berdasarkan ID
+	 */
 	const updateField = (id: string, updates: Partial<SchemaField>) => {
-		const updateRecursive = (list: SchemaField[]): SchemaField[] => {
+		const updateRekursif = (list: SchemaField[]): SchemaField[] => {
 			return list.map(field => {
 				if (field.id === id) {
-					const updatedField = { ...field, ...updates };
+					const fieldDiupdate = { ...field, ...updates };
 					if (updates.type === "object" && field.type !== "object" && !field.children) {
-						updatedField.children = [];
+						fieldDiupdate.children = [];
 					}
 					if (updates.type === "array" && field.type !== "array") {
-						updatedField.value = "[]";
+						fieldDiupdate.value = "[]";
 					}
 
-					// Inline validation for numbers and arrays to surface errors in UI
-					if (updatedField.type === "number") {
-						const n = parseFloat(String(updatedField.value));
+					// Validasi inline untuk number dan array
+					if (fieldDiupdate.type === "number") {
+						const n = parseFloat(String(fieldDiupdate.value));
 						if (Number.isNaN(n)) {
-							updatedField.error = `Invalid number: ${updatedField.value}`;
+							fieldDiupdate.error = `Angka tidak valid: ${fieldDiupdate.value}`;
 						} else {
-							delete updatedField.error;
+							delete fieldDiupdate.error;
 						}
 					}
-					if (updatedField.type === "array") {
+					if (fieldDiupdate.type === "array") {
 						try {
-							JSON.parse(updatedField.value || "[]");
-							delete updatedField.error;
+							JSON.parse(fieldDiupdate.value || "[]");
+							delete fieldDiupdate.error;
 						} catch (e) {
-							updatedField.error = (e as Error).message || "Invalid JSON array";
+							fieldDiupdate.error = (e as Error).message || "Array JSON tidak valid";
 						}
 					}
 
-					return updatedField;
+					return fieldDiupdate;
 				}
-				if (field.children) return { ...field, children: updateRecursive(field.children) };
+				if (field.children) return { ...field, children: updateRekursif(field.children) };
 				return field;
 			});
 		};
-		setVisualFields(prev => updateRecursive(prev));
+		setFieldVisual(prev => updateRekursif(prev));
 	};
 
-	const handleAddField = (parentId: string | null = null) => {
-		// If root array, auto key to next index
-		const nextKey = parentId === null && isRootArray ? String(visualFields.length) : "new_field";
+	/**
+	 * Menambah field baru
+	 * @param parentId - ID parent (null untuk root)
+	 */
+	const handleTambahField = (parentId: string | null = null) => {
+		// Jika root adalah array, kunci otomatis ke indeks berikutnya
+		const kunciBerikutnya = parentId === null && adalahRootArray ? String(fieldVisual.length) : "field_baru";
 
-		const newField: SchemaField = {
+		const fieldBaru: SchemaField = {
 			id: generateId(),
-			key: nextKey,
+			key: kunciBerikutnya,
 			value: "",
 			type: "string",
 			isCollapsed: false,
@@ -758,81 +776,95 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 		};
 
 		if (parentId === null) {
-			setVisualFields(prev => [...prev, newField]);
+			setFieldVisual(prev => [...prev, fieldBaru]);
 		} else {
-			const addRecursive = (list: SchemaField[]): SchemaField[] => {
+			const tambahRekursif = (list: SchemaField[]): SchemaField[] => {
 				return list.map(field => {
 					if (field.id === parentId) {
 						return {
 							...field,
-							children: [...(field.children || []), newField],
+							children: [...(field.children || []), fieldBaru],
 							isCollapsed: false,
 						};
 					}
 					if (field.children) {
-						return { ...field, children: addRecursive(field.children) };
+						return { ...field, children: tambahRekursif(field.children) };
 					}
 					return field;
 				});
 			};
-			setVisualFields(prev => addRecursive(prev));
+			setFieldVisual(prev => tambahRekursif(prev));
 		}
 	};
 
-	const findFieldRecursive = (list: SchemaField[], id: string): SchemaField | null => {
+	/**
+	 * Mencari field berdasarkan ID secara rekursif
+	 */
+	const cariFieldRekursif = (list: SchemaField[], id: string): SchemaField | null => {
 		for (const field of list) {
 			if (field.id === id) return field;
 			if (field.children) {
-				const found = findFieldRecursive(field.children, id);
-				if (found) return found;
+				const ditemukan = cariFieldRekursif(field.children, id);
+				if (ditemukan) return ditemukan;
 			}
 		}
 		return null;
 	};
 
-	const handleRemoveFieldRequest = (id: string) => {
-		const field = findFieldRecursive(visualFields, id);
+	/**
+	 * Permintaan penghapusan field (dengan konfirmasi jika ada anak)
+	 */
+	const handlePermintaanHapusField = (id: string) => {
+		const field = cariFieldRekursif(fieldVisual, id);
 		if (!field) return;
 		if (field.type === "object" && field.children && field.children.length > 0) {
-			setFieldToDelete({
+			setFieldUntukDihapus({
 				id: field.id,
 				type: "object",
-				childrenCount: field.children.length,
+				jumlahAnak: field.children.length,
 			});
 		} else {
-			executeRemoveField(id);
+			jalankanHapusField(id);
 		}
 	};
 
-	const executeRemoveField = (id: string) => {
-		const removeRecursive = (list: SchemaField[]): SchemaField[] => {
+	/**
+	 * Menjalankan penghapusan field setelah konfirmasi
+	 */
+	const jalankanHapusField = (id: string) => {
+		const hapusRekursif = (list: SchemaField[]): SchemaField[] => {
 			return list
 				.filter(f => f.id !== id)
 				.map(field => {
-					if (field.children) return { ...field, children: removeRecursive(field.children) };
+					if (field.children) return { ...field, children: hapusRekursif(field.children) };
 					return field;
 				});
 		};
-		setVisualFields(prev => removeRecursive(prev));
-		setFieldToDelete(null);
+		setFieldVisual(prev => hapusRekursif(prev));
+		setFieldUntukDihapus(null);
 	};
 
+	/**
+	 * Toggle collapse untuk field bertipe object
+	 */
 	const handleToggleCollapse = (id: string) => {
-		const toggleRecursive = (list: SchemaField[]): SchemaField[] => {
+		const toggleRekursif = (list: SchemaField[]): SchemaField[] => {
 			return list.map(f => {
 				if (f.id === id) return { ...f, isCollapsed: !f.isCollapsed };
-				if (f.children) return { ...f, children: toggleRecursive(f.children) };
+				if (f.children) return { ...f, children: toggleRekursif(f.children) };
 				return f;
 			});
 		};
-		setVisualFields(prev => toggleRecursive(prev));
+		setFieldVisual(prev => toggleRekursif(prev));
 	};
 
-	// Keyboard move helper: when focused on drag handle, ArrowUp/ArrowDown will move the field within its sibling list
-	const moveField = (id: string, direction: "up" | "down") => {
-		setVisualFields(prev => {
-			const newFields = deepClone(prev);
-			let moved = false;
+	/**
+	 * Memindahkan field dalam daftar sibling
+	 */
+	const pindahkanField = (id: string, direction: "up" | "down") => {
+		setFieldVisual(prev => {
+			const fieldBaru = klonDalam(prev);
+			let terpindah = false;
 
 			const helper = (list: SchemaField[]): boolean => {
 				const idx = list.findIndex(f => f.id === id);
@@ -840,7 +872,7 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 					const swapIdx = direction === "up" ? idx - 1 : idx + 1;
 					if (swapIdx >= 0 && swapIdx < list.length) {
 						[list[idx], list[swapIdx]] = [list[swapIdx], list[idx]];
-						moved = true;
+						terpindah = true;
 					}
 					return true;
 				}
@@ -850,23 +882,26 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 				return false;
 			};
 
-			helper(newFields);
-			if (moved) return newFields;
+			helper(fieldBaru);
+			if (terpindah) return fieldBaru;
 			return prev;
 		});
 	};
 
-	const insertVariable = (variable: string) => {
-		if (activeGeneratorDropdown) {
-			updateField(activeGeneratorDropdown, { value: variable });
-			setActiveGeneratorDropdown(null);
-		} else if (editorMode === "code" && textareaRef.current) {
+	/**
+	 * Menyisipkan variabel generator ke dalam field
+	 */
+	const sisipkanVariabel = (variable: string) => {
+		if (dropdownGeneratorAktif) {
+			updateField(dropdownGeneratorAktif, { value: variable });
+			setDropdownGeneratorAktif(null);
+		} else if (modeEditor === "code" && textareaRef.current) {
 			const textarea = textareaRef.current;
 			const start = textarea.selectionStart;
 			const end = textarea.selectionEnd;
-			const text = formData.responseBody;
+			const text = dataForm.responseBody;
 			const newText = text.substring(0, start) + variable + text.substring(end);
-			handleChange("responseBody", newText);
+			handlePerubahan("responseBody", newText);
 			setTimeout(() => {
 				textarea.focus();
 				textarea.setSelectionRange(start + variable.length, start + variable.length);
@@ -874,76 +909,92 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 		}
 	};
 
-	const addHeader = () => {
-		setFormData(prev => ({
+	/**
+	 * Menambah header baru
+	 */
+	const tambahHeader = () => {
+		setDataForm(prev => ({
 			...prev,
 			headers: [...(prev.headers || []), { key: "", value: "" }],
 		}));
 	};
 
+	/**
+	 * Mengupdate header berdasarkan indeks
+	 */
 	const updateHeader = (index: number, key: "key" | "value", value: string) => {
-		setFormData(prev => {
+		setDataForm(prev => {
 			const h = [...(prev.headers || [])];
 			h[index] = { ...h[index], [key]: value };
 			return { ...prev, headers: h };
 		});
 	};
 
-	const removeHeader = (index: number) => {
-		setFormData(prev => ({
+	/**
+	 * Menghapus header berdasarkan indeks
+	 */
+	const hapusHeader = (index: number) => {
+		setDataForm(prev => ({
 			...prev,
 			headers: (prev.headers || []).filter((_, i) => i !== index),
 		}));
 	};
 
+	/**
+	 * Handler untuk submit form
+	 */
 	const handleSubmit = (e: React.FormEvent) => {
 		e.preventDefault();
-		if (jsonError) {
-			addToast("Please fix JSON errors first", "error");
+		if (errorJson) {
+			addToast("Harap perbaiki error JSON terlebih dahulu", "error");
 			return;
 		}
-		if (conflictError) {
-			addToast("Cannot save: Route conflict detected", "error");
+		if (errorKonflik) {
+			addToast("Tidak dapat menyimpan: Terdeteksi konflik rute", "error");
 			return;
 		}
-		onSave(formData);
+		onSave(dataForm);
 	};
 
-	const handleAiGenerate = async () => {
-		if (!formData.name && !formData.path) {
-			addToast("Context needed: Please fill Name or Path", "error");
+	/**
+	 * Handler untuk generate AI
+	 */
+	const handleGenerateAI = async () => {
+		if (!(dataForm as any).nama && !dataForm.path) {
+			addToast("Diperlukan konteks: Harap isi Nama atau Path", "error");
 			return;
 		}
-		setIsGenerating(true);
+		setSedangGenerate(true);
 		try {
-			const context = `Name: ${formData.name}, Method: ${formData.method}, Path: ${formData.path}`;
+			const context = `Nama: ${(dataForm as any).nama}, Method: ${(dataForm as any).metode}, Path: ${
+				dataForm.path
+			}`;
 			if (!FEATURES.AI()) {
-				addToast("AI features are disabled. Enable via Settings or feature flags.", "info");
-				setIsGenerating(false);
+				addToast("Fitur AI dinonaktifkan. Aktifkan melalui Settings atau feature flags.", "info");
+				setSedangGenerate(false);
 				return;
 			}
 			const { generateMockData } = await import("../services/aiService");
-			const json = await generateMockData(formData.path, context);
-			handleChange("responseBody", json);
+			const json = await generateMockData(dataForm.path, context);
+			handlePerubahan("responseBody", json);
 
-			if (editorMode === "visual") {
+			if (modeEditor === "visual") {
 				try {
 					const parsed = JSON.parse(json);
-					// Strict check also for AI generation
 					if (typeof parsed === "object" && parsed !== null) {
-						setVisualFields(parseJsonToSchema(parsed, generateId));
-						setIsRootArray(Array.isArray(parsed));
+						setFieldVisual(parseJsonKeSkema(parsed, generateId));
+						setAdalahRootArray(Array.isArray(parsed));
 					}
 				} catch {}
 			}
-			addToast("Generated response body", "success");
+			addToast("Response body berhasil digenerate", "success");
 		} catch (e) {
 			const err = e as any;
 			if (err?.code === "OPENROUTER_DISABLED") {
-				addToast("OpenRouter provider disabled. Enable in Settings.", "error");
+				addToast("Provider OpenRouter dinonaktifkan. Aktifkan di Settings.", "error");
 			} else if (err?.code === "OPENROUTER_TIMEOUT") {
 				addToast(
-					"OpenRouter request timed out. Check network or increase proxy timeout (OPENROUTER_TIMEOUT_MS)",
+					"Request OpenRouter timeout. Periksa jaringan atau tambah timeout proxy (OPENROUTER_TIMEOUT_MS)",
 					"error"
 				);
 			} else if (
@@ -951,80 +1002,100 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 					(err.message.includes("OPENROUTER_API_KEY not configured") || err.message.includes("401"))) ||
 				err?.code === "OPENROUTER_UNAUTHORIZED"
 			) {
-				addToast("OpenRouter API Key missing or proxy not running. Configure or start proxy.", "error");
+				addToast(
+					"API Key OpenRouter tidak ada atau proxy tidak berjalan. Konfigurasi atau mulai proxy.",
+					"error"
+				);
 			} else {
-				addToast("Failed to generate", "error");
+				addToast("Gagal melakukan generate", "error");
 			}
 		} finally {
-			setIsGenerating(false);
+			setSedangGenerate(false);
 		}
 	};
 
+	/**
+	 * Format JSON dengan indentasi
+	 */
 	const formatJSON = () => {
 		try {
-			const parsed = JSON.parse(formData.responseBody);
-			handleChange("responseBody", JSON.stringify(parsed, null, 2));
-			addToast("JSON formatted", "success");
+			const parsed = JSON.parse(dataForm.responseBody);
+			handlePerubahan("responseBody", JSON.stringify(parsed, null, 2));
+			addToast("JSON telah diformat", "success");
 		} catch {
-			addToast("Invalid JSON cannot be formatted", "error");
+			addToast("JSON tidak valid tidak dapat diformat", "error");
 		}
 	};
 
+	/**
+	 * Minify JSON (hapus whitespace)
+	 */
 	const minifyJSON = () => {
 		try {
-			const parsed = JSON.parse(formData.responseBody);
-			handleChange("responseBody", JSON.stringify(parsed));
-			addToast("JSON minified", "info");
+			const parsed = JSON.parse(dataForm.responseBody);
+			handlePerubahan("responseBody", JSON.stringify(parsed));
+			addToast("JSON telah diminify", "info");
 		} catch {
-			addToast("Invalid JSON cannot be minified", "error");
+			addToast("JSON tidak valid tidak dapat diminify", "error");
 		}
 	};
 
-	const copyToClipboard = async () => {
-		const ok = await safeCopyToClipboard(formData.responseBody, "JSON copied to clipboard");
+	/**
+	 * Menyalin JSON ke clipboard
+	 */
+	const salinKeClipboardJSON = async () => {
+		const ok = await salinKeClipboard(dataForm.responseBody, "JSON disalin ke clipboard");
 		if (ok) {
-			setCopied(true);
-			setTimeout(() => setCopied(false), 2000);
+			setTerkopi(true);
+			setTimeout(() => setTerkopi(false), 2000);
 		}
 	};
 
-	const findNext = (direction: "next" | "prev" = "next") => {
-		if (!searchTerm || !textareaRef.current) return;
-		const text = formData.responseBody.toLowerCase();
-		const term = searchTerm.toLowerCase();
-		const currentPos = textareaRef.current.selectionStart;
-		let nextPos = -1;
+	/**
+	 * Mencari teks dalam editor
+	 */
+	const cariSelanjutnya = (direction: "next" | "prev" = "next") => {
+		if (!istilahPencarian || !textareaRef.current) return;
+		const text = dataForm.responseBody.toLowerCase();
+		const term = istilahPencarian.toLowerCase();
+		const posisiSaatIni = textareaRef.current.selectionStart;
+		let posisiBerikutnya = -1;
 
 		if (direction === "next") {
-			nextPos = text.indexOf(term, currentPos + 1);
-			if (nextPos === -1) nextPos = text.indexOf(term, 0);
+			posisiBerikutnya = text.indexOf(term, posisiSaatIni + 1);
+			if (posisiBerikutnya === -1) posisiBerikutnya = text.indexOf(term, 0);
 		} else {
-			nextPos = text.lastIndexOf(term, currentPos - 1);
-			if (nextPos === -1) nextPos = text.lastIndexOf(term);
+			posisiBerikutnya = text.lastIndexOf(term, posisiSaatIni - 1);
+			if (posisiBerikutnya === -1) posisiBerikutnya = text.lastIndexOf(term);
 		}
 
-		if (nextPos !== -1) {
+		if (posisiBerikutnya !== -1) {
 			textareaRef.current.focus();
-			textareaRef.current.setSelectionRange(nextPos, nextPos + term.length);
-			const matches = text.split(term).length - 1;
-			const precedingMatches = text.substring(0, nextPos).split(term).length;
-			setMatchCount({ current: precedingMatches, total: matches });
+			textareaRef.current.setSelectionRange(posisiBerikutnya, posisiBerikutnya + term.length);
+			const kecocokan = text.split(term).length - 1;
+			const kecocokanSebelum = text.substring(0, posisiBerikutnya).split(term).length;
+			setJumlahKecocokan({ saatIni: kecocokanSebelum, total: kecocokan });
 		} else {
-			setMatchCount({ current: 0, total: 0 });
+			setJumlahKecocokan({ saatIni: 0, total: 0 });
 		}
 	};
 
+	/**
+	 * Handler untuk scroll sinkron
+	 */
 	const handleScroll = () => {
 		if (textareaRef.current && lineNumbersRef.current) {
 			lineNumbersRef.current.scrollTop = textareaRef.current.scrollTop;
 		}
 	};
 
+	/**
+	 * Handler untuk keyboard shortcut
+	 */
 	const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-		// ... (Keep existing key handler logic) ...
 		if ((e.metaKey || e.ctrlKey) && e.key === "f") {
 			e.preventDefault();
-			setShowSearch(true);
+			setTampilkanPencarian(true);
 			return;
 		}
 		if (e.key === "Tab") {
@@ -1034,7 +1105,7 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 			const end = textarea.selectionEnd;
 			const value = textarea.value;
 			const newValue = value.substring(0, start) + "  " + value.substring(end);
-			handleChange("responseBody", newValue);
+			handlePerubahan("responseBody", newValue);
 			requestAnimationFrame(() => {
 				if (textareaRef.current) {
 					textareaRef.current.selectionStart = textareaRef.current.selectionEnd = start + 2;
@@ -1053,7 +1124,7 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 			if (value[start - 1] === "{" || value[start - 1] === "[") indent += "  ";
 			e.preventDefault();
 			const newValue = value.substring(0, start) + "\n" + indent + value.substring(start);
-			handleChange("responseBody", newValue);
+			handlePerubahan("responseBody", newValue);
 			requestAnimationFrame(() => {
 				if (textareaRef.current)
 					textareaRef.current.selectionStart = textareaRef.current.selectionEnd = start + 1 + indent.length;
@@ -1062,35 +1133,39 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 		}
 	};
 
-	const getErrorLine = (): number | null => {
-		if (jsonErrorLine) return jsonErrorLine;
-		if (!jsonError) return null;
-		const match = jsonError.match(/at position (\d+)/);
+	/**
+	 * Mendapatkan baris error JSON
+	 */
+	const dapatkanBarisError = (): number | null => {
+		if (barisErrorJson) return barisErrorJson;
+		if (!errorJson) return null;
+		const match = errorJson.match(/at position (\d+)/);
 		if (match && match[1]) {
 			const pos = parseInt(match[1]);
-			const textUpToError = formData.responseBody.substring(0, pos);
-			return textUpToError.split("\n").length;
+			const textSampaiError = dataForm.responseBody.substring(0, pos);
+			return textSampaiError.split("\n").length;
 		}
 		return null;
 	};
 
-	const errorLine = getErrorLine();
+	const barisError = dapatkanBarisError();
 
-	const fieldCtx: FieldRowContextProps = {
-		dragSourceId,
-		dragTargetId,
-		activeGeneratorDropdown,
+	// Konteks untuk FieldRow
+	const konteksField: FieldRowContextProps = {
+		idSumberDrag,
+		idTargetDrag,
+		dropdownGeneratorAktif,
 		onDragStart: handleDragStart,
 		onDragEnter: handleDragEnter,
 		onDragOver: handleDragOver,
 		onDragEnd: handleDragEnd,
 		onUpdateField: updateField,
-		onAddField: handleAddField,
-		onRemoveFieldRequest: handleRemoveFieldRequest,
-		onSetActiveGeneratorDropdown: setActiveGeneratorDropdown,
-		onInsertVariable: insertVariable,
+		onAddField: handleTambahField,
+		onRemoveFieldRequest: handlePermintaanHapusField,
+		onSetActiveGeneratorDropdown: setDropdownGeneratorAktif,
+		onInsertVariable: sisipkanVariabel,
 		onToggleCollapse: handleToggleCollapse,
-		onMoveField: moveField,
+		onMoveField: pindahkanField,
 	};
 
 	return (
@@ -1110,21 +1185,23 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 					</button>
 					<div>
 						<h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-							{initialData ? "Edit Definition" : "Design New Route"}
+							{initialData ? "Edit Definisi" : "Desain Route Baru"}
 						</h1>
-						<p className="text-slate-500 text-sm mt-0.5">Configure endpoint behavior and data structure.</p>
+						<p className="text-slate-500 text-sm mt-0.5">
+							Konfigurasi perilaku endpoint dan struktur data.
+						</p>
 					</div>
 				</div>
 				<div className="flex items-center gap-3">
 					{initialData && (
 						<button
 							type="button"
-							onClick={() => onDelete(formData.id)}
+							onClick={() => onDelete(dataForm.id)}
 							className="rounded-xl text-red-500 font-medium hover:bg-red-50 transition-colors text-sm border border-transparent hover:border-red-100 mr-2"
 							style={{ padding: "var(--space-2) var(--space-4)" }}
 						>
 							<Trash2 className="w-4 h-4 inline-block mr-2" />
-							Delete
+							Hapus
 						</button>
 					)}
 					<button
@@ -1133,48 +1210,48 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 						className="rounded-xl text-slate-600 font-medium hover:bg-slate-200/50 transition-colors text-sm"
 						style={{ padding: "var(--space-2) var(--space-5)" }}
 					>
-						Cancel
+						Batal
 					</button>
 					<button
 						type="submit"
 						onClick={handleSubmit}
-						disabled={!!jsonError || !!conflictError}
+						disabled={!!errorJson || !!errorKonflik}
 						className={`flex items-center space-x-2 rounded-xl text-white font-bold text-sm transition-all shadow-lg active:scale-95 ${
-							jsonError || conflictError
+							errorJson || errorKonflik
 								? "bg-slate-400 cursor-not-allowed shadow-none"
 								: "bg-brand-600 hover:bg-brand-50 shadow-brand-500/25"
 						}`}
 						style={{ padding: "var(--space-2) var(--space-5)" }}
 					>
 						<Save className="w-4 h-4" />
-						<span>Save Route</span>
+						<span>Simpan Route</span>
 					</button>
 				</div>
 			</div>
 
 			<form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full overflow-hidden">
-				{/* Left Column: Config */}
+				{/* Kolom Kiri: Konfigurasi */}
 				<div className="lg:col-span-4 flex flex-col gap-6 overflow-y-auto pr-2 custom-scrollbar pb-10">
-					{/* Main Info Card */}
+					{/* Kartu Info Utama */}
 					<div
 						className="bg-white rounded-2xl border border-slate-200 shadow-sm space-y-6"
 						style={{ padding: "var(--space-3)" }}
 					>
 						<h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 pb-2 border-b border-slate-100">
-							<Settings className="w-4 h-4 text-brand-500" /> General Settings
+							<Settings className="w-4 h-4 text-brand-500" /> Pengaturan Umum
 						</h3>
 
 						<div className="space-y-5">
 							<div>
-								<Label>HTTP Method</Label>
+								<Label>Metode HTTP</Label>
 								<div className="grid grid-cols-3 gap-2">
 									{Object.values(HttpMethod).map(m => (
 										<button
 											key={m}
 											type="button"
-											onClick={() => handleChange("method", m)}
+											onClick={() => handlePerubahan("metode" as keyof MockEndpoint, m)}
 											className={`text-xs font-bold py-2.5 rounded-lg border transition-all ${
-												formData.method === m
+												(dataForm as any).metode === m
 													? "bg-brand-50 border-brand-500 text-brand-700 ring-1 ring-brand-500"
 													: "bg-white border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50"
 											}`}
@@ -1186,14 +1263,14 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 							</div>
 
 							<div>
-								<Label>Resource Path</Label>
+								<Label>Path Resource</Label>
 								<div className="relative group">
 									<input
 										type="text"
-										value={formData.path}
-										onChange={e => handleChange("path", e.target.value)}
+										value={dataForm.path}
+										onChange={e => handlePerubahan("path", e.target.value)}
 										className={`w-full bg-slate-50 border rounded-xl px-4 py-3 text-sm font-mono focus:ring-2 focus:border-transparent outline-none transition-all placeholder:text-slate-400 ${
-											conflictError
+											errorKonflik
 												? "border-red-300 focus:ring-red-200 bg-red-50 text-red-700"
 												: "border-slate-200 focus:ring-brand-500/20 focus:border-brand-500"
 										}`}
@@ -1201,27 +1278,27 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 										style={{ padding: "var(--space-3) var(--space-4)" }}
 									/>
 								</div>
-								{conflictError ? (
+								{errorKonflik ? (
 									<div className="flex items-center text-[10px] text-red-500 mt-1.5 ml-1 font-bold animate-in fade-in slide-in-from-left-2">
 										<AlertTriangle className="w-3 h-3 mr-1" />
-										{conflictError}
+										{errorKonflik}
 									</div>
 								) : (
 									<div className="text-[10px] text-slate-400 mt-1.5 ml-1">
-										Supports dynamic parameters (e.g. :id)
+										Mendukung parameter dinamis (contoh: :id)
 									</div>
 								)}
 							</div>
 
 							<div>
-								<Label>Internal Name</Label>
+								<Label>Nama Internal</Label>
 								<input
 									type="text"
-									value={formData.name}
-									onChange={e => handleChange("name", e.target.value)}
+									value={(dataForm as any).nama}
+									onChange={e => handlePerubahan("nama" as keyof MockEndpoint, e.target.value)}
 									className="w-full bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all placeholder:text-slate-400"
 									style={{ padding: "var(--space-3) var(--space-4)" }}
-									placeholder="e.g. Fetch User Profile"
+									placeholder="contoh: Ambil Profil Pengguna"
 								/>
 							</div>
 
@@ -1230,20 +1307,20 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 									<Label>Status Code</Label>
 									<input
 										type="number"
-										value={formData.statusCode}
-										onChange={e => handleChange("statusCode", parseInt(e.target.value))}
+										value={dataForm.statusCode}
+										onChange={e => handlePerubahan("statusCode", parseInt(e.target.value))}
 										className={`w-full bg-slate-50 border rounded-xl px-4 py-3 text-sm font-mono font-bold outline-none focus:ring-2 transition-all ${
-											formData.statusCode >= 400
+											dataForm.statusCode >= 400
 												? "text-red-600 border-red-200 focus:border-red-500 focus:ring-red-500/20"
 												: "text-emerald-600 border-slate-200 focus:border-emerald-500 focus:ring-emerald-500/20"
 										}`}
 									/>
 									<div className="flex flex-wrap gap-1.5 mt-2">
-										{STATUS_PRESETS.map(code => (
+										{PRESET_STATUS.map(code => (
 											<button
 												key={code}
 												type="button"
-												onClick={() => handleChange("statusCode", code)}
+												onClick={() => handlePerubahan("statusCode", code)}
 												className="text-[10px] font-medium bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded transition-colors"
 											>
 												{code}
@@ -1252,21 +1329,21 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 									</div>
 								</div>
 								<div>
-									<Label>State</Label>
+									<Label>Status</Label>
 									<div className="flex items-center justify-between bg-slate-50 px-3 py-2.5 rounded-xl border border-slate-200 h-[46px]">
 										<span className="text-xs font-semibold text-slate-600">
-											{formData.isActive ? "Active" : "Disabled"}
+											{dataForm.isActive ? "Aktif" : "Nonaktif"}
 										</span>
 										<button
 											type="button"
-											onClick={() => handleChange("isActive", !formData.isActive)}
+											onClick={() => handlePerubahan("isActive", !dataForm.isActive)}
 											className={`w-9 h-5 flex items-center rounded-full transition-colors duration-200 ease-in-out px-0.5 ${
-												formData.isActive ? "bg-green-500" : "bg-slate-300"
+												dataForm.isActive ? "bg-green-500" : "bg-slate-300"
 											}`}
 										>
 											<div
 												className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform duration-200 ${
-													formData.isActive ? "translate-x-4" : "translate-x-0"
+													dataForm.isActive ? "translate-x-4" : "translate-x-0"
 												}`}
 											/>
 										</button>
@@ -1276,28 +1353,28 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 						</div>
 					</div>
 
-					{/* Security & Auth Config */}
+					{/* Kartu Konfigurasi Autentikasi & Keamanan */}
 					<div
 						className="bg-white rounded-2xl border border-slate-200 shadow-sm space-y-5"
 						style={{ padding: "var(--space-3)" }}
 					>
 						<h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 pb-2 border-b border-slate-100">
-							<Shield className="w-4 h-4 text-rose-500" /> Authentication & Security
+							<Shield className="w-4 h-4 text-rose-500" /> Autentikasi & Keamanan
 						</h3>
 
 						<p className="text-xs text-slate-500 leading-relaxed">
-							Protect your endpoint by requiring authentication credentials. Requests without valid
-							credentials will return{" "}
+							Lindungi endpoint Anda dengan mewajibkan kredensial autentikasi. Request tanpa kredensial
+							yang valid akan mengembalikan{" "}
 							<span className="font-semibold text-slate-700">401 Unauthorized</span>.
 						</p>
 
 						<div>
-							<Label>Authentication Type</Label>
+							<Label>Tipe Autentikasi</Label>
 							<div className="mt-2">
 								<button
 									type="button"
 									onClick={() => {
-										void safeCopyToClipboard(formData.authConfig?.token || "");
+										void salinKeClipboard(dataForm.authConfig?.token || "");
 									}}
 									className="inline-flex items-center gap-2 px-2 py-1 rounded-md bg-slate-700 text-white text-xs"
 									aria-label="Salin token ke clipboard (robust)"
@@ -1307,38 +1384,38 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 								</button>
 							</div>
 							<select
-								value={formData.authConfig?.type || "NONE"}
+								value={getAuthType(dataForm.authConfig)}
 								onChange={e =>
-									setFormData(prev => ({
+									setDataForm(prev => ({
 										...prev,
 										authConfig: {
 											...prev.authConfig,
-											type: e.target.value as any,
+											jenis: e.target.value as any,
 										},
 									}))
 								}
 								className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 outline-none transition-all cursor-pointer"
 							>
-								<option value="NONE">❌ No Authentication (Public)</option>
-								<option value="BEARER_TOKEN">🔑 Bearer Token (Authorization Header)</option>
-								<option value="API_KEY">🗝️ API Key (Custom Header)</option>
+								<option value="NONE">❌ Tanpa Autentikasi (Publik)</option>
+								<option value="BEARER_TOKEN">🔑 Bearer Token (Header Authorization)</option>
+								<option value="API_KEY">🗝️ API Key (Header Kustom)</option>
 							</select>
 						</div>
 
-						{formData.authConfig?.type === "BEARER_TOKEN" && (
+						{getAuthType(dataForm.authConfig) === "BEARER_TOKEN" && (
 							<div
 								className="space-y-4 bg-rose-50 border border-rose-200 rounded-lg animate-in fade-in slide-in-from-top-2"
 								style={{ padding: "var(--space-2)" }}
 							>
 								<div>
-									<Label>Bearer Token Value</Label>
+									<Label>Nilai Bearer Token</Label>
 									<div className="relative">
 										<Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
 										<input
 											type="text"
-											value={formData.authConfig?.token || ""}
+											value={dataForm.authConfig?.token || ""}
 											onChange={e =>
-												setFormData(prev => ({
+												setDataForm(prev => ({
 													...prev,
 													authConfig: {
 														...prev.authConfig!,
@@ -1347,20 +1424,20 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 												}))
 											}
 											className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-4 py-2.5 text-sm font-mono focus:border-rose-500 focus:ring-1 focus:ring-rose-500 outline-none"
-											placeholder="my-secret-token-12345"
+											placeholder="token-rahasia-saya-12345"
 										/>
 									</div>
 									<p className="text-[11px] text-slate-600 mt-2 ml-1 space-y-1">
 										<div>
-											📋 <strong>Expected Header:</strong>
+											📋 <strong>Header yang Diharapkan:</strong>
 										</div>
 										<div className="font-mono bg-slate-900 text-emerald-400 px-3 py-2 rounded-md overflow-x-auto text-[10px] mt-1">
 											<div className="flex items-center justify-between w-full">
-												<div className="truncate">{formatAuthPreview(formData.authConfig)}</div>
+												<div className="truncate">{formatAuthPreview(dataForm.authConfig)}</div>
 												<button
 													onClick={() => {
-														const token = formData.authConfig?.token || "";
-														if (token && (navigator as any).clipboard) {
+														const token = dataForm.authConfig?.token || "";
+														if (token && navigator.clipboard) {
 															navigator.clipboard.writeText(token);
 															addToast("Token disalin ke clipboard", "info");
 														} else {
@@ -1380,18 +1457,18 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 							</div>
 						)}
 
-						{formData.authConfig?.type === "API_KEY" && (
+						{getAuthType(dataForm.authConfig) === "API_KEY" && (
 							<div
 								className="space-y-4 bg-rose-50 border border-rose-200 rounded-lg animate-in fade-in slide-in-from-top-2"
 								style={{ padding: "var(--space-2)" }}
 							>
 								<div>
-									<Label>Header Name</Label>
+									<Label>Nama Header</Label>
 									<input
 										type="text"
-										value={formData.authConfig?.headerKey || "x-api-key"}
+										value={dataForm.authConfig?.headerKey || "x-api-key"}
 										onChange={e =>
-											setFormData(prev => ({
+											setDataForm(prev => ({
 												...prev,
 												authConfig: {
 													...prev.authConfig!,
@@ -1403,21 +1480,21 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 										placeholder="x-api-key"
 									/>
 									<p className="text-[10px] text-slate-500 mt-1.5 ml-1">
-										Name of the header that will contain your API key (e.g.,{" "}
+										Nama header yang akan berisi API key Anda (contoh:{" "}
 										<span className="font-mono font-bold">x-api-key</span>,{" "}
 										<span className="font-mono font-bold">X-API-Token</span>)
 									</p>
 								</div>
 
 								<div>
-									<Label>API Key Value</Label>
+									<Label>Nilai API Key</Label>
 									<div className="relative">
 										<Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
 										<input
 											type="text"
-											value={formData.authConfig?.token || ""}
+											value={dataForm.authConfig?.token || ""}
 											onChange={e =>
-												setFormData(prev => ({
+												setDataForm(prev => ({
 													...prev,
 													authConfig: {
 														...prev.authConfig!,
@@ -1431,15 +1508,15 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 									</div>
 									<p className="text-[11px] text-slate-600 mt-2 ml-1 space-y-1">
 										<div>
-											📋 <strong>Expected Header:</strong>
+											📋 <strong>Header yang Diharapkan:</strong>
 										</div>
 										<div className="font-mono bg-slate-900 text-emerald-400 px-3 py-2 rounded-md overflow-x-auto text-[10px] mt-1">
 											<div className="flex items-center justify-between w-full">
-												<div className="truncate">{formatAuthPreview(formData.authConfig)}</div>
+												<div className="truncate">{formatAuthPreview(dataForm.authConfig)}</div>
 												<button
 													onClick={() => {
-														const token = formData.authConfig?.token || "";
-														if (token && (navigator as any).clipboard) {
+														const token = dataForm.authConfig?.token || "";
+														if (token && navigator.clipboard) {
 															navigator.clipboard.writeText(token);
 															addToast("Token disalin ke clipboard", "info");
 														} else {
@@ -1459,7 +1536,7 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 							</div>
 						)}
 
-						{formData.authConfig?.type === "NONE" && (
+						{getAuthType(dataForm.authConfig) === "NONE" && (
 							<div
 								className="bg-slate-50 border border-slate-200 rounded-lg"
 								style={{ padding: "var(--space-2)" }}
@@ -1467,7 +1544,7 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 								<p className="text-xs text-slate-600 flex items-start gap-2">
 									<span className="text-lg leading-none">🌐</span>
 									<span>
-										This endpoint is <strong>public</strong> and accessible without authentication.
+										Endpoint ini <strong>publik</strong> dan dapat diakses tanpa autentikasi.
 									</span>
 								</p>
 							</div>
@@ -1482,36 +1559,36 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 								<div className="flex items-center gap-3 mb-2">
 									<button
 										onClick={() =>
-											setFormData(prev => ({
+											setDataForm(prev => ({
 												...prev,
 												proxy: { ...(prev.proxy || {}), enabled: !prev.proxy?.enabled },
 											}))
 										}
 										className={`w-9 h-5 flex items-center rounded-full transition-colors duration-200 ease-in-out px-0.5 ${
-											formData.proxy?.enabled ? "bg-emerald-500" : "bg-slate-300"
+											dataForm.proxy?.enabled ? "bg-emerald-500" : "bg-slate-300"
 										}`}
 									>
 										<div
 											className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform duration-200 ${
-												formData.proxy?.enabled ? "translate-x-4" : "translate-x-0"
+												dataForm.proxy?.enabled ? "translate-x-4" : "translate-x-0"
 											}`}
 										/>
 									</button>
-									<div className="text-sm text-slate-700 font-medium">Enable Proxy</div>
+									<div className="text-sm text-slate-700 font-medium">Aktifkan Proxy</div>
 								</div>
 
-								{formData.proxy?.enabled && (
+								{dataForm.proxy?.enabled && (
 									<div
 										className="space-y-3 border border-slate-100 rounded-md bg-emerald-50"
 										style={{ padding: "var(--space-1)" }}
 									>
 										<div>
-											<Label>Proxy Target (Base URL)</Label>
+											<Label>Target Proxy (Base URL)</Label>
 											<input
 												type="text"
-												value={formData.proxy?.target || ""}
+												value={dataForm.proxy?.target || ""}
 												onChange={e =>
-													setFormData(prev => ({
+													setDataForm(prev => ({
 														...prev,
 														proxy: {
 															...(prev.proxy || {}),
@@ -1524,8 +1601,8 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 												className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-sm font-mono focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
 											/>
 											<p className="text-[10px] text-slate-500 mt-1">
-												Requests to this route will be forwarded to the configured target base
-												URL (path preserved).
+												Request ke route ini akan diteruskan ke target base URL yang
+												dikonfigurasi (path akan dipertahankan).
 											</p>
 										</div>
 
@@ -1534,9 +1611,9 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 												<Label>Timeout (ms)</Label>
 												<input
 													type="number"
-													value={formData.proxy?.timeout ?? 5000}
+													value={dataForm.proxy?.timeout ?? 5000}
 													onChange={e =>
-														setFormData(prev => ({
+														setDataForm(prev => ({
 															...prev,
 															proxy: {
 																...(prev.proxy || {}),
@@ -1550,11 +1627,11 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 											</div>
 
 											<div>
-												<Label>Fallback to Mock</Label>
+												<Label>Fallback ke Mock</Label>
 												<select
-													value={String(formData.proxy?.fallbackToMock || false)}
+													value={String(dataForm.proxy?.fallbackToMock || false)}
 													onChange={e =>
-														setFormData(prev => ({
+														setDataForm(prev => ({
 															...prev,
 															proxy: {
 																...(prev.proxy || {}),
@@ -1565,8 +1642,8 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 													}
 													className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none"
 												>
-													<option value="false">Disabled</option>
-													<option value="true">Enabled</option>
+													<option value="false">Nonaktif</option>
+													<option value="true">Aktif</option>
 												</select>
 											</div>
 										</div>
@@ -1576,31 +1653,31 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 						)}
 
 						<div>
-							<Label>Collection Name</Label>
+							<Label>Nama Koleksi</Label>
 							<input
 								type="text"
-								value={formData.storeName || ""}
-								onChange={e => handleChange("storeName", e.target.value)}
+								value={dataForm.storeName || ""}
+								onChange={e => handlePerubahan("storeName", e.target.value)}
 								className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400"
-								placeholder="e.g. users (leave empty for static)"
+								placeholder="contoh: users (kosongkan untuk statis)"
 							/>
 						</div>
 					</div>
 
-					{/* Response Config Card */}
+					{/* Kartu Konfigurasi Response */}
 					<div
 						className="bg-white rounded-2xl border border-slate-200 shadow-sm space-y-6"
 						style={{ padding: "var(--space-3)" }}
 					>
 						<h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 pb-2 border-b border-slate-100">
-							<Gauge className="w-4 h-4 text-brand-500" /> Response Behavior
+							<Gauge className="w-4 h-4 text-brand-500" /> Perilaku Response
 						</h3>
 
 						<div>
 							<div className="flex justify-between items-center mb-4">
-								<Label className="mb-0">Simulated Latency</Label>
+								<Label className="mb-0">Latensi Simulasi</Label>
 								<span className="text-xs font-mono font-bold text-brand-600 bg-brand-50 px-2.5 py-1 rounded-md border border-brand-100">
-									{formData.delay}ms
+									{dataForm.delay}ms
 								</span>
 							</div>
 							<input
@@ -1608,40 +1685,40 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 								min="0"
 								max="5000"
 								step="50"
-								value={formData.delay}
-								onChange={e => handleChange("delay", parseInt(e.target.value))}
+								value={dataForm.delay}
+								onChange={e => handlePerubahan("delay", parseInt(e.target.value))}
 								className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-brand-600 hover:accent-brand-500"
 							/>
-							{/* Latency Presets */}
+							{/* Preset latensi */}
 							<div className="flex flex-wrap gap-1.5 mt-3">
-								{LATENCY_PRESETS.map(ms => (
+								{PRESET_LATENSI.map(ms => (
 									<button
 										key={ms}
 										type="button"
-										onClick={() => handleChange("delay", ms)}
+										onClick={() => handlePerubahan("delay", ms)}
 										className="text-[10px] font-medium bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded transition-colors"
 									>
-										{ms === 0 ? "None" : `${ms}ms`}
+										{ms === 0 ? "Tidak ada" : `${ms}ms`}
 									</button>
 								))}
 							</div>
 						</div>
 
-						{/* Headers Config */}
+						{/* Konfigurasi Header Kustom */}
 						<div className="pt-2">
 							<div className="flex items-center justify-between mb-3">
-								<Label className="mb-0">Custom Headers</Label>
+								<Label className="mb-0">Header Kustom</Label>
 								<button
 									type="button"
-									onClick={addHeader}
+									onClick={tambahHeader}
 									className="text-[10px] font-bold uppercase tracking-wide flex items-center text-brand-600 hover:text-brand-700 bg-brand-50 px-2 py-1 rounded border border-brand-100 transition-colors"
 								>
-									<Plus className="w-3 h-3 mr-1" /> Add Header
+									<Plus className="w-3 h-3 mr-1" /> Tambah Header
 								</button>
 							</div>
 
 							<div className="space-y-2">
-								{(formData.headers || []).map((header, index) => (
+								{(dataForm.headers || []).map((header, index) => (
 									<div key={index} className="flex items-center space-x-2 group">
 										<div className="grid grid-cols-2 gap-2 flex-1">
 											<input
@@ -1653,7 +1730,7 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 											/>
 											<input
 												type="text"
-												placeholder="Value"
+												placeholder="Nilai"
 												value={header.value}
 												onChange={e => updateHeader(index, "value", e.target.value)}
 												className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:ring-1 focus:ring-brand-500 outline-none placeholder:text-slate-400"
@@ -1661,7 +1738,7 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 										</div>
 										<button
 											type="button"
-											onClick={() => removeHeader(index)}
+											onClick={() => hapusHeader(index)}
 											className="text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
 											style={{ padding: "var(--space-1)" }}
 										>
@@ -1669,9 +1746,9 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 										</button>
 									</div>
 								))}
-								{(formData.headers || []).length === 0 && (
+								{(dataForm.headers || []).length === 0 && (
 									<div className="text-xs text-slate-400 py-4 text-center bg-slate-50/50 rounded-lg border border-slate-100 border-dashed">
-										No custom headers defined
+										Tidak ada header kustom yang didefinisikan
 									</div>
 								)}
 							</div>
@@ -1679,13 +1756,13 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 					</div>
 				</div>
 
-				{/* Right Column: JSON Editor (Same as before) */}
+				{/* Kolom Kanan: Editor JSON */}
 				<div className="lg:col-span-8 flex flex-col h-full bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden relative">
-					{/* Editor Toolbar */}
+					{/* Toolbar Editor */}
 					<div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-slate-50">
 						<div className="flex items-center space-x-4">
 							<h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-								<Database className="w-4 h-4 text-brand-500" /> Response Schema
+								<Database className="w-4 h-4 text-brand-500" /> Skema Response
 							</h3>
 
 							<div
@@ -1694,9 +1771,9 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 							>
 								<button
 									type="button"
-									onClick={() => handleModeSwitch("visual")}
+									onClick={() => handleGantiMode("visual")}
 									className={`flex items-center space-x-1 px-3 py-1.5 rounded-md text-[11px] font-bold transition-all ${
-										editorMode === "visual"
+										modeEditor === "visual"
 											? "bg-white text-brand-600 shadow-sm"
 											: "text-slate-500 hover:text-slate-700"
 									}`}
@@ -1706,9 +1783,9 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 								</button>
 								<button
 									type="button"
-									onClick={() => handleModeSwitch("code")}
+									onClick={() => handleGantiMode("code")}
 									className={`flex items-center space-x-1 px-3 py-1.5 rounded-md text-[11px] font-bold transition-all ${
-										editorMode === "code"
+										modeEditor === "code"
 											? "bg-white text-brand-600 shadow-sm"
 											: "text-slate-500 hover:text-slate-700"
 									}`}
@@ -1722,47 +1799,49 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 						<div className="flex items-center space-x-3">
 							<button
 								type="button"
-								onClick={handleAiGenerate}
-								disabled={isGenerating}
+								onClick={handleGenerateAI}
+								disabled={sedangGenerate}
 								className="flex items-center space-x-1.5 px-3 py-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-500 hover:to-indigo-500 rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
 							>
-								<Wand2 className={`w-3.5 h-3.5 ${isGenerating ? "animate-spin" : ""}`} />
-								<span>{isGenerating ? "Generating..." : "AI Generate"}</span>
+								<Wand2 className={`w-3.5 h-3.5 ${sedangGenerate ? "animate-spin" : ""}`} />
+								<span>{sedangGenerate ? "Mengenerate..." : "AI Generate"}</span>
 							</button>
 						</div>
 					</div>
 
 					<div className="relative flex-1 bg-white flex overflow-hidden">
-						{editorMode === "visual" ? (
+						{modeEditor === "visual" ? (
 							<div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-50/50">
 								<div
 									className="flex-1 overflow-y-auto space-y-0.5 custom-scrollbar"
 									style={{ padding: "var(--space-2)" }}
 								>
-									{visualFields.length > 0 && (
+									{fieldVisual.length > 0 && (
 										<div className="grid grid-cols-12 gap-3 px-10 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-											<div className="col-span-4">Field Name</div>
-											<div className="col-span-3">Type</div>
-											<div className="col-span-5">Value / Structure</div>
+											<div className="col-span-4">Nama Field</div>
+											<div className="col-span-3">Tipe</div>
+											<div className="col-span-5">Nilai / Struktur</div>
 										</div>
 									)}
 
-									{visualFields.length === 0 && (
+									{fieldVisual.length === 0 && (
 										<div className="flex flex-col items-center justify-center py-12 text-slate-400 border-2 border-dashed border-slate-200 rounded-2xl bg-white/50">
 											<Table2 className="w-10 h-10 mb-3 text-slate-300" />
-											<p className="text-sm font-medium text-slate-600">No fields defined yet</p>
+											<p className="text-sm font-medium text-slate-600">
+												Belum ada field yang didefinisikan
+											</p>
 											<button
 												type="button"
-												onClick={() => handleAddField()}
+												onClick={() => handleTambahField()}
 												className="px-4 py-2 bg-brand-50 hover:bg-brand-100 text-brand-600 rounded-lg text-xs font-bold transition-colors"
 											>
-												+ Add First Field
+												+ Tambah Field Pertama
 											</button>
 										</div>
 									)}
 
-									{visualFields.map(field => (
-										<FieldRow key={field.id} field={field} ctx={fieldCtx} />
+									{fieldVisual.map(field => (
+										<FieldRow key={field.id} field={field} ctx={konteksField} />
 									))}
 								</div>
 
@@ -1772,7 +1851,7 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 								>
 									<button
 										type="button"
-										onClick={() => handleAddField()}
+										onClick={() => handleTambahField()}
 										className="w-full py-3 border-2 border-dashed border-slate-200 hover:border-brand-400 hover:bg-brand-50/50 text-slate-500 hover:text-brand-600 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 group active:scale-[0.99]"
 									>
 										<div
@@ -1781,7 +1860,7 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 										>
 											<Plus className="w-4 h-4" />
 										</div>
-										<span>Add New Root Field</span>
+										<span>Tambah Field Root Baru</span>
 									</button>
 								</div>
 							</div>
@@ -1793,15 +1872,15 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 										className="bg-[#1e1e2e] border-r border-slate-700/50 text-slate-600 text-xs font-mono pt-5 text-right pr-4 pl-2 select-none flex-shrink-0 leading-relaxed min-w-[3.5rem] overflow-hidden z-10"
 										style={{ lineHeight: "1.6" }}
 									>
-										{formData.responseBody.split("\n").map((_, i) => (
+										{dataForm.responseBody.split("\n").map((_, i) => (
 											<div
 												key={i}
 												className={`transition-colors cursor-default ${
-													i + 1 === errorLine
+													i + 1 === barisError
 														? "text-red-500 font-bold bg-red-500/10"
 														: "hover:text-slate-400"
 												}`}
-												style={{ fontSize: `${fontSize}px` }}
+												style={{ fontSize: `${ukuranFont}px` }}
 											>
 												{i + 1}
 											</div>
@@ -1813,18 +1892,18 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 											className="absolute inset-0 overflow-auto"
 											style={{ scrollbarWidth: "none" }}
 										>
-											<JsonHighlightOverlay code={formData.responseBody} fontSize={fontSize} />
+											<JsonHighlightOverlay code={dataForm.responseBody} fontSize={ukuranFont} />
 										</div>
 
 										<textarea
 											ref={textareaRef}
 											onScroll={handleScroll}
 											onKeyDown={handleKeyDown}
-											value={formData.responseBody}
-											onChange={e => handleChange("responseBody", e.target.value)}
+											value={dataForm.responseBody}
+											onChange={e => handlePerubahan("responseBody", e.target.value)}
 											className="absolute inset-0 w-full h-full font-mono text-transparent bg-transparent resize-none outline-none focus:ring-0 leading-relaxed selection:bg-brand-500/30 caret-white z-10"
 											style={{
-												fontSize: `${fontSize}px`,
+												fontSize: `${ukuranFont}px`,
 												lineHeight: "1.6",
 												padding: "var(--space-3)",
 												paddingLeft: "var(--space-2)",
@@ -1839,26 +1918,26 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 
 					<div
 						className={`text-xs flex items-center border-t justify-between font-medium token-footer-padding ${
-							jsonError
+							errorJson
 								? "bg-red-50 text-red-600 border-red-200"
 								: "bg-slate-50 text-slate-500 border-slate-200"
 						}`}
 					>
 						<span className="flex items-center">
-							{jsonError ? (
+							{errorJson ? (
 								<>
 									<AlertCircle className="w-4 h-4 mr-2" />
-									Syntax Error: {jsonError}
+									Error Sintaks: {errorJson}
 								</>
-							) : conflictError ? (
+							) : errorKonflik ? (
 								<>
 									<AlertTriangle className="w-4 h-4 mr-2 text-red-500" />
-									<span className="text-red-500">Route Conflict Detected</span>
+									<span className="text-red-500">Terdeteksi Konflik Rute</span>
 								</>
 							) : (
 								<>
 									<CheckCircle className="w-4 h-4 mr-2 text-emerald-500" />
-									Schema Validated
+									Skema Tervalidasi
 								</>
 							)}
 						</span>
@@ -1880,13 +1959,14 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 								</button>
 							</div>
 							<FileJson className="w-3.5 h-3.5" />{" "}
-							{editorMode === "visual" ? "Generated JSON" : "Raw JSON"}
+							{modeEditor === "visual" ? "JSON yang Digenerate" : "JSON Mentah"}
 						</span>
 					</div>
 				</div>
 			</form>
 
-			{fieldToDelete && (
+			{/* Modal Konfirmasi Penghapusan Field */}
+			{fieldUntukDihapus && (
 				<div
 					className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200"
 					style={{ padding: "var(--space-2)" }}
@@ -1900,27 +1980,29 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 							<div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4 text-red-600">
 								<AlertTriangle className="w-6 h-6" />
 							</div>
-							<h3 className="text-lg font-bold text-slate-900 mb-2">Delete Field?</h3>
+							<h3 className="text-lg font-bold text-slate-900 mb-2">Hapus Field?</h3>
 							<p className="text-sm text-slate-600 mb-6">
-								This field contains{" "}
-								<strong className="text-slate-800">{fieldToDelete.childrenCount} nested items</strong>.
-								Deleting it will permanently remove all child fields.
+								Field ini berisi{" "}
+								<strong className="text-slate-800">
+									{fieldUntukDihapus.jumlahAnak} item bertingkat
+								</strong>
+								. Menghapusnya akan menghapus semua field anak secara permanen.
 							</p>
 
 							<div className="grid grid-cols-2 gap-3 w-full">
 								<button
 									type="button"
-									onClick={() => setFieldToDelete(null)}
+									onClick={() => setFieldUntukDihapus(null)}
 									className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-medium hover:bg-slate-50 transition-colors"
 								>
-									Cancel
+									Batal
 								</button>
 								<button
 									type="button"
-									onClick={() => executeRemoveField(fieldToDelete.id)}
+									onClick={() => jalankanHapusField(fieldUntukDihapus.id)}
 									className="px-4 py-2.5 rounded-xl bg-red-600 text-white font-bold hover:bg-red-700 transition-colors shadow-lg shadow-red-200"
 								>
-									Delete
+									Hapus
 								</button>
 							</div>
 						</div>
