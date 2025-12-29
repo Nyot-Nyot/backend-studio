@@ -1,309 +1,501 @@
 "use strict";
-// Load .env for local development so users can just set variables in the repo .env file
-let _dotenvLoaded = false;
+
+/**
+ * Proksi OpenRouter untuk aplikasi klien
+ * File ini menyediakan server proxy yang aman untuk mengakses API OpenRouter
+ * dengan penanganan kunci API, batas kecepatan, dan fallback yang tepat
+ */
+
+// ============================================
+// LOAD KONFIGURASI ENVIRONMENT
+// ============================================
+
+/**
+ * Memuat konfigurasi dari file .env untuk pengembangan lokal
+ * Pengguna dapat menyetel variabel di file .env di repositori
+ */
+let _dotenvDimuat = false;
+
 try {
-	const d = require("dotenv");
-	d.config();
-	_dotenvLoaded = true;
-} catch (e) {
-	// dotenv not installed; try a minimal manual parser as a best-effort fallback
+	const dotenv = require("dotenv");
+	dotenv.config();
+	_dotenvDimuat = true;
+} catch (error) {
+	// dotenv tidak terinstal; coba parser manual sederhana sebagai fallback
 	try {
 		const fs = require("fs");
 		const path = require("path");
-		const envPath = path.resolve(process.cwd(), ".env");
-		if (fs.existsSync(envPath)) {
-			const raw = fs.readFileSync(envPath, "utf8");
-			raw.split(/\r?\n/).forEach(line => {
-				const trimmed = line.trim();
-				if (!trimmed || trimmed.startsWith("#")) return;
-				const eq = trimmed.indexOf("=");
-				if (eq === -1) return;
-				const key = trimmed.slice(0, eq).trim();
-				let val = trimmed.slice(eq + 1).trim();
-				// Remove surrounding quotes
-				if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-					val = val.slice(1, -1);
+		const jalurEnv = path.resolve(process.cwd(), ".env");
+
+		if (fs.existsSync(jalurEnv)) {
+			const kontenMentah = fs.readFileSync(jalurEnv, "utf8");
+
+			kontenMentah.split(/\r?\n/).forEach(baris => {
+				const barisTrim = baris.trim();
+
+				if (!barisTrim || barisTrim.startsWith("#")) return;
+
+				const indexSamaDengan = barisTrim.indexOf("=");
+				if (indexSamaDengan === -1) return;
+
+				const kunci = barisTrim.slice(0, indexSamaDengan).trim();
+				let nilai = barisTrim.slice(indexSamaDengan + 1).trim();
+
+				// Hapus tanda kutip di sekitar nilai
+				if ((nilai.startsWith('"') && nilai.endsWith('"')) || (nilai.startsWith("'") && nilai.endsWith("'"))) {
+					nilai = nilai.slice(1, -1);
 				}
-				if (typeof process.env[key] === "undefined") process.env[key] = val;
+
+				if (typeof process.env[kunci] === "undefined") {
+					process.env[kunci] = nilai;
+				}
 			});
-			_dotenvLoaded = true;
+
+			_dotenvDimuat = true;
 		}
-	} catch (e2) {
-		// ignore fallback errors
+	} catch (errorFallback) {
+		// Abaikan error fallback
 	}
 }
+
 const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
 
+// ============================================
+// KONFIGURASI UTAMA
+// ============================================
+
 const PORT = process.env.OPENROUTER_HELPER_PORT || 3002;
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || process.env.VITE_OPENROUTER_KEY;
+const KUNCI_API_OPENROUTER = process.env.OPENROUTER_API_KEY || process.env.VITE_OPENROUTER_KEY;
 
-// Note: server key presence/redaction is computed inside createApp so that tests can change process.env between runs.
+// ============================================
+// FUNGSI UTAMA UNTUK MEMBUAT APLIKASI
+// ============================================
 
-function createApp(opts = {}) {
-	const hasOverride = Object.prototype.hasOwnProperty.call(opts, "openRouterApiKey");
-	const OPENROUTER_API_KEY_OVERRIDE = opts.openRouterApiKey;
-	const QUIET =
-		opts.quiet || process.env.OPENROUTER_PROXY_QUIET === "1" || process.env.OPENROUTER_PROXY_QUIET === "true";
-	const ALLOW_CLIENT_KEY = opts.allowClientKey || process.env.DEV_ALLOW_CLIENT_KEY === "1";
-	const callOpenRouterFn = opts.callOpenRouter || null; // test override, we'll wire below
+/**
+ * Membuat dan mengkonfigurasi aplikasi Express untuk proksi OpenRouter
+ * @param {Object} opsi - Opsi konfigurasi tambahan
+ * @returns {Object} Aplikasi Express yang sudah dikonfigurasi
+ */
+function buatAplikasi(opsi = {}) {
+	const memilikiOverride = Object.prototype.hasOwnProperty.call(opsi, "openRouterApiKey");
+	const OVERRIDE_KUNCI_API_OPENROUTER = opsi.openRouterApiKey;
 
-	// compute server key presence and redaction dynamically so tests can mutate env
-	const serverKeyPresent = !!(hasOverride ? OPENROUTER_API_KEY_OVERRIDE : process.env.OPENROUTER_API_KEY);
-	const serverKeyRedacted = (hasOverride ? OPENROUTER_API_KEY_OVERRIDE : process.env.OPENROUTER_API_KEY)
-		? String(hasOverride ? OPENROUTER_API_KEY_OVERRIDE : process.env.OPENROUTER_API_KEY).length > 8
-			? `${String(hasOverride ? OPENROUTER_API_KEY_OVERRIDE : process.env.OPENROUTER_API_KEY).slice(
+	const MODE_SENYAP =
+		opsi.quiet || process.env.OPENROUTER_PROXY_QUIET === "1" || process.env.OPENROUTER_PROXY_QUIET === "true";
+
+	const IZINKAN_KUNCI_KLIEN = opsi.allowClientKey || process.env.DEV_ALLOW_CLIENT_KEY === "1";
+
+	// Hook untuk testing
+	const fungsiPanggilOpenRouter = opsi.callOpenRouter || null;
+
+	// Hitung keberadaan kunci server secara dinamis agar testing dapat mengubah process.env
+	const kunciServerAda = !!(memilikiOverride ? OVERRIDE_KUNCI_API_OPENROUTER : process.env.OPENROUTER_API_KEY);
+
+	// Format kunci untuk log (redaksi sebagian untuk keamanan)
+	const kunciServerTeredaksi = (memilikiOverride ? OVERRIDE_KUNCI_API_OPENROUTER : process.env.OPENROUTER_API_KEY)
+		? String(memilikiOverride ? OVERRIDE_KUNCI_API_OPENROUTER : process.env.OPENROUTER_API_KEY).length > 8
+			? `${String(memilikiOverride ? OVERRIDE_KUNCI_API_OPENROUTER : process.env.OPENROUTER_API_KEY).slice(
 					0,
 					4
-			  )}...${String(hasOverride ? OPENROUTER_API_KEY_OVERRIDE : process.env.OPENROUTER_API_KEY).slice(-4)}`
+			  )}...` +
+			  `${String(memilikiOverride ? OVERRIDE_KUNCI_API_OPENROUTER : process.env.OPENROUTER_API_KEY).slice(-4)}`
 			: "***"
 		: null;
 
-	if (!QUIET) {
-		if (!serverKeyPresent) {
+	// Log konfigurasi jika tidak dalam mode senyap
+	if (!MODE_SENYAP) {
+		if (!kunciServerAda) {
 			console.warn(
-				"Warning: OPENROUTER_API_KEY is not set. Proxy will respond with 401 unless a key is provided or DEV_ALLOW_CLIENT_KEY is enabled for dev."
+				"Peringatan: OPENROUTER_API_KEY tidak disetel. " +
+					"Proxy akan merespons dengan 401 kecuali kunci diberikan atau " +
+					"DEV_ALLOW_CLIENT_KEY diaktifkan untuk pengembangan."
 			);
 		} else {
-			console.log(`OpenRouter proxy: using server key ${serverKeyRedacted}`);
+			console.log(`Proksi OpenRouter: menggunakan kunci server ${kunciServerTeredaksi}`);
 		}
 	}
 
-	const app = express();
-	app.use(cors());
-	app.use(bodyParser.json());
+	// ============================================
+	// INISIALISASI APLIKASI EXPRESS
+	// ============================================
 
-	app.get("/health", (req, res) => res.json({ ok: true }));
+	const aplikasi = express();
+	aplikasi.use(cors());
+	aplikasi.use(bodyParser.json());
 
-	// Expose a path under /openrouter for Vite dev proxy health checks (client fetches /openrouter/health)
-	app.get("/openrouter/health", (req, res) => {
-		const keyPresent = !!(hasOverride ? OPENROUTER_API_KEY_OVERRIDE : process.env.OPENROUTER_API_KEY);
-		res.json({ ok: true, keyPresent });
+	// ============================================
+	// ENDPOINT KESEHATAN
+	// ============================================
+
+	/**
+	 * Endpoint untuk memeriksa kesehatan server
+	 */
+	aplikasi.get("/health", (permintaan, respon) => {
+		respon.json({ ok: true });
 	});
 
-	// Helper to call OpenRouter Chat Completions
-	async function callOpenRouter(messages, model = "deepseek/deepseek-r1-0528:free", apiKey) {
-		// Expose a testing hook so tests can call the internal function directly
-		if (!app._isTest_callOpenRouter) app._isTest_callOpenRouter = msgs => callOpenRouter(msgs, model, apiKey);
-		const keyToUse = apiKey || (hasOverride ? OPENROUTER_API_KEY_OVERRIDE : process.env.OPENROUTER_API_KEY);
+	/**
+	 * Endpoint kesehatan khusus untuk OpenRouter
+	 * Digunakan oleh Vite dev proxy untuk pengecekan kesehatan
+	 */
+	aplikasi.get("/openrouter/health", (permintaan, respon) => {
+		const kunciAda = !!(memilikiOverride ? OVERRIDE_KUNCI_API_OPENROUTER : process.env.OPENROUTER_API_KEY);
+		respon.json({ ok: true, kunciAda });
+	});
+
+	// ============================================
+	// FUNGSI BANTUAN UNTUK PANGGIL OPENROUTER
+	// ============================================
+
+	/**
+	 * Memanggil API Chat Completions OpenRouter
+	 * @param {Array} pesan - Array pesan untuk model AI
+	 * @param {string} model - Model AI yang akan digunakan
+	 * @param {string} kunciApi - Kunci API untuk autentikasi
+	 * @returns {Promise<Object>} Respons dari API OpenRouter
+	 */
+	async function panggilOpenRouter(pesan, model = "deepseek/deepseek-r1-0528:free", kunciApi) {
+		const kunciUntukDigunakan =
+			kunciApi || (memilikiOverride ? OVERRIDE_KUNCI_API_OPENROUTER : process.env.OPENROUTER_API_KEY);
+
+		if (!kunciUntukDigunakan) {
+			throw new Error("OPENROUTER_API_KEY tidak dikonfigurasi");
+		}
+
 		const retryUtil = require("../services/retry.cjs");
 
-		if (!keyToUse) throw new Error("OPENROUTER_API_KEY not configured");
-
-		const doFetch = async () => {
-			const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+		const eksekusiFetch = async () => {
+			const respon = await fetch("https://openrouter.ai/api/v1/chat/completions", {
 				method: "POST",
 				headers: {
-					Authorization: `Bearer ${keyToUse}`,
+					Authorization: `Bearer ${kunciUntukDigunakan}`,
 					"Content-Type": "application/json",
 				},
-				body: JSON.stringify({ model, messages }),
+				body: JSON.stringify({ model, messages: pesan }),
 			});
 
-			if (!response) throw new Error("no response from fetch");
-
-			// Parse body for non-success statuses so we can include messages
-			if (response.status >= 400) {
-				let body = null;
-				try {
-					body = await response.json();
-				} catch (e) {
-					// ignore parse errors
-				}
-
-				if (response.status === 429) {
-					const msg = body?.message || body?.error || JSON.stringify(body) || "rate limit";
-					const retryAfter =
-						response.headers && typeof response.headers.get === "function"
-							? response.headers.get("retry-after")
-							: null;
-					const err = new Error(`rate_limit:${msg}`);
-					err.status = 429;
-					err.noRetry = true; // don't retry rate-limit errors
-					err.retryAfter = retryAfter;
-					throw err;
-				}
-
-				// For other 4xx client errors, surface the message and don't retry
-				if (response.status >= 400 && response.status < 500) {
-					const err = new Error(`client_error:${response.status}:${JSON.stringify(body)}`);
-					err.status = response.status;
-					err.noRetry = true;
-					throw err;
-				}
-
-				// For 5xx, throw to trigger retry logic
-				if (response.status >= 500) throw new Error("server_error:" + response.status);
+			if (!respon) {
+				throw new Error("Tidak ada respons dari fetch");
 			}
 
-			const json = await response.json();
-			return { status: response.status, body: json };
+			// Tangani status error
+			if (respon.status >= 400) {
+				let badanRespon = null;
+
+				try {
+					badanRespon = await respon.json();
+				} catch (errorParse) {
+					// Abaikan error parsing
+				}
+
+				// Error batas kecepatan (rate limit)
+				if (respon.status === 429) {
+					const pesanError =
+						badanRespon?.message || badanRespon?.error || JSON.stringify(badanRespon) || "batas kecepatan";
+
+					const retrySetelah =
+						respon.headers && typeof respon.headers.get === "function"
+							? respon.headers.get("retry-after")
+							: null;
+
+					const error = new Error(`rate_limit:${pesanError}`);
+					error.status = 429;
+					error.noRetry = true; // Jangan ulangi untuk error batas kecepatan
+					error.retryAfter = retrySetelah;
+
+					throw error;
+				}
+
+				// Error klien 4xx lainnya
+				if (respon.status >= 400 && respon.status < 500) {
+					const error = new Error(`client_error:${respon.status}:${JSON.stringify(badanRespon)}`);
+					error.status = respon.status;
+					error.noRetry = true;
+
+					throw error;
+				}
+
+				// Error server 5xx
+				if (respon.status >= 500) {
+					throw new Error(`server_error:${respon.status}`);
+				}
+			}
+
+			const json = await respon.json();
+			return { status: respon.status, body: json };
 		};
 
-		// Use retry with reasonable defaults and per-attempt timeout
+		// Konfigurasi timeout dari environment atau default 60 detik
 		const timeoutMsEnv = process.env.OPENROUTER_TIMEOUT_MS
 			? parseInt(process.env.OPENROUTER_TIMEOUT_MS, 10)
 			: undefined;
-		const timeoutMs = typeof timeoutMsEnv === "number" && !Number.isNaN(timeoutMsEnv) ? timeoutMsEnv : 60000; // default 60s per attempt
-		if (process.env.DEBUG_OPENROUTER === "1" && !QUIET) console.log(`OpenRouter call: timeoutMs=${timeoutMs}`);
-		const result = await retryUtil.retry(doFetch, {
+
+		const timeoutMs = typeof timeoutMsEnv === "number" && !Number.isNaN(timeoutMsEnv) ? timeoutMsEnv : 60000; // Default 60 detik per percobaan
+
+		if (process.env.DEBUG_OPENROUTER === "1" && !MODE_SENYAP) {
+			console.log(`Panggilan OpenRouter: timeoutMs=${timeoutMs}`);
+		}
+
+		const hasil = await retryUtil.retry(eksekusiFetch, {
 			retries: 3,
 			baseDelayMs: 200,
 			factor: 2,
 			maxDelayMs: 1500,
 			timeoutMs: timeoutMs,
 		});
-		return result;
+
+		return hasil;
 	}
 
-	// Expose internal call helper for tests (call directly to avoid HTTP layer)
-	app._isTest_callOpenRouter = (msgs, model, apiKey) => callOpenRouter(msgs, model, apiKey);
+	// Ekspos fungsi internal untuk testing
+	aplikasi._isTest_callOpenRouter = (pesan, model, kunciApi) => panggilOpenRouter(pesan, model, kunciApi);
 
-	app.post("/openrouter/generate-mock", async (req, res) => {
-		const { path, context } = req.body || {};
-		// Determine key: server override > env server key > client-provided header if explicitly allowed and not production
-		const keyFromHeader = req.get("x-openrouter-key");
-		let keyCandidate = null;
-		if (hasOverride) {
-			// explicit override provided by factory; allow null to mean "explicitly no key"
-			keyCandidate = OPENROUTER_API_KEY_OVERRIDE === null ? null : OPENROUTER_API_KEY_OVERRIDE;
+	// ============================================
+	// ENDPOINT UNTUK MEMBANGKITKAN DATA MOCK
+	// ============================================
+
+	/**
+	 * Endpoint untuk membangkitkan respons API mock menggunakan AI
+	 */
+	aplikasi.post("/openrouter/generate-mock", async (permintaan, respon) => {
+		const { path, context } = permintaan.body || {};
+
+		// Tentukan kunci yang akan digunakan
+		const kunciDariHeader = permintaan.get("x-openrouter-key");
+		let kunciKandidat = null;
+
+		if (memilikiOverride) {
+			// Override eksplisit dari factory
+			kunciKandidat = OVERRIDE_KUNCI_API_OPENROUTER === null ? null : OVERRIDE_KUNCI_API_OPENROUTER;
 		} else {
-			keyCandidate = process.env.OPENROUTER_API_KEY || null;
+			kunciKandidat = process.env.OPENROUTER_API_KEY || null;
 		}
-		const key =
-			keyCandidate ||
-			(ALLOW_CLIENT_KEY && process.env.NODE_ENV !== "production" && keyFromHeader ? keyFromHeader : null);
-		if (!key) return res.status(401).json({ error: "OPENROUTER_API_KEY not configured" });
-		if (!path) return res.status(400).json({ error: "Missing path" });
+
+		const kunci =
+			kunciKandidat ||
+			(IZINKAN_KUNCI_KLIEN && process.env.NODE_ENV !== "production" && kunciDariHeader ? kunciDariHeader : null);
+
+		if (!kunci) {
+			return respon.status(401).json({
+				error: "OPENROUTER_API_KEY tidak dikonfigurasi",
+			});
+		}
+
+		if (!path) {
+			return respon.status(400).json({
+				error: "Path tidak diberikan",
+			});
+		}
+
+		// Log peringatan jika menggunakan kunci dari klien di lingkungan development
 		if (
-			keyFromHeader &&
-			keyFromHeader === key &&
-			ALLOW_CLIENT_KEY &&
+			kunciDariHeader &&
+			kunciDariHeader === kunci &&
+			IZINKAN_KUNCI_KLIEN &&
 			process.env.NODE_ENV !== "production" &&
-			!QUIET
+			!MODE_SENYAP
 		) {
 			console.warn(
-				"OpenRouter proxy: using client-provided API key (DEV_ALLOW_CLIENT_KEY is enabled) — be careful not to expose your keys in production"
+				"Proksi OpenRouter: menggunakan kunci API dari klien " +
+					"(DEV_ALLOW_CLIENT_KEY diaktifkan) — hati-hati jangan membocorkan " +
+					"kunci Anda di produksi"
 			);
 		}
 
-		const userPrompt = [
-			"You are a backend developer helper. Generate a realistic JSON response body for the REST API endpoint.",
+		// Siapkan prompt untuk model AI
+		const promptPengguna = [
+			"Anda adalah asisten pengembang backend. Bangkitkan respons JSON yang realistis ",
+			"untuk endpoint API REST.",
 			`Endpoint Path: "${path}"`,
 			`Context/Description: "${context}"`,
-			"Requirements:",
-			"1) Output ONLY valid JSON.",
-			"2) Do not include markdown code fences; return plain JSON only.",
-			"3) If the path implies a list (e.g., /users), return an array of 3-5 items.",
-			"4) If the path implies a single resource (e.g., /users/1), return a single object.",
-			"5) Use realistic data (names, dates, emails).",
+			"Persyaratan:",
+			"1) Hanya keluarkan JSON yang valid.",
+			"2) Jangan sertakan tanda kode markdown; kembalikan hanya JSON polos.",
+			"3) Jika path mengimplikasikan daftar (contoh: /users), kembalikan array 3-5 item.",
+			"4) Jika path mengimplikasikan sumber daya tunggal (contoh: /users/1), ",
+			"kembalikan objek tunggal.",
+			"5) Gunakan data realistis (nama, tanggal, email).",
 		].join(" ");
 
 		try {
-			const messages = [{ role: "user", content: userPrompt }];
-			const result = callOpenRouterFn
-				? await callOpenRouterFn(messages, undefined, key)
-				: await callOpenRouter(messages, undefined, key);
-			if (result.status !== 200) return res.status(result.status).json({ error: result.body });
+			const pesan = [{ role: "user", content: promptPengguna }];
 
-			// Attempt to extract content text (compat with OpenRouter response shape)
-			const text =
-				result.body?.choices?.[0]?.message?.content ||
-				result.body?.choices?.[0]?.content ||
-				JSON.stringify(result.body);
-			// Strip fences if any
-			const cleaned = String(text)
+			const hasil = fungsiPanggilOpenRouter
+				? await fungsiPanggilOpenRouter(pesan, undefined, kunci)
+				: await panggilOpenRouter(pesan, undefined, kunci);
+
+			if (hasil.status !== 200) {
+				return respon.status(hasil.status).json({
+					error: hasil.body,
+				});
+			}
+
+			// Ekstrak teks konten dari respons
+			const teks =
+				hasil.body?.choices?.[0]?.message?.content ||
+				hasil.body?.choices?.[0]?.content ||
+				JSON.stringify(hasil.body);
+
+			// Bersihkan tanda kode markdown jika ada
+			const teksBersih = String(teks)
 				.replace(/```json/g, "")
 				.replace(/```/g, "")
 				.trim();
 
-			// Validate JSON output
+			// Validasi dan parse output JSON
 			try {
-				const parsed = JSON.parse(cleaned);
-				return res.json({ json: parsed });
-			} catch (err) {
-				if (!QUIET) console.warn("OpenRouter proxy: model returned invalid JSON for generate-mock");
-				return res.status(502).json({ error: "invalid_model_output", raw: cleaned });
+				const terparse = JSON.parse(teksBersih);
+				return respon.json({ json: terparse });
+			} catch (errorParse) {
+				if (!MODE_SENYAP) {
+					console.warn("Proksi OpenRouter: model mengembalikan JSON tidak valid untuk generate-mock");
+				}
+
+				return respon.status(502).json({
+					error: "invalid_model_output",
+					raw: teksBersih,
+				});
 			}
-		} catch (e) {
-			console.error("OpenRouter proxy error (generate-mock):", e);
-			res.status(500).json({ error: "proxy_error", details: String(e) });
+		} catch (error) {
+			console.error("Error proksi OpenRouter (generate-mock):", error);
+			respon.status(500).json({
+				error: "proxy_error",
+				details: String(error),
+			});
 		}
 	});
 
-	app.post("/openrouter/generate-endpoint", async (req, res) => {
-		const { prompt } = req.body || {};
-		const keyFromHeader = req.get("x-openrouter-key");
-		let keyCandidate = null;
-		if (hasOverride) {
-			// explicit override provided by factory; allow null to mean "explicitly no key"
-			keyCandidate = OPENROUTER_API_KEY_OVERRIDE === null ? null : OPENROUTER_API_KEY_OVERRIDE;
+	// ============================================
+	// ENDPOINT UNTUK MEMBANGKITKAN ENDPOINT API
+	// ============================================
+
+	/**
+	 * Endpoint untuk membangkitkan konfigurasi endpoint API lengkap
+	 */
+	aplikasi.post("/openrouter/generate-endpoint", async (permintaan, respon) => {
+		const { prompt } = permintaan.body || {};
+
+		// Tentukan kunci yang akan digunakan
+		const kunciDariHeader = permintaan.get("x-openrouter-key");
+		let kunciKandidat = null;
+
+		if (memilikiOverride) {
+			// Override eksplisit dari factory
+			kunciKandidat = OVERRIDE_KUNCI_API_OPENROUTER === null ? null : OVERRIDE_KUNCI_API_OPENROUTER;
 		} else {
-			keyCandidate = process.env.OPENROUTER_API_KEY || null;
+			kunciKandidat = process.env.OPENROUTER_API_KEY || null;
 		}
-		const key =
-			keyCandidate ||
-			(ALLOW_CLIENT_KEY && process.env.NODE_ENV !== "production" && keyFromHeader ? keyFromHeader : null);
-		if (!key) return res.status(401).json({ error: "OPENROUTER_API_KEY not configured" });
-		if (!prompt) return res.status(400).json({ error: "Missing prompt" });
+
+		const kunci =
+			kunciKandidat ||
+			(IZINKAN_KUNCI_KLIEN && process.env.NODE_ENV !== "production" && kunciDariHeader ? kunciDariHeader : null);
+
+		if (!kunci) {
+			return respon.status(401).json({
+				error: "OPENROUTER_API_KEY tidak dikonfigurasi",
+			});
+		}
+
+		if (!prompt) {
+			return respon.status(400).json({
+				error: "Prompt tidak diberikan",
+			});
+		}
+
+		// Log peringatan jika menggunakan kunci dari klien di lingkungan development
 		if (
-			keyFromHeader &&
-			keyFromHeader === key &&
-			ALLOW_CLIENT_KEY &&
+			kunciDariHeader &&
+			kunciDariHeader === kunci &&
+			IZINKAN_KUNCI_KLIEN &&
 			process.env.NODE_ENV !== "production" &&
-			!QUIET
+			!MODE_SENYAP
 		) {
 			console.warn(
-				"OpenRouter proxy: using client-provided API key (DEV_ALLOW_CLIENT_KEY is enabled) — be careful not to expose your keys in production"
+				"Proksi OpenRouter: menggunakan kunci API dari klien " +
+					"(DEV_ALLOW_CLIENT_KEY diaktifkan) — hati-hati jangan membocorkan " +
+					"kunci Anda di produksi"
 			);
 		}
 
-		const systemPrompt = [
-			"You are an API Architect. Based on the user's description, generate a complete REST API endpoint configuration.",
-			`User Description: "${prompt}"`,
-			'Return ONLY a raw JSON object (no markdown) with this structure: { "name": "Short descriptive name", "path": "/api/v1/resource-name", "method": "GET|POST|PUT|DELETE|PATCH", "statusCode": 200, "responseBody": "The JSON string of the response data (stringified)" }',
-			"Ensure the path uses best practices (kebab-case). Ensure the responseBody is a valid stringified JSON.",
+		// Siapkan prompt sistem untuk model AI
+		const promptSistem = [
+			"Anda adalah Arsitek API. Berdasarkan deskripsi pengguna, ",
+			"bangkitkan konfigurasi endpoint REST API yang lengkap.",
+			`Deskripsi Pengguna: "${prompt}"`,
+			"Kembalikan HANYA objek JSON mentah (tanpa markdown) dengan struktur ini: ",
+			'{ "name": "Nama deskriptif singkat", ',
+			'"path": "/api/v1/nama-sumber-daya", ',
+			'"method": "GET|POST|PUT|DELETE|PATCH", ',
+			'"statusCode": 200, ',
+			'"responseBody": "String JSON dari data respons (dalam bentuk string)" }',
+			"Pastikan path menggunakan praktik terbaik (kebab-case). ",
+			"Pastikan responseBody adalah JSON string yang valid.",
 		].join(" ");
 
 		try {
-			const messages = [{ role: "user", content: systemPrompt }];
-			const result = await callOpenRouter(messages, undefined, key);
-			if (result.status !== 200) return res.status(result.status).json({ error: result.body });
+			const pesan = [{ role: "user", content: promptSistem }];
+			const hasil = await panggilOpenRouter(pesan, undefined, kunci);
 
-			const text =
-				result.body?.choices?.[0]?.message?.content ||
-				result.body?.choices?.[0]?.content ||
-				JSON.stringify(result.body);
-			const cleaned = String(text)
+			if (hasil.status !== 200) {
+				return respon.status(hasil.status).json({
+					error: hasil.body,
+				});
+			}
+
+			const teks =
+				hasil.body?.choices?.[0]?.message?.content ||
+				hasil.body?.choices?.[0]?.content ||
+				JSON.stringify(hasil.body);
+
+			const teksBersih = String(teks)
 				.replace(/```json/g, "")
 				.replace(/```/g, "")
 				.trim();
 
-			// Try to parse JSON
+			// Coba parse JSON
 			try {
-				const parsed = JSON.parse(cleaned);
-				return res.json(parsed);
-			} catch (e) {
-				return res.status(502).json({ error: "invalid_model_output", raw: cleaned });
+				const terparse = JSON.parse(teksBersih);
+				return respon.json(terparse);
+			} catch (errorParse) {
+				return respon.status(502).json({
+					error: "invalid_model_output",
+					raw: teksBersih,
+				});
 			}
-		} catch (e) {
-			console.error("OpenRouter proxy error (generate-endpoint):", e);
-			res.status(500).json({ error: "proxy_error", details: String(e) });
+		} catch (error) {
+			console.error("Error proksi OpenRouter (generate-endpoint):", error);
+			respon.status(500).json({
+				error: "proxy_error",
+				details: String(error),
+			});
 		}
 	});
 
-	return app;
+	return aplikasi;
 }
 
+// ============================================
+// MENJALANKAN SERVER JIKA DIEKSEKUSI LANGSUNG
+// ============================================
+
 if (require.main === module) {
-	const app = createApp();
-	app.listen(PORT, () => {
-		console.log(`OpenRouter proxy running on port ${PORT}`);
-		console.log(`Endpoints: POST http://localhost:${PORT}/openrouter/generate-mock`);
-		console.log(`           POST http://localhost:${PORT}/openrouter/generate-endpoint`);
+	const aplikasi = buatAplikasi();
+
+	aplikasi.listen(PORT, () => {
+		console.log(`Proksi OpenRouter berjalan di port ${PORT}`);
+		console.log(`Endpoint: POST http://localhost:${PORT}/openrouter/generate-mock`);
+		console.log(`         POST http://localhost:${PORT}/openrouter/generate-endpoint`);
 	});
 }
 
-// Export factory for testing
-module.exports = { createApp };
+// ============================================
+// EKSPOR MODUL
+// ============================================
+
+module.exports = {
+	buatAplikasi,
+	PORT,
+	KUNCI_API_OPENROUTER,
+};

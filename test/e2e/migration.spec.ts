@@ -9,15 +9,8 @@ test('migrates localStorage collections to IndexedDB on bootstrap', async ({ pag
   // Navigate to app (index.tsx will call dbService.init on startup)
   await page.goto('/');
 
-  // Open the Database view in the sidebar then verify the 'migrtest' collection is present
-  await page.getByText('Database').click();
+  // Database UI removed: verify migration by inspecting IndexedDB directly (no UI interaction required)
 
-  const collectionButton = page.getByRole('button', { name: 'migrtest' });
-  await expect(collectionButton).toBeVisible({ timeout: 5000 });
-
-  // Open the collection and verify data is visible in the table
-  await collectionButton.click();
-  await expect(page.getByText('Alice')).toBeVisible();
 
   // Verify IndexedDB contains the migrated collection
   const idxData: any = await page.evaluate(async () => {

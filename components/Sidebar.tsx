@@ -455,30 +455,6 @@ export const Sidebar: React.FC<PropsSidebar> = ({
 							{!sedangCollapsed && <span className="font-medium">Prototype Lab</span>}
 						</div>
 
-						{/* Item Database */}
-						<div
-							role="button"
-							tabIndex={0}
-							onClick={() => padaUbahTampilan("database")}
-							onKeyDown={event =>
-								(event.key === "Enter" || event.key === " ") && padaUbahTampilan("database")
-							}
-							aria-pressed={tampilanSaatIni === "database"}
-							aria-label="Database"
-							className={dapatkanKelasItemNavigasi("database")}
-							title="Database"
-						>
-							{indikatorAktif("database")}
-							<BasisData
-								className={`w-5 h-5 ${
-									tampilanSaatIni === "database"
-										? "text-brand-400"
-										: "text-slate-500 group-hover:text-slate-300"
-								}`}
-							/>
-							{!sedangCollapsed && <span className="font-medium">Database</span>}
-						</div>
-
 						{/* Item Logs (kondisional) */}
 						{fitur.logs && (
 							<div

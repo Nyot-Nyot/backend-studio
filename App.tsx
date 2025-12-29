@@ -24,7 +24,6 @@ import {
 } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Dashboard } from "./components/Dashboard";
-import { DatabaseView } from "./components/DatabaseView";
 import EmailExportModal from "./components/EmailExportModal";
 import ExportModal from "./components/ExportModal";
 import LandingPage from "./components/LandingPage";
@@ -1266,7 +1265,6 @@ function Aplikasi() {
 						statusSocket={statusSocket}
 					/>
 				)}
-				{tampilanAktif === "database" && <DatabaseView />}
 
 				{tampilanAktif === "settings" && (
 					<PanelPengaturan

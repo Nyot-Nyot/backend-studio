@@ -1,4 +1,11 @@
 "use strict";
+
+/**
+ * Server helper untuk mengelola unggahan file sementara untuk keperluan email
+ * Modul CommonJS ini menyediakan server web sederhana untuk menerima upload file
+ * dengan batas waktu berlaku (TTL) dan kemampuan unggah ke layanan publik.
+ */
+
 const express = require("express");
 const multer = require("multer");
 const path = require("path");
@@ -6,208 +13,473 @@ const fs = require("fs");
 const crypto = require("crypto");
 const cors = require("cors");
 
-const PORT = process.env.EMAIL_HELPER_PORT || process.env.VITE_EMAIL_HELPER_PORT || 3001;
-const UPLOAD_DIR = path.resolve(process.cwd(), "tmp", "email-uploads");
-const TTL_HOURS = Number(process.env.EMAIL_HELPER_TTL_HOURS || 24);
+// ============================================
+// KONFIGURASI APLIKASI
+// ============================================
 
-// CLI / env: quiet mode to suppress potentially sensitive logs
-const argv = process.argv.slice(2);
-const QUIET = argv.includes("--quiet") || process.env.EMAIL_HELPER_QUIET === "true";
-function safeLog() {
-	if (!QUIET) console.log.apply(console, arguments);
+const PORT = process.env.EMAIL_HELPER_PORT || process.env.VITE_EMAIL_HELPER_PORT || 3001;
+const DIREKTORI_UPLOAD = path.resolve(process.cwd(), "tmp", "email-uploads");
+const JAM_MASA_BERLAKU = Number(process.env.EMAIL_HELPER_TTL_HOURS || 24);
+
+// Mode senyap untuk menekan log yang berpotensi sensitif
+const argumenBarisPerintah = process.argv.slice(2);
+const MODE_SENYAP = argumenBarisPerintah.includes("--quiet") || process.env.EMAIL_HELPER_QUIET === "true";
+
+/**
+ * Fungsi untuk mencatat log dengan aman (hanya jika tidak dalam mode senyap)
+ */
+function catatLogAman() {
+	if (!MODE_SENYAP) console.log.apply(console, arguments);
 }
-function safeWarn() {
-	if (!QUIET) console.warn.apply(console, arguments);
+
+/**
+ * Fungsi untuk mencatat peringatan dengan aman
+ */
+function catatPeringatanAman() {
+	if (!MODE_SENYAP) console.warn.apply(console, arguments);
 }
-function safeError() {
+
+/**
+ * Fungsi untuk mencatat error (selalu ditampilkan)
+ */
+function catatError() {
 	console.error.apply(console, arguments);
 }
 
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+// ============================================
+// INISIALISASI DIREKTORI DAN PENYIMPANAN
+// ============================================
 
-const storage = multer.diskStorage({
-	destination: (req, file, cb) => cb(null, UPLOAD_DIR),
-	filename: (req, file, cb) => {
-		const id = crypto.randomBytes(8).toString("hex");
-		const ext = path.extname(file.originalname) || ".zip";
-		const name = `${id}${ext}`;
-		cb(null, name);
+/**
+ * Memastikan direktori upload ada, membuatnya jika belum ada
+ */
+function pastikanDirektoriUploadAda() {
+	if (!fs.existsSync(DIREKTORI_UPLOAD)) {
+		fs.mkdirSync(DIREKTORI_UPLOAD, { recursive: true });
+		catatLogAman(`Direktori upload dibuat: ${DIREKTORI_UPLOAD}`);
+	}
+}
+
+pastikanDirektoriUploadAda();
+
+/**
+ * Konfigurasi penyimpanan untuk multer
+ */
+const konfigurasiPenyimpanan = multer.diskStorage({
+	destination: (permintaan, file, callback) => callback(null, DIREKTORI_UPLOAD),
+	filename: (permintaan, file, callback) => {
+		const idUnik = crypto.randomBytes(8).toString("hex");
+		const ekstensiFile = path.extname(file.originalname) || ".zip";
+		const namaFile = `${idUnik}${ekstensiFile}`;
+		callback(null, namaFile);
 	},
 });
 
-// Acceptable extensions (for this helper): .zip, .json, .txt, .png, .jpg
-const ACCEPT_EXTENSIONS = new Set([".zip", ".json", ".txt", ".png", ".jpg", ".jpeg"]);
+// ============================================
+// KONFIGURASI VALIDASI FILE
+// ============================================
 
-// Simple in-memory rate limiter (per-IP). Configurable via env vars
-const RATE_LIMIT = Number(process.env.EMAIL_HELPER_RATE_LIMIT || 20); // uploads per window
-const RATE_WINDOW_MS = Number(process.env.EMAIL_HELPER_RATE_WINDOW_HOURS || 1) * 60 * 60 * 1000;
-const rateMap = new Map();
+/**
+ * Daftar ekstensi file yang diperbolehkan untuk keamanan
+ */
+const EKSTENSI_DIIZINKAN = new Set([".zip", ".json", ".txt", ".png", ".jpg", ".jpeg"]);
 
-function rateLimitMiddleware(req, res, next) {
-	const ip = req.ip || (req.connection && req.connection.remoteAddress) || "unknown";
-	let entry = rateMap.get(ip);
-	const now = Date.now();
-	if (!entry || now - entry.first > RATE_WINDOW_MS) {
-		entry = { count: 0, first: now };
+// ============================================
+// MIDDLEWARE BATAS LAJU UPLOAD
+// ============================================
+
+/**
+ * Konfigurasi untuk membatasi jumlah upload per alamat IP
+ */
+const BATAS_LAJU_UPLOAD = Number(process.env.EMAIL_HELPER_RATE_LIMIT || 20);
+const JENDELA_WAKTU_BATAS_LAJU_MS = Number(process.env.EMAIL_HELPER_RATE_WINDOW_HOURS || 1) * 60 * 60 * 1000;
+const petaBatasLaju = new Map();
+
+/**
+ * Middleware untuk menerapkan batas laju upload berdasarkan alamat IP
+ */
+function middlewareBatasLaju(permintaan, respon, lanjutkan) {
+	const alamatIP =
+		permintaan.ip || (permintaan.connection && permintaan.connection.remoteAddress) || "tidak-diketahui";
+
+	let entriLaju = petaBatasLaju.get(alamatIP);
+	const waktuSekarang = Date.now();
+
+	if (!entriLaju || waktuSekarang - entriLaju.waktuMulai > JENDELA_WAKTU_BATAS_LAJU_MS) {
+		entriLaju = { jumlah: 0, waktuMulai: waktuSekarang };
 	}
-	entry.count += 1;
-	rateMap.set(ip, entry);
-	if (entry.count > RATE_LIMIT) {
-		safeWarn(`Rate limit exceeded for ${ip} (${entry.count} > ${RATE_LIMIT})`);
-		return res.status(429).json({ error: "Too many upload requests" });
+
+	entriLaju.jumlah += 1;
+	petaBatasLaju.set(alamatIP, entriLaju);
+
+	if (entriLaju.jumlah > BATAS_LAJU_UPLOAD) {
+		catatPeringatanAman(
+			`Batas laju upload terlampaui untuk ${alamatIP} ` + `(${entriLaju.jumlah} > ${BATAS_LAJU_UPLOAD})`
+		);
+		return respon.status(429).json({
+			error: "Terlalu banyak permintaan upload",
+		});
 	}
-	next();
+
+	lanjutkan();
 }
 
-// cleanup old entries periodically
-setInterval(() => {
-	const now = Date.now();
-	rateMap.forEach((v, k) => {
-		if (now - v.first > RATE_WINDOW_MS * 2) rateMap.delete(k);
-	});
-}, RATE_WINDOW_MS);
-
-const upload = multer({
-	storage,
-	limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max
-	fileFilter: (req, file, cb) => {
-		const ext = path.extname(file.originalname || "").toLowerCase();
-		if (!ACCEPT_EXTENSIONS.has(ext)) {
-			// don't throw; signal validation failure and reject the file
-			req._fileValidationError = "File type not allowed";
-			return cb(null, false);
+/**
+ * Membersihkan entri batas laju yang sudah kadaluarsa
+ */
+function bersihkanEntriBatasLaju() {
+	const waktuSekarang = Date.now();
+	petaBatasLaju.forEach((nilai, kunci) => {
+		if (waktuSekarang - nilai.waktuMulai > JENDELA_WAKTU_BATAS_LAJU_MS * 2) {
+			petaBatasLaju.delete(kunci);
 		}
-		cb(null, true);
+	});
+}
+
+// Jadwalkan pembersihan berkala untuk entri batas laju
+setInterval(bersihkanEntriBatasLaju, JENDELA_WAKTU_BATAS_LAJU_MS);
+
+// ============================================
+// KONFIGURASI MULTER UNTUK UPLOAD
+// ============================================
+
+/**
+ * Konfigurasi multer untuk menangani upload file
+ */
+const konfigurasiUnggah = multer({
+	storage: konfigurasiPenyimpanan,
+	limits: {
+		fileSize: 50 * 1024 * 1024, // Maksimal 50MB
+	},
+	fileFilter: (permintaan, file, callback) => {
+		const ekstensiFile = path.extname(file.originalname || "").toLowerCase();
+
+		if (!EKSTENSI_DIIZINKAN.has(ekstensiFile)) {
+			// Tandai error validasi di objek permintaan
+			permintaan._errorValidasiFile = "Tipe file tidak diizinkan";
+			return callback(null, false);
+		}
+
+		callback(null, true);
 	},
 });
 
-const app = express();
-app.use(cors());
-app.use(express.json());
+// ============================================
+// INISIALISASI APLIKASI EXPRESS
+// ============================================
 
-// serve files with simple static middleware
-app.use("/files", express.static(UPLOAD_DIR, { index: false }));
+const aplikasi = express();
 
-const USE_0X0 = process.env.EMAIL_HELPER_UPLOAD_TO_0X0 === "true" || process.env.EMAIL_HELPER_PUBLIC_HOST === "0x0.st";
+// Middleware dasar
+aplikasi.use(cors());
+aplikasi.use(express.json());
 
-// Multer error wrapper so fileFilter errors are returned as JSON
-function uploadHandler(req, res, next) {
-	upload.single("file")(req, res, function (err) {
-		if (err) {
-			if (err.code === "LIMIT_FILE_SIZE") return res.status(413).json({ error: "File too large" });
-			if (err.message && err.message.includes("File type not allowed"))
-				return res.status(400).json({ error: "File type not allowed" });
-			safeError("Upload error (unexpected)", err);
-			return res.status(500).json({ error: "Internal upload error" });
+// Middleware untuk menyajikan file yang sudah diunggah
+aplikasi.use("/files", express.static(DIREKTORI_UPLOAD, { index: false }));
+
+// ============================================
+// KONFIGURASI UNGGAH KE LAYANAN PUBLIK
+// ============================================
+
+/**
+ * Menentukan apakah akan menggunakan layanan publik 0x0.st
+ */
+const GUNAKAN_LAYANAN_0X0 =
+	process.env.EMAIL_HELPER_UPLOAD_TO_0X0 === "true" || process.env.EMAIL_HELPER_PUBLIC_HOST === "0x0.st";
+
+// ============================================
+// HANDLER UNGGAH DENGAN ERROR WRAPPER
+// ============================================
+
+/**
+ * Handler untuk upload file dengan penanganan error yang lebih baik
+ */
+function handlerUnggahFile(permintaan, respon, lanjutkan) {
+	konfigurasiUnggah.single("file")(permintaan, respon, function (error) {
+		if (error) {
+			if (error.code === "LIMIT_FILE_SIZE") {
+				return respon.status(413).json({
+					error: "File terlalu besar",
+				});
+			}
+
+			if (error.message && error.message.includes("Tipe file tidak diizinkan")) {
+				return respon.status(400).json({
+					error: "Tipe file tidak diizinkan",
+				});
+			}
+
+			catatError("Error upload (tak terduga):", error);
+			return respon.status(500).json({
+				error: "Error internal saat upload",
+			});
 		}
-		next();
+
+		lanjutkan();
 	});
 }
 
-app.post("/upload-temp", rateLimitMiddleware, uploadHandler, async (req, res) => {
-	// if the file was rejected by validation the helper will set a flag
-	if (req._fileValidationError) return res.status(400).json({ error: req._fileValidationError });
-	if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-	if (req.file && req.file.size > 50 * 1024 * 1024) return res.status(413).json({ error: "File too large" });
-	const expiresAt = Date.now() + TTL_HOURS * 60 * 60 * 1000;
-	// sanitize original filename to avoid path injection and weird chars
-	const sanitizedOriginalName = path
-		.basename(req.file.originalname || "")
-		.replace(/[^\w.\-]+/g, "_")
-		.slice(0, 255);
-	// store metadata small JSON beside file
-	const meta = { originalName: sanitizedOriginalName, filename: req.file.filename, size: req.file.size, expiresAt };
-	fs.writeFileSync(path.join(UPLOAD_DIR, `${req.file.filename}.json`), JSON.stringify(meta));
+// ============================================
+// ENDPOINT UNTUK UPLOAD FILE SEMENTARA
+// ============================================
 
-	if (USE_0X0) {
+/**
+ * Endpoint untuk mengunggah file sementara
+ */
+aplikasi.post("/upload-temp", middlewareBatasLaju, handlerUnggahFile, async (permintaan, respon) => {
+	// Validasi: periksa apakah file ditolak oleh validasi
+	if (permintaan._errorValidasiFile) {
+		return respon.status(400).json({
+			error: permintaan._errorValidasiFile,
+		});
+	}
+
+	// Validasi: pastikan ada file yang diunggah
+	if (!permintaan.file) {
+		return respon.status(400).json({
+			error: "Tidak ada file yang diunggah",
+		});
+	}
+
+	// Validasi ukuran file (double-check)
+	if (permintaan.file && permintaan.file.size > 50 * 1024 * 1024) {
+		return respon.status(413).json({
+			error: "File terlalu besar",
+		});
+	}
+
+	// Hitung waktu kedaluwarsa
+	const waktuKedaluwarsa = Date.now() + JAM_MASA_BERLAKU * 60 * 60 * 1000;
+
+	/**
+	 * Membersihkan nama file asli untuk menghindari serangan path injection
+	 */
+	function bersihkanNamaFileAsli(namaFileAsli) {
+		const namaDasar = path.basename(namaFileAsli || "");
+		const namaBersih = namaDasar
+			.replace(/[^\w.\-]+/g, "_") // Ganti karakter tidak aman dengan underscore
+			.slice(0, 255); // Batasi panjang nama
+		return namaBersih;
+	}
+
+	const namaBersih = bersihkanNamaFileAsli(permintaan.file.originalname);
+
+	// Metadata file yang akan disimpan
+	const metadataFile = {
+		namaAsli: namaBersih,
+		namaFile: permintaan.file.filename,
+		ukuran: permintaan.file.size,
+		waktuKedaluwarsa: waktuKedaluwarsa,
+	};
+
+	// Simpan metadata dalam file JSON terpisah
+	fs.writeFileSync(path.join(DIREKTORI_UPLOAD, `${permintaan.file.filename}.json`), JSON.stringify(metadataFile));
+
+	// Jika diaktifkan, coba unggah ke layanan publik 0x0.st
+	if (GUNAKAN_LAYANAN_0X0) {
 		try {
 			const FormData = require("form-data");
-			const form = new FormData();
-			const filePath = path.join(UPLOAD_DIR, req.file.filename);
-			form.append("file", fs.createReadStream(filePath), { filename: req.file.originalname });
-			const fetchRes = await fetch("https://0x0.st", { method: "POST", body: form, headers: form.getHeaders() });
-			const text = (await fetchRes.text()).trim();
-			if (fetchRes.ok && text && text.startsWith("http")) {
-				const url = text;
-				meta.remoteUrl = url;
-				fs.writeFileSync(path.join(UPLOAD_DIR, `${req.file.filename}.json`), JSON.stringify(meta));
-				// remove local file to save disk space
+			const formData = new FormData();
+			const jalurFileLokal = path.join(DIREKTORI_UPLOAD, permintaan.file.filename);
+
+			formData.append("file", fs.createReadStream(jalurFileLokal), {
+				filename: permintaan.file.originalname,
+			});
+
+			const responFetch = await fetch("https://0x0.st", {
+				method: "POST",
+				body: formData,
+				headers: formData.getHeaders(),
+			});
+
+			const teksRespon = (await responFetch.text()).trim();
+
+			if (responFetch.ok && teksRespon && teksRespon.startsWith("http")) {
+				const urlPublik = teksRespon;
+
+				// Perbarui metadata dengan URL publik
+				metadataFile.urlPublik = urlPublik;
+				fs.writeFileSync(
+					path.join(DIREKTORI_UPLOAD, `${permintaan.file.filename}.json`),
+					JSON.stringify(metadataFile)
+				);
+
+				// Hapus file lokal untuk menghemat ruang disk
 				try {
-					fs.unlinkSync(filePath);
-				} catch (e) {}
-				return res.json({ url, expiresAt });
+					fs.unlinkSync(jalurFileLokal);
+				} catch (error) {
+					// Abaikan error jika gagal menghapus
+				}
+
+				return respon.json({
+					url: urlPublik,
+					waktuKedaluwarsa: waktuKedaluwarsa,
+				});
 			} else {
-				// avoid logging response body (may contain sensitive URLs). Log status only unless not quiet.
-				safeWarn("0x0.st upload failed", fetchRes.status);
+				// Hindari mencatat isi respon yang mungkin sensitif
+				catatPeringatanAman("Unggah ke 0x0.st gagal", responFetch.status);
 			}
-		} catch (e) {
-			// still log error to stderr
-			safeError("Public upload error", e);
+		} catch (error) {
+			catatError("Error unggah publik:", error);
 		}
 	}
 
-	// fallback to local url
-	const fileUrl = `${req.protocol}://${req.get("host")}/files/${req.file.filename}`;
-	res.json({ url: fileUrl, expiresAt });
+	// Fallback ke URL lokal jika unggah publik gagal atau tidak diaktifkan
+	const urlLokal = `${permintaan.protocol}://${permintaan.get("host")}/files/${permintaan.file.filename}`;
+
+	respon.json({
+		url: urlLokal,
+		waktuKedaluwarsa: waktuKedaluwarsa,
+	});
 });
 
-// Generic error handler for pretty upload errors
-app.use(function (err, req, res, next) {
-	if (!err) return next();
-	if (err.code === "LIMIT_FILE_SIZE") return res.status(413).json({ error: "File too large" });
-	if (err.message && err.message.includes("File type not allowed"))
-		return res.status(400).json({ error: "File type not allowed" });
-	safeError("Upload error", err);
-	return res.status(500).json({ error: "Internal upload error" });
+// ============================================
+// HANDLER ERROR UMUM UNTUK UPLOAD
+// ============================================
+
+/**
+ * Handler error umum untuk menangani error upload dengan lebih baik
+ */
+aplikasi.use(function (error, permintaan, respon, lanjutkan) {
+	if (!error) return lanjutkan();
+
+	if (error.code === "LIMIT_FILE_SIZE") {
+		return respon.status(413).json({
+			error: "File terlalu besar",
+		});
+	}
+
+	if (error.message && error.message.includes("Tipe file tidak diizinkan")) {
+		return respon.status(400).json({
+			error: "Tipe file tidak diizinkan",
+		});
+	}
+
+	catatError("Error upload:", error);
+	return respon.status(500).json({
+		error: "Error internal saat upload",
+	});
 });
 
-// Simple cleanup job
-setInterval(() => {
+// ============================================
+// TUGAS BERKALA: PEMBERSIHAN FILE KADALUARSA
+// ============================================
+
+/**
+ * Membersihkan file yang sudah melewati masa berlaku
+ */
+function bersihkanFileKadaluarsa() {
 	try {
-		const files = fs.readdirSync(UPLOAD_DIR);
-		const now = Date.now();
-		files.forEach(f => {
-			if (f.endsWith(".json")) return; // skip metadata files
-			const metaPath = path.join(UPLOAD_DIR, `${f}.json`);
-			let shouldDelete = false;
-			if (fs.existsSync(metaPath)) {
-				const meta = JSON.parse(fs.readFileSync(metaPath, "utf8"));
-				if (meta.expiresAt && meta.expiresAt < now) shouldDelete = true;
+		const daftarFile = fs.readdirSync(DIREKTORI_UPLOAD);
+		const waktuSekarang = Date.now();
+
+		daftarFile.forEach(namaFile => {
+			// Lewati file metadata
+			if (namaFile.endsWith(".json")) return;
+
+			const jalurFile = path.join(DIREKTORI_UPLOAD, namaFile);
+			const jalurMetadata = path.join(DIREKTORI_UPLOAD, `${namaFile}.json`);
+			let harusDihapus = false;
+
+			if (fs.existsSync(jalurMetadata)) {
+				try {
+					const metadata = JSON.parse(fs.readFileSync(jalurMetadata, "utf8"));
+					if (metadata.waktuKedaluwarsa && metadata.waktuKedaluwarsa < waktuSekarang) {
+						harusDihapus = true;
+					}
+				} catch (error) {
+					// Jika metadata rusak, anggap file harus dihapus
+					harusDihapus = true;
+				}
 			} else {
-				// if no metadata, delete older than 7 days
-				const stats = fs.statSync(path.join(UPLOAD_DIR, f));
-				if (now - stats.mtimeMs > 7 * 24 * 60 * 60 * 1000) shouldDelete = true;
+				// Jika tidak ada metadata, hapus file yang lebih lama dari 7 hari
+				try {
+					const statistik = fs.statSync(jalurFile);
+					const batasWaktu = 7 * 24 * 60 * 60 * 1000; // 7 hari
+					if (waktuSekarang - statistik.mtimeMs > batasWaktu) {
+						harusDihapus = true;
+					}
+				} catch (error) {
+					// Jika tidak bisa membaca statistik, anggap harus dihapus
+					harusDihapus = true;
+				}
 			}
-			if (shouldDelete) {
+
+			if (harusDihapus) {
 				try {
-					fs.unlinkSync(path.join(UPLOAD_DIR, f));
-				} catch (e) {}
+					fs.unlinkSync(jalurFile);
+				} catch (error) {
+					// Abaikan error jika gagal menghapus file
+				}
+
 				try {
-					fs.unlinkSync(path.join(UPLOAD_DIR, `${f}.json`));
-				} catch (e) {}
+					fs.unlinkSync(jalurMetadata);
+				} catch (error) {
+					// Abaikan error jika gagal menghapus metadata
+				}
 			}
 		});
-	} catch (e) {
-		console.error("Cleanup error", e);
+	} catch (error) {
+		catatError("Error pembersihan:", error);
 	}
-}, 60 * 60 * 1000); // hourly
-
-app.get("/health", (req, res) => res.json({ ok: true }));
-
-function createApp() {
-	// Reuse the already-configured global app instance, which has
-	// all middleware, routes (including /upload-temp and /health),
-	// and static file handling set up.
-	return app;
 }
 
+// Jadwalkan pembersihan setiap jam
+setInterval(bersihkanFileKadaluarsa, 60 * 60 * 1000);
+
+// ============================================
+// ENDPOINT KESEHATAN (HEALTH CHECK)
+// ============================================
+
+/**
+ * Endpoint untuk memeriksa kesehatan server
+ */
+aplikasi.get("/health", (permintaan, respon) => {
+	respon.json({
+		ok: true,
+		waktu: new Date().toISOString(),
+		direktoriUpload: DIREKTORI_UPLOAD,
+	});
+});
+
+// ============================================
+// FUNGSI UNTUK MEMBUAT APLIKASI (UNTUK TESTING)
+// ============================================
+
+/**
+ * Membuat dan mengembalikan instance aplikasi Express
+ * Fungsi ini berguna untuk testing atau penggunaan sebagai modul
+ * @returns {Object} Instance aplikasi Express yang sudah dikonfigurasi
+ */
+function buatAplikasi() {
+	// Menggunakan instance aplikasi global yang sudah dikonfigurasi
+	// yang sudah memiliki semua middleware, rute, dan handler
+	return aplikasi;
+}
+
+// ============================================
+// MENJALANKAN SERVER JIKA DIEKSEKUSI LANGSUNG
+// ============================================
+
 if (require.main === module) {
-	const app = createApp();
-	app.listen(PORT, () => {
-		safeLog(`Email helper server running on port ${PORT}`);
-		safeLog(`Upload endpoint: POST http://localhost:${PORT}/upload-temp (form field name 'file')`);
-		safeLog(`Public uploads to 0x0.st enabled: ${USE_0X0 ? "yes" : "no"}`);
+	const aplikasiServer = buatAplikasi();
+
+	aplikasiServer.listen(PORT, () => {
+		catatLogAman(`Server helper email berjalan di port ${PORT}`);
+		catatLogAman(`Endpoint upload: POST http://localhost:${PORT}/upload-temp`);
+		catatLogAman(`(gunakan field form dengan nama 'file')`);
+		catatLogAman(`Unggah publik ke 0x0.st: ${GUNAKAN_LAYANAN_0X0 ? "YA" : "TIDAK"}`);
+		catatLogAman(`Masa berlaku file: ${JAM_MASA_BERLAKU} jam`);
 	});
 }
 
-module.exports = { createApp };
+// ============================================
+// EKSPOR MODUL
+// ============================================
+
+module.exports = {
+	buatAplikasi,
+	DIREKTORI_UPLOAD,
+	JAM_MASA_BERLAKU,
+	EKSTENSI_DIIZINKAN,
+};

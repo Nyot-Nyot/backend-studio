@@ -194,7 +194,7 @@ export interface StateKonsolPengujian {
  * State tampilan aktif dalam aplikasi.
  * Menentukan halaman mana yang sedang ditampilkan.
  */
-export type StateTampilan = 'dashboard' | 'editor' | 'logs' | 'settings' | 'test' | 'database';
+export type StateTampilan = 'dashboard' | 'editor' | 'logs' | 'settings' | 'test';
 
 // --- Alias ekspor untuk kompatibilitas (nama Inggris) ---
 // Beberapa modul (komponen) masih mengimpor nama bahasa Inggris seperti `HttpMethod`.

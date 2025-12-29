@@ -48,8 +48,8 @@
 -   [x] [services/zipErrors.ts](./services/zipErrors.ts)
 -   [x] [services/retry.ts](./services/retry.ts)
 
--   [ ] [scripts/email-helper.js](./scripts/email-helper.js)
--   [ ] [email-helper.cjs](./email-helper.cjs)
+-   [x] [scripts/email-helper.js](./scripts/email-helper.js)
+-   [x] [email-helper.cjs](./email-helper.cjs)
 -   [ ] [openrouter-proxy.cjs](./openrouter-proxy.cjs)
 -   [ ] [socket-server.cjs](./socket-server.cjs)
 

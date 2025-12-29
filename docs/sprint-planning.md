@@ -97,7 +97,7 @@ const tombolKirim = "Kirim";
 
 ## Phase 2 — P2 (Medium priority)
 
--   [ ] Virtualize long lists in `LogViewer` and `DatabaseView` (react-window) and add perf tests
+-   [ ] Virtualize long lists in `LogViewer` (react-window) and add perf tests
 -   [ ] Refactor `MockEditor` into smaller components + `useSchemaEditor` and `useDragDrop` hooks; add unit tests
 -   [ ] Extract `App.tsx` side-effects into hooks: `useSocket`, `useServiceWorker`, `usePersistentStorage`
 -   [ ] Validate generated `server.js` during export and provide `Dockerfile` template; add smoke test

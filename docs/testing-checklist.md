@@ -55,7 +55,7 @@
 
 ## Stateful Mocking (DatabaseView)
 
--   [x] Insert a record via UI and verify it appears in `DatabaseView` and in subsequent GET responses. (verified via simulateRequest tests)
+-   [x] Insert a record programmatically and verify it appears in subsequent GET responses. (Database UI removed; verify via simulateRequest/IndexedDB)
 -   [x] Update a record and confirm changes reflect in responses and persisted storage. (verified via simulateRequest tests)
 -   [x] Delete a record and ensure it is no longer returned by GET requests. (verified via simulateRequest tests)
 -   [x] Verify data persisted in LocalStorage after page reload. (verified via e2e tests)

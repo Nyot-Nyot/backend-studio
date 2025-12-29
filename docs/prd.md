@@ -84,7 +84,7 @@ Dalam pengembangan perangkat lunak modern:
     -   **GET (Detail):** Mengambil data berdasarkan ID.
     -   **PUT/PATCH:** Memperbarui data berdasarkan ID.
     -   **DELETE:** Menghapus data berdasarkan ID.
--   **Database Viewer:** Antarmuka visual untuk melihat, mengedit, dan membersihkan data yang tersimpan di memori (localStorage).
+-   **(Removed)** _Database Viewer_ — UI page removed; stateful mocking (in-memory persistence) remains available via APIs and engine (no dedicated visual page).
 
 ### 4.5. Authentication Simulation
 
