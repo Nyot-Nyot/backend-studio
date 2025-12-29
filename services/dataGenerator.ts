@@ -1,107 +1,179 @@
+// generatorData.ts
+// Layanan untuk menghasilkan data sintetis berdasarkan skema sumber daya dengan dukungan deterministik
+
 import { ResourceField, ResourceSchema } from "../types";
 
-const sampleNames = ["Alice", "Bob", "Charlie", "Diana", "Eve", "Frank"];
+/**
+ * Contoh nama untuk generator data acak
+ */
+const contohNama = ["Alice", "Bob", "Charlie", "Diana", "Eve", "Frank"];
 
-// Simple deterministic RNG utilities (seed optional). If no seed is provided, we fall back to Math.random
-function xfnv1a(str: string) {
-  let h = 2166136261 >>> 0;
-  for (let i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i) >>> 0;
-    h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24);
+/**
+ * Fungsi hash FNV-1a sederhana untuk menghasilkan seed deterministik dari string
+ * @param string - String input untuk di-hash
+ * @returns Nilai hash 32-bit
+ */
+function fungsiHashXfnv1a(string: string): number {
+  let hash = 2166136261 >>> 0;
+  for (let indeks = 0; indeks < string.length; indeks++) {
+    hash ^= string.charCodeAt(indeks) >>> 0;
+    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
   }
-  return h >>> 0;
+  return hash >>> 0;
 }
 
-function mulberry32(a: number) {
+/**
+ * Generator angka pseudorandom Mulberry32
+ * @param seed - Seed untuk generator
+ * @returns Fungsi yang mengembalikan angka acak antara 0 dan 1
+ */
+function pembangkitAngkaMulberry32(seed: number): () => number {
   return function () {
-    let t = (a += 0x6d2b79f5);
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    let nilai = (seed += 0x6d2b79f5);
+    nilai = Math.imul(nilai ^ (nilai >>> 15), nilai | 1);
+    nilai ^= nilai + Math.imul(nilai ^ (nilai >>> 7), nilai | 61);
+    return ((nilai ^ (nilai >>> 14)) >>> 0) / 4294967296;
   };
 }
 
-function createRng(seed?: string | number) {
+/**
+ * Interface untuk generator angka acak dengan fitur tambahan
+ */
+interface GeneratorAngkaAcak {
+  random: () => number;
+  randomInt: (min: number, max: number) => number;
+  choice: <T>(array: T[]) => T;
+}
+
+/**
+ * Membuat generator angka acak dengan dukungan seed untuk hasil deterministik
+ * @param seed - Seed untuk generator (opsional, jika tidak ada akan menggunakan Math.random)
+ * @returns Generator angka acak dengan metode utilitas
+ */
+function buatPembangkitAngkaAcak(seed?: string | number): GeneratorAngkaAcak {
   if (seed === undefined || seed === null) {
     return {
       random: () => Math.random(),
       randomInt: (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min,
-      choice: <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)],
+      choice: <T,>(array: T[]) => array[Math.floor(Math.random() * array.length)],
     };
   }
-  const seedNum = typeof seed === "number" ? seed : xfnv1a(String(seed));
-  const rnd = mulberry32(seedNum);
+
+  const seedNumerik = typeof seed === "number" ? seed : fungsiHashXfnv1a(String(seed));
+  const fungsiRandom = pembangkitAngkaMulberry32(seedNumerik);
+
   return {
-    random: rnd,
-    randomInt: (min: number, max: number) => Math.floor(rnd() * (max - min + 1)) + min,
-    choice: <T,>(arr: T[]) => arr[Math.floor(rnd() * arr.length)],
+    random: fungsiRandom,
+    randomInt: (min: number, max: number) => Math.floor(fungsiRandom() * (max - min + 1)) + min,
+    choice: <T,>(array: T[]) => array[Math.floor(fungsiRandom() * array.length)],
   };
 }
 
-function deterministicUuid(rng: { random: () => number }) {
-  // produce a v4-like pseudo-uuid deterministically from the RNG
-  function hex(n: number) {
-    let s = "";
-    for (let i = 0; i < n; i++) {
-      s += Math.floor(rng.random() * 16).toString(16);
+/**
+ * Membuat UUID v4-like secara deterministik dari generator angka acak
+ * @param generator - Generator angka acak
+ * @returns UUID string
+ */
+function buatUuidDeterministik(generator: { random: () => number }): string {
+  const hasilkanHex = (panjang: number): string => {
+    let hasil = "";
+    for (let indeks = 0; indeks < panjang; indeks++) {
+      hasil += Math.floor(generator.random() * 16).toString(16);
     }
-    return s;
-  }
-  return `${hex(8)}-${hex(4)}-4${hex(3)}-${((Math.floor(rng.random() * 4) + 8).toString(16))}${hex(3)}-${hex(
-    12
-  )}`;
+    return hasil;
+  };
+
+  return `${hasilkanHex(8)}-${hasilkanHex(4)}-4${hasilkanHex(3)}-${((Math.floor(generator.random() * 4) + 8).toString(16))}${hasilkanHex(3)}-${hasilkanHex(12)}`;
 }
 
-function genValueForField(
+/**
+ * Opsi untuk pembangkitan data
+ */
+export type OpsiPembangkitan = {
+  seed?: string | number;
+  schemaMap?: Record<string, ResourceSchema>;
+  petaSchema?: Record<string, ResourceSchema>; // alias bahasa Indonesia
+  maxDepth?: number;
+  // penggunaan internal: memungkinkan penerusan generator yang ada atau kedalaman rekursi saat ini
+  generator?: GeneratorAngkaAcak;
+  depth?: number;
+};
+
+/**
+ * Menghasilkan nilai untuk field tertentu berdasarkan tipe dan generatornya
+ * @param field - Field yang akan diisi nilai
+ * @param generator - Generator angka acak
+ * @param petaSchema - Peta schema untuk referensi nested (opsional)
+ * @param depth - Kedalaman rekursi saat ini (untuk mencegah infinite recursion)
+ * @param maxDepth - Kedalaman maksimum yang diizinkan untuk nested object/array
+ * @returns Nilai yang dihasilkan untuk field
+ */
+function hasilkanNilaiUntukField(
   field: ResourceField,
-  rng: ReturnType<typeof createRng>,
-  schemaMap?: Record<string, ResourceSchema>,
+  generator: GeneratorAngkaAcak,
+  petaSchema?: Record<string, ResourceSchema>,
   depth: number = 0,
   maxDepth: number = 3
 ): any {
-  const gen = field.generator || "";
-  switch (gen) {
+  const generatorField = field.generator || "";
+
+  switch (generatorField) {
     case "uuid":
-      return rng.random === Math.random ? (crypto?.randomUUID ? crypto.randomUUID() : deterministicUuid(rng)) : deterministicUuid(rng);
+      return generator.random === Math.random
+        ? (crypto?.randomUUID ? crypto.randomUUID() : buatUuidDeterministik(generator))
+        : buatUuidDeterministik(generator);
     case "randomName":
-      return rng.choice(sampleNames);
+      return generator.choice(contohNama);
     case "email":
-      return `${rng.choice(sampleNames).toLowerCase()}${rng.randomInt(0, 999)}@example.com`;
+      return `${generator.choice(contohNama).toLowerCase()}${generator.randomInt(0, 999)}@example.com`;
     case "isoDate":
-      // deterministic date derived from RNG so repeated runs with the same seed are stable
-      // base epoch: 2021-01-01 (1609459200000)
-      return new Date(1609459200000 + Math.floor(rng.random() * 1000 * 60 * 60 * 24 * 365)).toISOString();
+      // Tanggal deterministik yang diturunkan dari generator agar berjalan berulang dengan seed sama stabil
+      // Epoch dasar: 2021-01-01 (1609459200000)
+      return new Date(1609459200000 + Math.floor(generator.random() * 1000 * 60 * 60 * 24 * 365)).toISOString();
     case "number":
-      return rng.randomInt(0, 1000);
+      return generator.randomInt(0, 1000);
     case "boolean":
-      return rng.random() < 0.5;
+      return generator.random() < 0.5;
     default:
-      // Fallback: generate simple value by type
-      switch (field.type) {
+      // Fallback: hasilkan nilai sederhana berdasarkan tipe
+      switch ((field as any).tipe) {
         case "string":
-          return `${field.name}_${rng.randomInt(0, 9999)}`;
+          return `${(field as any).nama}_${generator.randomInt(0, 9999)}`;
         case "number":
-          return rng.randomInt(0, 1000);
+          return generator.randomInt(0, 1000);
         case "boolean":
-          return rng.random() < 0.5;
+          return generator.random() < 0.5;
         case "date":
           return new Date().toISOString();
         case "object": {
           if (depth >= maxDepth) return {};
-          const nested = field.nestedSchemaId && schemaMap ? schemaMap[field.nestedSchemaId] : undefined;
-          if (nested) return generateRecord(nested, undefined, { seed: undefined, schemaMap, rng, maxDepth, depth: depth + 1 });
+          const schemaBertumpuk = (field as any).nestedSchemaId && petaSchema ? petaSchema[(field as any).nestedSchemaId] : undefined;
+          if (schemaBertumpuk) {
+            return hasilkanRekaman(schemaBertumpuk, undefined, {
+              generator,
+              petaSchema,
+              maxDepth,
+              depth: depth + 1
+            });
+          }
           return {};
         }
         case "array": {
           if (depth >= maxDepth) return [];
-          const nested = field.nestedSchemaId && schemaMap ? schemaMap[field.nestedSchemaId] : undefined;
-          const len = rng.randomInt(1, 3);
-          if (nested) {
-            const arr = [] as any[];
-            for (let i = 0; i < len; i++) {
-              arr.push(generateRecord(nested, undefined, { seed: undefined, schemaMap, rng, maxDepth, depth: depth + 1 }));
+          const schemaBertumpuk = (field as any).nestedSchemaId && petaSchema ? petaSchema[(field as any).nestedSchemaId] : undefined;
+          const panjang = generator.randomInt(1, 3);
+
+          if (schemaBertumpuk) {
+            const array: any[] = [];
+            for (let indeks = 0; indeks < panjang; indeks++) {
+              array.push(hasilkanRekaman(schemaBertumpuk, undefined, {
+                generator,
+                petaSchema,
+                maxDepth,
+                depth: depth + 1
+              }));
             }
-            return arr;
+            return array;
           }
           return [];
         }
@@ -111,40 +183,56 @@ function genValueForField(
   }
 }
 
-export type GenerateOptions = {
-  seed?: string | number;
-  schemaMap?: Record<string, ResourceSchema>;
-  maxDepth?: number;
-  // internal use: allow passing an existing rng or current recursion depth
-  rng?: ReturnType<typeof createRng>;
-  depth?: number;
-};
-
-export function generateRecord(
+/**
+ * Menghasilkan satu rekaman data berdasarkan schema
+ * @param schema - Schema yang digunakan untuk pembangkitan data
+ * @param petaField - Peta field (opsional)
+ * @param opsi - Opsi pembangkitan data
+ * @returns Objek rekaman dengan data yang dihasilkan
+ */
+export function hasilkanRekaman(
   schema: ResourceSchema,
-  fieldMap?: Record<string, ResourceField>,
-  opts: GenerateOptions = {}
+  petaField?: Record<string, ResourceField>,
+  opsi: OpsiPembangkitan = {}
 ): Record<string, any> {
-  const out: Record<string, any> = {};
-  const rng = opts.rng ?? createRng(opts.seed);
-  const schemaMap = opts.schemaMap;
-  const maxDepth = opts.maxDepth ?? 3;
-  const depth = opts.depth ?? 0;
+  const keluaran: Record<string, any> = {};
+  const generator = opsi.generator ?? buatPembangkitAngkaAcak(opsi.seed);
+  const petaSchema = opsi.schemaMap ?? (opsi as any).petaSchema;
+  const maxDepth = opsi.maxDepth ?? 3;
+  const depth = opsi.depth ?? 0;
 
   for (const field of schema.fields) {
-    out[field.name] = genValueForField(field, rng, schemaMap, depth, maxDepth);
+    keluaran[(field as any).nama] = hasilkanNilaiUntukField(field as any, generator, petaSchema, depth, maxDepth);
   }
-  return out;
+  return keluaran;
 }
 
-export function generateRecords(schema: ResourceSchema, count: number = 1, opts: GenerateOptions = {}): any[] {
-  const res: any[] = [];
-  // If a seed is provided, we create an RNG for the whole batch so outputs are stable across runs
-  const rng = opts.rng ?? createRng(opts.seed);
-  for (let i = 0; i < count; i++) {
-    res.push(generateRecord(schema, undefined, { ...opts, rng }));
+/**
+ * Menghasilkan banyak rekaman data berdasarkan schema
+ * @param schema - Schema yang digunakan untuk pembangkitan data
+ * @param jumlah - Jumlah rekaman yang akan dihasilkan (default: 1)
+ * @param opsi - Opsi pembangkitan data
+ * @returns Array rekaman dengan data yang dihasilkan
+ *
+ * @catatan
+ * Jika seed disediakan, generator akan dibuat satu kali untuk seluruh batch
+ * sehingga output stabil di semua proses berjalan
+ */
+export function hasilkanBanyakRekaman(
+  schema: ResourceSchema,
+  jumlah: number = 1,
+  opsi: OpsiPembangkitan = {}
+): any[] {
+  const hasil: any[] = [];
+  const generator = opsi.generator ?? buatPembangkitAngkaAcak(opsi.seed);
+
+  for (let indeks = 0; indeks < jumlah; indeks++) {
+    hasil.push(hasilkanRekaman(schema, undefined, { ...opsi, generator }));
   }
-  return res;
+  return hasil;
 }
 
-export const GENERATOR_OPTIONS = ["uuid", "randomName", "email", "isoDate", "number", "boolean"];
+/**
+ * Pilihan generator yang tersedia untuk field
+ */
+export const PILIHAN_GENERATOR = ["uuid", "randomName", "email", "isoDate", "number", "boolean"];

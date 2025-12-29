@@ -1,377 +1,559 @@
+// layananDatabase.ts
 /**
- * Database Service with optional pluggable persistence backends.
- * - Default behavior remains compatible with existing synchronous API
- * - Supports backend: 'localStorage' (default), 'indexeddb', 'memory'
- * - Adds async helpers for consumers that want deterministic persistence
+ * Layanan Database dengan backend penyimpanan yang dapat dipasang opsional.
+ * - Perilaku default tetap kompatibel dengan API sinkron yang ada
+ * - Mendukung backend: 'localStorage' (default), 'indexeddb', 'memory'
+ * - Menambahkan fungsi bantuan async untuk konsumen yang menginginkan persistensi deterministik
  */
 
-const DB_PREFIX = "api_sim_db_";
+import { logger } from './logger';
 
-/** * Basic typed interfaces for stored items and IDs
+const log = logger('layananDatabase');
+
+// Prefiks untuk kunci penyimpanan lokal (localStorage)
+const PREFIKS_DB = "api_sim_db_";
+
+/**
+ * Tipe dasar untuk item database
  */
 export type Id = string | number;
-export interface DbItem {
+
+export interface ItemDatabase {
   id?: Id;
   [k: string]: unknown;
 }
 
-/** Helper to detect presence of localStorage in the environment */
-const hasLocalStorage = () => typeof (globalThis as any).localStorage !== 'undefined' && (globalThis as any).localStorage !== null;
-
-/** * Detects if all IDs in a collection are numeric
+/**
+ * Koleksi yang secara default menggunakan UUID saat kosong
+ * @constant
  */
-const isNumericIdStrategy = (ids: unknown[]): boolean => {
-  return ids.length > 0 && ids.every((val) => typeof val === "number");
-};
-
-// Collections that should default to UUIDs when empty
-const DEFAULT_UUID_COLLECTIONS = new Set<string>(["products", "items"]);
+const KOLEKSI_DENGAN_UUID_DEFAULT = new Set<string>(["produk", "item"]);
 
 /**
- * Generates a numeric ID by finding the maximum and incrementing
+ * Nomor ID numerik default pertama untuk kompatibilitas mundur
+ * @constant
  */
-const generateNumericId = (ids: number[]): number => {
-  const maxId = ids.reduce(
-    (max: number, curr: number) => (curr > max ? curr : max),
+const ID_NUMERIK_PERTAMA_DEFAULT = 1;
+
+// Cache dalam memori untuk menjaga stabilitas API sinkron sementara persistensi mungkin async
+const cache: Record<string, ItemDatabase[]> = {};
+
+// Backend penyimpanan yang aktif, default ke localStorage
+let _backend: 'localStorage' | 'indexeddb' | 'memory' = 'localStorage';
+
+/**
+ * Memeriksa ketersediaan localStorage di lingkungan saat ini
+ * @returns {boolean} true jika localStorage tersedia
+ */
+const apakahLocalStorageTersedia = (): boolean => {
+  try {
+    return typeof (globalThis as any).localStorage !== 'undefined' &&
+      (globalThis as any).localStorage !== null;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Memeriksa ketersediaan IndexedDB di lingkungan saat ini
+ * @returns {boolean} true jika IndexedDB tersedia
+ */
+const apakahIndexedDBTersedia = (): boolean => {
+  try {
+    return typeof (globalThis as any).indexedDB !== 'undefined' &&
+      (globalThis as any).indexedDB !== null;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Mendeteksi apakah semua ID dalam koleksi adalah numerik
+ * @param ids - Array ID yang akan diperiksa
+ * @returns {boolean} true jika semua ID numerik dan array tidak kosong
+ */
+const apakahStrategiIdNumerik = (ids: unknown[]): boolean => {
+  const arrayTidakKosong = ids.length > 0;
+  const semuaNumerik = ids.every((nilai) => typeof nilai === "number");
+
+  return arrayTidakKosong && semuaNumerik;
+};
+
+/**
+ * Menghasilkan ID numerik dengan mencari nilai maksimum dan menambahkan 1
+ * @param ids - Array ID numerik yang ada
+ * @returns {number} ID numerik baru
+ */
+const hasilkanIdNumerik = (ids: number[]): number => {
+  if (ids.length === 0) {
+    return ID_NUMERIK_PERTAMA_DEFAULT;
+  }
+
+  const idMaksimum = ids.reduce(
+    (maksimum: number, nilaiSaatIni: number) => (nilaiSaatIni > maksimum ? nilaiSaatIni : maksimum),
     0
   );
-  return maxId + 1;
+
+  return idMaksimum + 1;
 };
 
 /**
- * Generates a short UUID (first 8 characters)
+ * Menghasilkan UUID pendek (8 karakter pertama)
+ * @returns {string} UUID pendek
  */
-const generateShortUuid = (): string => {
+const hasilkanUuidPendek = (): string => {
   return crypto.randomUUID().split("-")[0];
 };
 
-// In-memory cache to keep synchronous API stable while persistence may be async
-const cache: Record<string, DbItem[]> = {};
-let _backend: 'localStorage' | 'indexeddb' | 'memory' = 'localStorage';
-
-// Default first numeric id when collection chooses numeric strategy (kept for backwards compatibility)
-const DEFAULT_FIRST_NUMERIC_ID = 1;
-
-import { logger } from './logger';
-const log = logger('dbService');
-
-const persistCollection = async (name: string, data: DbItem[]): Promise<void> => {
-  if (_backend === 'localStorage') {
-    if (!hasLocalStorage()) {
-      log.warn(`localStorage unavailable: cannot persist collection "${name}"`);
-      return;
-    }
-    try {
-      (globalThis as any).localStorage.setItem(DB_PREFIX + name, JSON.stringify(data));
-    } catch (e) {
-      log.error(`Error saving collection "${name}" to localStorage:`, e);
-    }
+/**
+ * Memuat semua koleksi dari localStorage ke cache
+ * Fungsi ini digunakan saat inisialisasi untuk memastikan data tersedia untuk API sinkron
+ */
+const muatSemuaDariLocalStorage = (): void => {
+  if (!apakahLocalStorageTersedia()) {
     return;
   }
 
-  if (_backend === 'indexeddb') {
-    try {
-      const mod = await import('./indexedDbService');
-      await mod.indexedDbService.saveCollection(name, data);
-    } catch (e) {
-      log.warn(`Error saving collection "${name}" to IndexedDB:`, e);
-    }
-    return;
-  }
+  for (let indeks = 0; indeks < ((globalThis as any).localStorage.length || 0); indeks++) {
+    const kunci = (globalThis as any).localStorage.key(indeks);
 
-  // memory backend: do nothing (cache already set)
-};
+    if (kunci && kunci.startsWith(PREFIKS_DB)) {
+      const namaKoleksi = kunci.replace(PREFIKS_DB, "");
 
-const loadAllFromLocalStorage = () => {
-  if (!hasLocalStorage()) return;
-  for (let i = 0; i < ((globalThis as any).localStorage.length || 0); i++) {
-    const key = (globalThis as any).localStorage.key(i);
-    if (key && key.startsWith(DB_PREFIX)) {
-      const name = key.replace(DB_PREFIX, "");
       try {
-        cache[name] = JSON.parse((globalThis as any).localStorage.getItem(key) || 'null') || [];
-      } catch (e) {
-        cache[name] = [];
+        const dataString = (globalThis as any).localStorage.getItem(kunci) || 'null';
+        cache[namaKoleksi] = JSON.parse(dataString) || [];
+      } catch (errorParsing) {
+        log.warn(`Gagal memparsing koleksi "${namaKoleksi}" dari localStorage:`, errorParsing);
+        cache[namaKoleksi] = [];
       }
     }
   }
 };
 
-export const dbService = {
-  /**
-   * Get entire collection (synchronous API preserved)
-   * Uses in-memory cache if available, otherwise falls back to localStorage.
-   */
-  getCollection: <T extends DbItem = DbItem>(name: string): T[] => {
-    // If running in indexeddb mode and cache populated, prefer that for sync reads.
-    if (_backend === 'indexeddb' && cache[name]) return cache[name] as T[];
+/**
+ * Menyimpan koleksi ke backend yang aktif
+ * @param nama - Nama koleksi
+ * @param data - Data koleksi
+ * @returns {Promise<void>} Promise yang selesai ketika penyimpanan berhasil atau gagal
+ */
+const simpanKoleksiKeBackend = async (nama: string, data: ItemDatabase[]): Promise<void> => {
+  try {
+    switch (_backend) {
+      case 'localStorage':
+        if (!apakahLocalStorageTersedia()) {
+          log.warn(`localStorage tidak tersedia: tidak dapat menyimpan koleksi "${nama}"`);
+          return;
+        }
 
-    // Always read from localStorage for deterministic test behavior and to keep
-    // behavior identical to previous implementation unless explicitly initialized
-    // into indexeddb mode.
-    if (!hasLocalStorage()) {
-      cache[name] = cache[name] || [];
-      return cache[name] as T[];
+        (globalThis as any).localStorage.setItem(PREFIKS_DB + nama, JSON.stringify(data));
+        break;
+
+      case 'indexeddb':
+        const modul = await import('./indexedDbService');
+        await modul.indexedDbService.simpanKoleksi(nama, data);
+        break;
+
+      case 'memory':
+        // Backend memory tidak memerlukan persistensi eksternal
+        break;
+    }
+  } catch (errorPenyimpanan) {
+    log.error(`Gagal menyimpan koleksi "${nama}" ke backend ${_backend}:`, errorPenyimpanan);
+  }
+};
+
+/**
+ * Membersihkan koleksi dari backend yang aktif
+ * @param nama - Nama koleksi yang akan dibersihkan
+ * @returns {Promise<void>} Promise yang selesai ketika pembersihan selesai
+ */
+const bersihkanKoleksiDariBackend = async (nama: string): Promise<void> => {
+  try {
+    switch (_backend) {
+      case 'localStorage':
+        if (apakahLocalStorageTersedia()) {
+          (globalThis as any).localStorage.removeItem(PREFIKS_DB + nama);
+        }
+        break;
+
+      case 'indexeddb':
+        const modul = await import('./indexedDbService');
+        await modul.indexedDbService.bersihkanKoleksi(nama);
+        break;
+
+      case 'memory':
+        // Tidak ada tindakan khusus untuk memory backend
+        break;
+    }
+  } catch (errorPembersihan) {
+    log.warn(`Gagal membersihkan koleksi "${nama}" dari backend ${_backend}:`, errorPembersihan);
+  }
+};
+
+export const layananDatabase = {
+  /**
+   * Mendapatkan seluruh koleksi (API sinkron dipertahankan)
+   * Menggunakan cache dalam memori jika tersedia, jika tidak, fallback ke localStorage.
+   *
+   * @param nama - Nama koleksi
+   * @returns Array item dari koleksi
+   *
+   * @contohPenggunaan
+   * ```
+   * const semuaPengguna = layananDatabase.dapatkanKoleksi('pengguna');
+   * console.log(semuaPengguna.length); // 5
+   * ```
+   */
+  dapatkanKoleksi: <T extends ItemDatabase = ItemDatabase>(nama: string): T[] => {
+    // Jika menggunakan backend indexeddb dan cache sudah terisi, gunakan cache untuk pembacaan sinkron
+    if (_backend === 'indexeddb' && cache[nama]) {
+      return cache[nama] as T[];
+    }
+
+    // Selalu baca dari localStorage untuk perilaku pengujian yang deterministik
+    if (!apakahLocalStorageTersedia()) {
+      cache[nama] = cache[nama] || [];
+      return cache[nama] as T[];
     }
 
     try {
-      const data = (globalThis as any).localStorage.getItem(DB_PREFIX + name);
-      const parsed = data ? (JSON.parse(data) as T[]) : [];
-      cache[name] = parsed;
-      return parsed;
-    } catch (error) {
-      log.warn(`Error reading collection "${name}":`, error);
-      cache[name] = [];
+      const dataString = (globalThis as any).localStorage.getItem(PREFIKS_DB + nama);
+      const dataTerparsing = dataString ? (JSON.parse(dataString) as T[]) : [];
+      cache[nama] = dataTerparsing;
+      return dataTerparsing;
+    } catch (errorPembacaan) {
+      log.warn(`Error membaca koleksi "${nama}":`, errorPembacaan);
+      cache[nama] = [];
       return [];
     }
   },
 
   /**
-   * Save entire collection.
-   * - Default: synchronous signature (fire-and-forget background persistence) to preserve existing behavior.
-   * - If `opts.await` is true, returns a Promise that resolves when persistence completes.
+   * Menyimpan seluruh koleksi.
+   * - Default: tanda tangan sinkron (persistensi latar belakang fire-and-forget) untuk mempertahankan perilaku yang ada.
+   * - Jika `opsi.tunggu` true, mengembalikan Promise yang selesai ketika persistensi selesai.
+   *
+   * @param nama - Nama koleksi
+   * @param data - Data koleksi
+   * @param opsi - Opsi penyimpanan
+   * @returns {void | Promise<void>} Tidak mengembalikan apa-apa atau Promise jika opsi.tunggu=true
    */
-  saveCollection: <T extends DbItem = DbItem>(name: string, data: T[], opts?: { await?: boolean }): void | Promise<void> => {
-    cache[name] = data as DbItem[];
+  simpanKoleksi: <T extends ItemDatabase = ItemDatabase>(
+    nama: string,
+    data: T[],
+    opsi?: { tunggu?: boolean }
+  ): void | Promise<void> => {
+    // Perbarui cache dalam memori
+    cache[nama] = data as ItemDatabase[];
 
-    if (opts && opts.await) {
-      // Return a Promise that resolves when persistence completes
-      return (async () => {
+    if (opsi && opsi.tunggu) {
+      // Kembalikan Promise yang selesai ketika persistensi selesai
+      return (async (): Promise<void> => {
         try {
-          await persistCollection(name, data as DbItem[]);
-        } catch (err) {
-          log.warn('Persist failed:', err);
+          await simpanKoleksiKeBackend(nama, data as ItemDatabase[]);
+        } catch (errorSimpan) {
+          log.warn('Penyimpanan gagal:', errorSimpan);
         }
       })();
     }
 
-    // Fire-and-forget (backwards compatible)
-    (async () => {
+    // Fire-and-forget (kompatibilitas mundur)
+    (async (): Promise<void> => {
       try {
-        await persistCollection(name, data as DbItem[]);
-      } catch (err) {
-        log.warn('Persist failed:', err);
-      }
-    })();
-
-  },
-
-  persistCollectionAsync: async (name: string, data: DbItem[]): Promise<void> => {
-    cache[name] = data;
-    await persistCollection(name, data);
-  },
-
-  /**
-   * Clear specific collection
-   */
-  clearCollection: (name: string): void => {
-    delete cache[name];
-    if (_backend === 'localStorage') {
-      if (hasLocalStorage()) {
-        (globalThis as any).localStorage.removeItem(DB_PREFIX + name);
-      } else {
-        log.warn(`localStorage unavailable: cannot remove collection "${name}"`);
-      }
-      return;
-    }
-    // async clear for indexedDB
-    (async () => {
-      if (_backend === 'indexeddb') {
-        try {
-          const mod = await import('./indexedDbService');
-          await mod.indexedDbService.clearCollection(name);
-        } catch (e) {
-          log.warn('Error clearing collection in indexedDB:', e);
-        }
+        await simpanKoleksiKeBackend(nama, data as ItemDatabase[]);
+      } catch (errorSimpan) {
+        log.warn('Penyimpanan gagal:', errorSimpan);
       }
     })();
   },
 
   /**
-   * List collections (from cache + localStorage fallback)
+   * Fungsi async eksplisit untuk menyimpan koleksi
+   * @param nama - Nama koleksi
+   * @param data - Data koleksi
+   * @returns {Promise<void>} Promise yang selesai ketika penyimpanan berhasil
    */
-  listCollections: (): string[] => {
-    const names = new Set<string>(Object.keys(cache));
-    if (!hasLocalStorage()) return Array.from(names);
-    for (let i = 0; i < ((globalThis as any).localStorage.length || 0); i++) {
-      const key = (globalThis as any).localStorage.key(i);
-      if (key && key.startsWith(DB_PREFIX)) {
-        names.add(key.replace(DB_PREFIX, ''));
+  simpanKoleksiAsync: async (nama: string, data: ItemDatabase[]): Promise<void> => {
+    cache[nama] = data;
+    await simpanKoleksiKeBackend(nama, data);
+  },
+
+  /**
+   * Membersihkan koleksi tertentu
+   * @param nama - Nama koleksi yang akan dibersihkan
+   */
+  bersihkanKoleksi: (nama: string): void => {
+    // Hapus dari cache
+    delete cache[nama];
+
+    // Hapus dari backend yang aktif
+    (async (): Promise<void> => {
+      await bersihkanKoleksiDariBackend(nama);
+    })();
+  },
+
+  /**
+   * Mendaftar semua koleksi (dari cache + fallback localStorage)
+   * @returns {string[]} Daftar nama koleksi
+   */
+  daftarKoleksi: (): string[] => {
+    const namaKoleksi = new Set<string>(Object.keys(cache));
+
+    if (!apakahLocalStorageTersedia()) {
+      return Array.from(namaKoleksi);
+    }
+
+    for (let indeks = 0; indeks < ((globalThis as any).localStorage.length || 0); indeks++) {
+      const kunci = (globalThis as any).localStorage.key(indeks);
+      if (kunci && kunci.startsWith(PREFIKS_DB)) {
+        namaKoleksi.add(kunci.replace(PREFIKS_DB, ''));
       }
     }
-    return Array.from(names);
+
+    return Array.from(namaKoleksi);
   },
 
-  find: <T extends DbItem = DbItem>(collection: string, id: string | number): T | undefined => {
-    const list = dbService.getCollection<T>(collection);
-    return list.find((item) => (item as { id?: unknown }).id == id) as T | undefined;
+  /**
+   * Mencari item berdasarkan ID
+   * @param koleksi - Nama koleksi
+   * @param id - ID yang dicari
+   * @returns Item jika ditemukan, undefined jika tidak
+   */
+  temukan: <T extends ItemDatabase = ItemDatabase>(koleksi: string, id: string | number): T | undefined => {
+    const daftar = layananDatabase.dapatkanKoleksi<T>(koleksi);
+    return daftar.find((item) => item.id == id);
   },
 
-  insert: (collection: string, item: Record<string, unknown>): Record<string, unknown> & { id: string | number } => {
-    const list = dbService.getCollection(collection);
+  /**
+   * Menyisipkan item baru ke koleksi
+   * @param koleksi - Nama koleksi
+   * @param item - Item yang akan disisipkan
+   * @returns Item yang sudah disisipkan dengan ID
+   */
+  sisipkan: (koleksi: string, item: Record<string, unknown>): Record<string, unknown> & { id: string | number } => {
+    const daftar = layananDatabase.dapatkanKoleksi(koleksi);
 
-    if ((item as { id?: unknown }).id === undefined || (item as { id?: unknown }).id === null) {
-      const existingIds = list
-        .map((i) => (i as { id?: unknown }).id)
-        .filter((val) => val !== undefined && val !== null) as unknown[];
+    // Jika item tidak memiliki ID, hasilkan ID baru
+    if (item.id === undefined || item.id === null) {
+      const idYangAda = daftar
+        .map((i) => i.id)
+        .filter((nilai) => nilai !== undefined && nilai !== null) as unknown[];
 
-      if (existingIds.length === 0) {
-        if (DEFAULT_UUID_COLLECTIONS.has(collection)) {
-          (item as { id?: unknown }).id = generateShortUuid();
+      if (idYangAda.length === 0) {
+        // Koleksi kosong: tentukan strategi ID berdasarkan nama koleksi
+        if (KOLEKSI_DENGAN_UUID_DEFAULT.has(koleksi)) {
+          item.id = hasilkanUuidPendek();
         } else {
-          (item as { id?: unknown }).id = 1 as unknown;
+          item.id = ID_NUMERIK_PERTAMA_DEFAULT;
         }
-      } else if (isNumericIdStrategy(existingIds)) {
-        (item as { id?: unknown }).id = generateNumericId(existingIds as number[]);
+      } else if (apakahStrategiIdNumerik(idYangAda)) {
+        // Koleksi menggunakan ID numerik
+        item.id = hasilkanIdNumerik(idYangAda as number[]);
       } else {
-        (item as { id?: unknown }).id = generateShortUuid();
+        // Koleksi menggunakan ID string (UUID)
+        item.id = hasilkanUuidPendek();
       }
     }
 
-    list.push(item);
-    dbService.saveCollection(collection, list);
+    // Tambahkan item ke daftar dan simpan
+    daftar.push(item as ItemDatabase);
+    layananDatabase.simpanKoleksi(koleksi, daftar);
+
     return item as Record<string, unknown> & { id: string | number };
   },
 
-  update: (collection: string, id: string | number, updates: Partial<Record<string, unknown>>): Record<string, unknown> | null => {
-    const list = dbService.getCollection(collection);
-    const index = list.findIndex((item) => (item as { id?: unknown }).id == id);
+  /**
+   * Memperbarui item berdasarkan ID
+   * @param koleksi - Nama koleksi
+   * @param id - ID item yang akan diperbarui
+   * @param pembaruan - Data pembaruan
+   * @returns Item yang sudah diperbarui atau null jika tidak ditemukan
+   */
+  perbarui: (
+    koleksi: string,
+    id: string | number,
+    pembaruan: Partial<Record<string, unknown>>
+  ): Record<string, unknown> | null => {
+    const daftar = layananDatabase.dapatkanKoleksi(koleksi);
+    const indeks = daftar.findIndex((item) => item.id == id);
 
-    if (index !== -1) {
-      list[index] = { ...list[index], ...updates } as Record<string, unknown>;
-      dbService.saveCollection(collection, list);
-      return list[index] as Record<string, unknown>;
+    if (indeks !== -1) {
+      // Gabungkan item lama dengan pembaruan
+      daftar[indeks] = { ...daftar[indeks], ...pembaruan } as ItemDatabase;
+      layananDatabase.simpanKoleksi(koleksi, daftar);
+      return daftar[indeks] as Record<string, unknown>;
     }
+
     return null;
   },
 
-  delete: (collection: string, id: string | number): boolean => {
-    let list = dbService.getCollection(collection);
-    const initialLen = list.length;
+  /**
+   * Menghapus item berdasarkan ID
+   * @param koleksi - Nama koleksi
+   * @param id - ID item yang akan dihapus
+   * @returns true jika berhasil dihapus, false jika tidak ditemukan
+   */
+  hapus: (koleksi: string, id: string | number): boolean => {
+    let daftar = layananDatabase.dapatkanKoleksi(koleksi);
+    const panjangAwal = daftar.length;
 
-    list = list.filter((item) => (item as { id?: unknown }).id != id);
+    daftar = daftar.filter((item) => item.id != id);
 
-    if (list.length !== initialLen) {
-      dbService.saveCollection(collection, list as DbItem[]);
+    if (daftar.length !== panjangAwal) {
+      layananDatabase.simpanKoleksi(koleksi, daftar as ItemDatabase[]);
       return true;
     }
+
     return false;
   },
 
-  getStats: (collection: string): { count: number; idType: 'numeric' | 'string' | 'mixed' } => {
-    const list = dbService.getCollection(collection);
+  /**
+   * Mendapatkan statistik koleksi
+   * @param koleksi - Nama koleksi
+   * @returns Statistik jumlah item dan tipe ID
+   */
+  dapatkanStatistik: (koleksi: string): { jumlah: number; tipeId: 'numerik' | 'string' | 'campuran' } => {
+    const daftar = layananDatabase.dapatkanKoleksi(koleksi);
 
-    if (list.length === 0) {
-      return { count: 0, idType: 'mixed' };
+    if (daftar.length === 0) {
+      return { jumlah: 0, tipeId: 'campuran' };
     }
 
-    const idTypes = new Set(list.map((item) => typeof (item as { id?: unknown }).id));
-    let idType: 'numeric' | 'string' | 'mixed' = 'string';
-    if (idTypes.size === 1) {
-      idType = idTypes.has('number') ? 'numeric' : 'string';
+    const tipeIdUnik = new Set(daftar.map((item) => typeof item.id));
+    let tipeId: 'numerik' | 'string' | 'campuran' = 'string';
+
+    if (tipeIdUnik.size === 1) {
+      tipeId = tipeIdUnik.has('number') ? 'numerik' : 'string';
     } else {
-      idType = 'mixed';
+      tipeId = 'campuran';
     }
 
     return {
-      count: list.length,
-      idType,
+      jumlah: daftar.length,
+      tipeId,
     };
   },
 
-  clearAllCollections: (): void => {
-    const collections = dbService.listCollections();
-    collections.forEach((col) => {
-      dbService.clearCollection(col);
+  /**
+   * Membersihkan semua koleksi (sinkron)
+   */
+  bersihkanSemuaKoleksi: (): void => {
+    const koleksi = layananDatabase.daftarKoleksi();
+    koleksi.forEach((namaKoleksi) => {
+      layananDatabase.bersihkanKoleksi(namaKoleksi);
     });
   },
 
   /**
-   * Async variant: clear all collections and wait for backend persistence to finish.
-   * Useful for deterministic flows like factory reset or import where we need to guarantee
-   * the storage state before proceeding.
+   * Variasi async: membersihkan semua koleksi dan menunggu persistensi backend selesai.
+   * Berguna untuk alur deterministik seperti reset pabrik atau impor di mana kita perlu menjamin
+   * status penyimpanan sebelum melanjutkan.
    */
-  clearAllCollectionsAsync: async (): Promise<void> => {
-    const collections = dbService.listCollections();
-    // If using indexeddb backend, call indexedDbService to ensure persistence
+  bersihkanSemuaKoleksiAsync: async (): Promise<void> => {
+    const koleksi = layananDatabase.daftarKoleksi();
+
     if (_backend === 'indexeddb') {
       try {
-        const mod = await import('./indexedDbService');
-        for (const c of collections) {
-          await mod.indexedDbService.clearCollection(c);
+        const modul = await import('./indexedDbService');
+        for (const namaKoleksi of koleksi) {
+          await modul.indexedDbService.bersihkanKoleksi(namaKoleksi);
         }
-      } catch (e) {
-        log.warn('clearAllCollectionsAsync (indexeddb) failed:', e);
-        // Fallback to clearing localStorage items that match prefix
-        for (const c of collections) {
-          if (hasLocalStorage()) (globalThis as any).localStorage.removeItem(DB_PREFIX + c);
+      } catch (errorIndexedDB) {
+        log.warn('bersihkanSemuaKoleksiAsync (indexeddb) gagal:', errorIndexedDB);
+        // Fallback ke localStorage
+        for (const namaKoleksi of koleksi) {
+          if (apakahLocalStorageTersedia()) {
+            (globalThis as any).localStorage.removeItem(PREFIKS_DB + namaKoleksi);
+          }
         }
       }
     } else {
-      // localStorage or memory: clear synchronously
-      for (const c of collections) {
-        if (hasLocalStorage()) (globalThis as any).localStorage.removeItem(DB_PREFIX + c);
-        delete cache[c];
+      // localStorage atau memory: bersihkan secara sinkron
+      for (const namaKoleksi of koleksi) {
+        if (apakahLocalStorageTersedia()) {
+          (globalThis as any).localStorage.removeItem(PREFIKS_DB + namaKoleksi);
+        }
+        delete cache[namaKoleksi];
       }
     }
+  },
+
+  // Backward-compatible English alias
+  clearAllCollectionsAsync: async (): Promise<void> => {
+    return layananDatabase.bersihkanSemuaKoleksiAsync();
   },
 
   /**
-   * Initialize backends and optionally migrate data from localStorage to IndexedDB.
-   * If backend is 'auto' it prefers IndexedDB when available.
+   * Menginisialisasi backend dan secara opsional memigrasi data dari localStorage ke IndexedDB.
+   * Jika backend adalah 'auto' maka akan memilih IndexedDB jika tersedia.
    */
-  init: async (opts?: { backend?: 'auto' | 'indexeddb' | 'localStorage' }) => {
-    const backend = opts?.backend ?? 'auto';
-    const hasIndexedDB = typeof (globalThis as any).indexedDB !== 'undefined' && (globalThis as any).indexedDB !== null;
+  inisialisasi: async (opsi?: { backend?: 'auto' | 'indexeddb' | 'localStorage' }): Promise<{ dimigrasi: boolean }> => {
+    const backend = opsi?.backend ?? 'auto';
+    const indexedDBTersedia = apakahIndexedDBTersedia();
 
-    if (backend === 'indexeddb' || (backend === 'auto' && hasIndexedDB)) {
+    if (backend === 'indexeddb' || (backend === 'auto' && indexedDBTersedia)) {
       try {
         _backend = 'indexeddb';
-        const mod = await import('./indexedDbService');
-        await mod.indexedDbService.init();
+        const modul = await import('./indexedDbService');
+        await modul.indexedDbService.inisialisasi();
 
-        // Try migration if localStorage has data
-        const { migrated } = await mod.indexedDbService.migrateFromLocalStorage(DB_PREFIX);
+        // Coba migrasi jika localStorage memiliki data
+        const hasilMigrasi = await modul.indexedDbService.migrasiDariLocalStorage(PREFIKS_DB);
+        const dimigrasi = (hasilMigrasi as any).dimigrasi ?? (hasilMigrasi as any).migrated ?? false;
 
-        // Load all collections from indexedDB into cache for sync reads
-        const cols = await mod.indexedDbService.listCollections();
-        for (const c of cols) {
-          cache[c] = await mod.indexedDbService.getCollection(c);
+        // Muat semua koleksi dari indexedDB ke cache untuk pembacaan sinkron
+        const koleksi = (await modul.indexedDbService.daftarKoleksi()) as string[];
+        for (const namaKoleksi of koleksi) {
+          cache[namaKoleksi] = await modul.indexedDbService.dapatkanKoleksi(namaKoleksi);
         }
 
-        // Also pick up any leftover localStorage collections not migrated
-        loadAllFromLocalStorage();
+        // Juga ambil koleksi dari localStorage yang belum dimigrasi
+        muatSemuaDariLocalStorage();
 
-        return { migrated };
-      } catch (error) {
-        log.warn('IndexedDB init/migration failed:', error);
-        // fallback to localStorage mode
+        return { dimigrasi };
+      } catch (errorInisialisasi) {
+        log.warn('Inisialisasi/migrasi IndexedDB gagal:', errorInisialisasi);
+        // fallback ke mode localStorage
         _backend = 'localStorage';
-        loadAllFromLocalStorage();
-        return { migrated: false };
+        muatSemuaDariLocalStorage();
+        return { dimigrasi: false };
       }
     }
 
-    // localStorage mode: populate cache right away
+    // Mode localStorage: isi cache segera
     _backend = 'localStorage';
-    loadAllFromLocalStorage();
-    return { migrated: false };
+    muatSemuaDariLocalStorage();
+    return { dimigrasi: false };
   },
 
-  // Async variants for new consumers
-  getCollectionAsync: async (name: string) => {
+  /**
+   * Variasi async untuk mendapatkan koleksi
+   * @param nama - Nama koleksi
+   * @returns Promise yang mengembalikan data koleksi
+   */
+  dapatkanKoleksiAsync: async <T extends ItemDatabase = ItemDatabase>(nama: string): Promise<T[]> => {
     if (_backend === 'indexeddb') {
       try {
-        const mod = await import('./indexedDbService');
-        const data = await mod.indexedDbService.getCollection(name);
-        cache[name] = data;
-        return data;
-      } catch (e) {
-        log.warn('getCollectionAsync (indexeddb) failed:', e);
+        const modul = await import('./indexedDbService');
+        const data = await modul.indexedDbService.dapatkanKoleksi(nama);
+        cache[nama] = data;
+        return data as T[];
+      } catch (errorIndexedDB) {
+        log.warn('dapatkanKoleksiAsync (indexeddb) gagal:', errorIndexedDB);
       }
     }
-    // fallback to sync version
-    return dbService.getCollection(name);
+
+    // Fallback ke versi sinkron
+    return layananDatabase.dapatkanKoleksi(nama);
   },
 
+  // Backward-compatible aliases for initialization
+  init: (opsi?: { backend?: 'auto' | 'indexeddb' | 'localStorage' }) => layananDatabase.inisialisasi(opsi),
+  initialize: (opsi?: { backend?: 'auto' | 'indexeddb' | 'localStorage' }) => layananDatabase.inisialisasi(opsi),
 };
+
+// Backward-compatible named export expected by many modules/tests
+export const dbService = layananDatabase;
+export default layananDatabase;
+

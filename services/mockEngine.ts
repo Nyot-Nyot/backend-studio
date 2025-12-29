@@ -1,724 +1,882 @@
+// mesinMock.ts
+// Mesin untuk menangani pencocokan rute, pemrosesan respons dinamis, dan simulasi permintaan HTTP
 
 import { EnvironmentVariable, HttpMethod, MockEndpoint } from "../types";
-import { dbService } from "./dbService";
+import { layananDatabase } from "./dbService";
 import { logger } from "./logger";
 
-// Helper: Match Route Pattern
-export const matchRoute = (pattern: string, requestPath: string): { matches: boolean; params: Record<string, string | undefined> } => {
-  // Normalize paths (remove trailing slash, ensure leading slash)
-  const cleanReqPath = requestPath.split('?')[0].replace(/\/+$/, '');
-  const cleanPattern = pattern.replace(/\/+$/, '');
+/**
+ * Interface untuk hasil pencocokan rute
+ */
+interface HasilPencocokanRute {
+  cocok: boolean;
+  parameter: Record<string, string | undefined>;
+}
 
-  const patternSegments = cleanPattern.split('/').filter(Boolean);
-  const pathSegments = cleanReqPath.split('/').filter(Boolean);
-  const params: Record<string, string | undefined> = {};
+/**
+ * Interface untuk hasil simulasi permintaan
+ */
+interface HasilSimulasi {
+  respons: {
+    status: number;
+    badan: string;
+    header: { kunci: string; nilai: string }[];
+    penundaan: number;
+  };
+  idMockYangCocok?: string;
+}
 
-  // Two-pointer approach to allow optional params (:id?), single '*' wildcard (matches one segment)
-  // and trailing '*' wildcard that matches the rest of the path.
-  let p = 0; // index in patternSegments
-  let i = 0; // index in pathSegments
+/**
+ * Variabel sistem yang tersedia untuk digunakan dalam templat respons
+ */
+const VARIABEL_SISTEM_BANTUAN = [
+  { label: '{{$uuid}}', deskripsi: 'UUID v4 acak' },
+  { label: '{{$randomInt}}', deskripsi: 'Angka acak (0-1000)' },
+  { label: '{{$randomName}}', deskripsi: 'Nama depan acak' },
+  { label: '{{$randomCity}}', deskripsi: 'Kota acak' },
+  { label: '{{$isoDate}}', deskripsi: 'Tanggal ISO 8601 saat ini' },
+  { label: '{{$fakerName}}', deskripsi: 'Alias seperti Faker untuk nama acak' },
+  { label: '{{$fakerCity}}', deskripsi: 'Alias seperti Faker untuk kota acak' },
+  { label: '{{@param.id}}', deskripsi: 'Nilai dari jalur URL /:id' },
+  { label: '{{@query.page}}', deskripsi: 'Nilai dari string kueri misalnya ?page=2' },
+  { label: '{{@body.name}}', deskripsi: 'Nilai dari badan permintaan JSON' },
+  { label: '{{my_var}}', deskripsi: 'Variabel Lingkungan yang ditentukan pengguna' },
+];
 
-  while (p < patternSegments.length) {
-    const seg = patternSegments[p];
+/**
+ * Mencocokkan jalur permintaan dengan pola rute
+ * @param pola - Pola rute (misalnya '/users/:id')
+ * @param jalurPermintaan - Jalur permintaan aktual
+ * @returns Hasil pencocokan termasuk parameter yang diekstrak
+ *
+ * @logikaPencocokan
+ * 1. Mendukung parameter dinamis (:id)
+ * 2. Mendukung parameter opsional (:id?)
+ * 3. Mendukung wildcard satu segmen (*)
+ * 4. Mendukung wildcard akhir (*) untuk menangkap sisa jalur
+ * 5. Mengembalikan parameter yang diekstrak dalam objek
+ */
+export const cocokkanRute = (pola: string, jalurPermintaan: string): HasilPencocokanRute => {
+  // Normalisasi jalur (hapus slash di akhir, pastikan tidak ada multiple slashes)
+  const jalurBersih = jalurPermintaan.split('?')[0].replace(/\/+$/, '');
+  const polaBersih = pola.replace(/\/+$/, '');
 
-    // Trailing wildcard: match the rest
-    if (seg === '*' && p === patternSegments.length - 1) {
-      // capture rest as wildcard param if desired; here we just match
-      return { matches: true, params };
+  const segmenPola = polaBersih.split('/').filter(Boolean);
+  const segmenJalur = jalurBersih.split('/').filter(Boolean);
+  const parameter: Record<string, string | undefined> = {};
+
+  // Pendekatan dua pointer untuk mendukung parameter opsional, wildcard tunggal,
+  // dan wildcard akhir yang mencocokkan sisa jalur.
+  let p = 0; // indeks di segmenPola
+  let i = 0; // indeks di segmenJalur
+
+  while (p < segmenPola.length) {
+    const segmen = segmenPola[p];
+
+    // Wildcard akhir: cocokkan sisanya
+    if (segmen === '*' && p === segmenPola.length - 1) {
+      // tangkap sisanya sebagai parameter wildcard jika diinginkan;
+      // di sini kita hanya mencocokkan
+      return { cocok: true, parameter };
     }
 
-    const pathSeg = pathSegments[i];
+    const segmenJalurSaatIni = segmenJalur[i];
 
-    // If we've run out of path segments
-    if (pathSeg === undefined) {
-      // Segment can still match if it's an optional param like ':id?'
-      if (seg.startsWith(':') && seg.endsWith('?')) {
-        const paramName = seg.substring(1, seg.length - 1);
-        params[paramName] = undefined;
+    // Jika kita kehabisan segmen jalur
+    if (segmenJalurSaatIni === undefined) {
+      // Segmen masih bisa cocok jika itu parameter opsional seperti ':id?'
+      if (segmen.startsWith(':') && segmen.endsWith('?')) {
+        const namaParameter = segmen.substring(1, segmen.length - 1);
+        parameter[namaParameter] = undefined;
         p++;
         continue;
       }
-      // otherwise no match
-      return { matches: false, params: {} };
+      // jika tidak, tidak cocok
+      return { cocok: false, parameter: {} };
     }
 
-    if (seg === '*') {
-      // single-segment wildcard
+    if (segmen === '*') {
+      // wildcard satu segmen
       p++;
       i++;
       continue;
     }
 
-    if (seg.startsWith(':')) {
-      const isOptional = seg.endsWith('?');
-      const paramName = isOptional ? seg.substring(1, seg.length - 1) : seg.substring(1);
-      params[paramName] = pathSeg;
+    if (segmen.startsWith(':')) {
+      const adalahOpsional = segmen.endsWith('?');
+      const namaParameter = adalahOpsional ? segmen.substring(1, segmen.length - 1) : segmen.substring(1);
+      parameter[namaParameter] = segmenJalurSaatIni;
       p++;
       i++;
       continue;
     }
 
-    // exact match
-    if (seg === pathSeg) {
+    // pencocokan eksak
+    if (segmen === segmenJalurSaatIni) {
       p++;
       i++;
       continue;
     }
 
-    // no match
-    return { matches: false, params: {} };
+    // tidak cocok
+    return { cocok: false, parameter: {} };
   }
 
-  // Only match if all path segments are consumed
-  if (i !== pathSegments.length) {
-    return { matches: false, params: {} };
+  // Hanya cocok jika semua segmen jalur telah dikonsumsi
+  if (i !== segmenJalur.length) {
+    return { cocok: false, parameter: {} };
   }
 
-  return { matches: true, params };
+  return { cocok: true, parameter };
 };
-// Check whether two route patterns may conflict (i.e., there exists at least one path
-// that would be matched by both patterns). This is a conservative check used by
-// the editor to prevent saving overlapping routes.
-export const patternsConflict = (a: string, b: string): boolean => {
-  const clean = (s: string) => s.replace(/\/+$/g, '').split('/').filter(Boolean);
-  const pa = clean(a);
-  const pb = clean(b);
 
-  // Quick equality
-  if (a.trim().toLowerCase() === b.trim().toLowerCase()) return true;
+/**
+ * Memeriksa apakah dua pola rute mungkin konflik (yaitu, ada setidaknya satu jalur
+ * yang akan dicocokkan oleh kedua pola). Ini adalah pemeriksaan konservatif yang digunakan
+ * oleh editor untuk mencegah penyimpanan rute yang tumpang tindih.
+ *
+ * @param polaA - Pola rute pertama
+ * @param polaB - Pola rute kedua
+ * @returns boolean - true jika ada kemungkinan konflik
+ */
+export const apakahPolaBerkonflik = (polaA: string, polaB: string): boolean => {
+  const bersihkan = (s: string) => s.replace(/\/+$/g, '').split('/').filter(Boolean);
+  const segmenA = bersihkan(polaA);
+  const segmenB = bersihkan(polaB);
 
-  const MAX_CHECK = 10; // reasonable cap for path length exploration
+  // Pemeriksaan kesetaraan cepat
+  if (polaA.trim().toLowerCase() === polaB.trim().toLowerCase()) return true;
 
-  const minLen = (p: string[]) => p.filter(seg => !(seg.startsWith(':') && seg.endsWith('?'))).length;
-  const hasTrailingWildcard = (p: string[]) => p.length > 0 && p[p.length - 1] === '*';
-  const maxLen = (p: string[]) => hasTrailingWildcard(p) ? MAX_CHECK : p.length;
+  const BATAS_PENCOCOKAN = 10; // batas wajar untuk eksplorasi panjang jalur
 
-  const minA = minLen(pa);
-  const minB = minLen(pb);
-  const maxA = maxLen(pa);
-  const maxB = maxLen(pb);
+  const hitungPanjangMinimal = (segmen: string[]) => segmen.filter(s => !(s.startsWith(':') && s.endsWith('?'))).length;
+  const memilikiWildcardAkhir = (segmen: string[]) => segmen.length > 0 && segmen[segmen.length - 1] === '*';
+  const hitungPanjangMaksimal = (segmen: string[]) => memilikiWildcardAkhir(segmen) ? BATAS_PENCOCOKAN : segmen.length;
 
-  const start = Math.max(minA, minB);
-  const end = Math.min(maxA, maxB);
-  const trailingIndexA = hasTrailingWildcard(pa) ? pa.length - 1 : -1;
-  const trailingIndexB = hasTrailingWildcard(pb) ? pb.length - 1 : -1;
+  const panjangMinimalA = hitungPanjangMinimal(segmenA);
+  const panjangMinimalB = hitungPanjangMinimal(segmenB);
+  const panjangMaksimalA = hitungPanjangMaksimal(segmenA);
+  const panjangMaksimalB = hitungPanjangMaksimal(segmenB);
 
-  for (let n = start; n <= end; n++) {
-    let ok = true;
+  const mulai = Math.max(panjangMinimalA, panjangMinimalB);
+  const akhir = Math.min(panjangMaksimalA, panjangMaksimalB);
+  const indeksWildcardAkhirA = memilikiWildcardAkhir(segmenA) ? segmenA.length - 1 : -1;
+  const indeksWildcardAkhirB = memilikiWildcardAkhir(segmenB) ? segmenB.length - 1 : -1;
+
+  for (let n = mulai; n <= akhir; n++) {
+    let oke = true;
+
     for (let i = 0; i < n; i++) {
-      const segA = pa[i];
-      const segB = pb[i];
+      const segmenAA = segmenA[i];
+      const segmenBB = segmenB[i];
 
-      const segAIsWildcardRest = segA === '*' && i === pa.length - 1;
-      const segBIsWildcardRest = segB === '*' && i === pb.length - 1;
+      const segmenAAdalahWildcardAkhir = segmenAA === '*' && i === segmenA.length - 1;
+      const segmenBBAdalahWildcardAkhir = segmenBB === '*' && i === segmenB.length - 1;
 
-      const segAExists = segA !== undefined && !segAIsWildcardRest;
-      const segBExists = segB !== undefined && !segBIsWildcardRest;
+      const segmenAAAda = segmenAA !== undefined && !segmenAAdalahWildcardAkhir;
+      const segmenBBAda = segmenBB !== undefined && !segmenBBAdalahWildcardAkhir;
 
-      // If segment in A is undefined
-      if (!segAExists) {
-        // If A has trailing wildcard earlier, it can absorb remaining segments
-        if (trailingIndexA >= 0 && trailingIndexA <= i) {
-          // ok, wildcard at end of A covers this position
-        } else if (segAIsWildcardRest) {
-          // wildcard at end of A can match remaining segments
+      // Jika segmen di A tidak terdefinisi
+      if (!segmenAAAda) {
+        // Jika A memiliki wildcard akhir lebih awal, itu dapat menyerap segmen yang tersisa
+        if (indeksWildcardAkhirA >= 0 && indeksWildcardAkhirA <= i) {
+          // oke, wildcard di akhir A mencakup posisi ini
+        } else if (segmenAAdalahWildcardAkhir) {
+          // wildcard di akhir A dapat mencocokkan segmen yang tersisa
         } else {
-          ok = false;
+          oke = false;
           break;
         }
       }
 
-      if (!segBExists) {
-        if (trailingIndexB >= 0 && trailingIndexB <= i) {
-          // ok, wildcard at end of B covers this position
-        } else if (segBIsWildcardRest) {
-          // wildcard at end of B
+      if (!segmenBBAda) {
+        if (indeksWildcardAkhirB >= 0 && indeksWildcardAkhirB <= i) {
+          // oke, wildcard di akhir B mencakup posisi ini
+        } else if (segmenBBAdalahWildcardAkhir) {
+          // wildcard di akhir B
         } else {
-          ok = false;
+          oke = false;
           break;
         }
       }
 
-      // Treat trailing wildcard earlier as an effective '*' for matching
-      const effectiveSegA = (trailingIndexA >= 0 && trailingIndexA <= i) ? '*' : segA;
-      const effectiveSegB = (trailingIndexB >= 0 && trailingIndexB <= i) ? '*' : segB;
+      // Perlakukan wildcard akhir yang lebih awal sebagai '*' yang efektif untuk pencocokan
+      const segmenAAEfektif = (indeksWildcardAkhirA >= 0 && indeksWildcardAkhirA <= i) ? '*' : segmenAA;
+      const segmenBBEfektif = (indeksWildcardAkhirB >= 0 && indeksWildcardAkhirB <= i) ? '*' : segmenBB;
 
-      // If either is a trailing rest wildcard at this position, this position can be matched
-      if (segAIsWildcardRest || segBIsWildcardRest) continue;
+      // Jika salah satunya adalah wildcard sisa di posisi ini, posisi ini dapat dicocokkan
+      if (segmenAAdalahWildcardAkhir || segmenBBAdalahWildcardAkhir) continue;
 
-      // If either is a single '*' wildcard, it's fine
-      if (effectiveSegA === '*' || effectiveSegB === '*') continue;
+      // Jika salah satunya adalah wildcard tunggal '*', itu baik-baik saja
+      if (segmenAAEfektif === '*' || segmenBBEfektif === '*') continue;
 
-      // If either is a param (including optional), it's fine
-      if ((effectiveSegA && effectiveSegA.startsWith(':')) || (effectiveSegB && effectiveSegB.startsWith(':'))) continue;
+      // Jika salah satunya adalah parameter (termasuk opsional), itu baik-baik saja
+      if ((segmenAAEfektif && segmenAAEfektif.startsWith(':')) || (segmenBBEfektif && segmenBBEfektif.startsWith(':'))) continue;
 
-      // Both literals must match to be compatible at this position
-      if (effectiveSegA !== effectiveSegB) {
-        ok = false;
+      // Kedua literal harus cocok untuk kompatibel di posisi ini
+      if (segmenAAEfektif !== segmenBBEfektif) {
+        oke = false;
         break;
       }
     }
 
-    if (ok) return true;
+    if (oke) return true;
   }
 
   return false;
 };
-export const processMockResponse = (
-  bodyTemplate: string,
-  requestPath: string,
-  routePattern: string,
-  envVars: EnvironmentVariable[] = [],
-  requestBody: string | null = null
-): string => {
-  let processedBody = bodyTemplate;
 
-  // Try to parse request body JSON if present
-  let parsedBody: unknown = null;
-  if (requestBody) {
+/**
+ * Generator untuk variabel dinamis sistem
+ */
+const generatorVariabel: Record<string, () => any> = {
+  '$uuid': () => (crypto?.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2, 10)),
+  '$randomInt': () => Math.floor(Math.random() * 1000),
+  '$timestamp': () => Date.now(),
+  '$isoDate': () => new Date().toISOString(),
+  '$randomName': () => {
+    const daftarNama = ['Alice', 'Bob', 'Charlie', 'David', 'Eve', 'Frank', 'Grace', 'Heidi', 'Ivan'];
+    return daftarNama[Math.floor(Math.random() * daftarNama.length)];
+  },
+  '$randomCity': () => {
+    const daftarKota = ['New York', 'London', 'Tokyo', 'Jakarta', 'Berlin', 'Paris', 'Sydney'];
+    return daftarKota[Math.floor(Math.random() * daftarKota.length)];
+  },
+  '$randomBool': () => Math.random() > 0.5,
+
+  // Alias seperti Faker
+  '$fakerName': () => generatorVariabel['$randomName'](),
+  '$fakerCity': () => generatorVariabel['$randomCity'](),
+};
+
+/**
+ * Memeriksa apakah karakter pada indeks tertentu berada di dalam tanda kutip
+ * @param teks - Teks untuk diperiksa
+ * @param indeks - Indeks karakter yang diperiksa
+ * @returns boolean - true jika berada di dalam tanda kutip
+ */
+const apakahDiDalamTandaKutip = (teks: string, indeks: number): boolean => {
+  // Pemeriksaan naif: hitung tanda kutip ganda yang tidak di-escape sebelum indeks
+  let hitung = 0;
+  for (let i = 0; i < indeks; i++) {
+    if (teks[i] === '"') {
+      // lewati yang di-escape
+      if (i > 0 && teks[i - 1] === '\\') continue;
+      hitung++;
+    }
+  }
+  return (hitung % 2) === 1;
+};
+
+/**
+ * Mengganti token dalam string dengan nilai yang sesuai
+ * @param string - String yang akan diproses
+ * @param tokenRegex - Regex untuk menemukan token
+ * @param resolverToken - Fungsi untuk mengatasi nilai token
+ * @returns String dengan token yang telah diganti
+ */
+const gantiTokenDalamString = (
+  string: string,
+  tokenRegex: RegExp,
+  resolverToken: (token: string) => any
+): string => {
+  let keluaran = string;
+  // hindari infinite loop; lakukan hingga 3 kali
+  for (let iterasi = 0; iterasi < 3; iterasi++) {
+    let berubah = false;
+
+    keluaran = keluaran.replace(tokenRegex, (cocokan, token, offset) => {
+      const nilai = resolverToken(token);
+      if (nilai === undefined) return cocokan; // biarkan tidak berubah
+
+      const diDalamKutip = apakahDiDalamTandaKutip(keluaran, offset);
+      let pengganti: string;
+
+      if (diDalamKutip) {
+        if (typeof nilai === 'object') {
+          pengganti = JSON.stringify(nilai);
+        } else {
+          pengganti = String(nilai);
+        }
+      } else {
+        // tempatkan JSON mentah untuk objek/array/boolean/angka
+        if (typeof nilai === 'object') {
+          pengganti = JSON.stringify(nilai);
+        } else if (typeof nilai === 'boolean') {
+          pengganti = nilai ? 'true' : 'false';
+        } else {
+          pengganti = String(nilai);
+        }
+      }
+
+      berubah = true;
+      return pengganti;
+    });
+
+    if (!berubah) break;
+  }
+
+  return keluaran;
+};
+
+/**
+ * Mengganti token dalam objek JSON secara rekursif
+ * @param obj - Objek yang akan diproses
+ * @param resolverToken - Fungsi untuk mengatasi nilai token
+ * @returns Objek dengan token yang telah diganti
+ */
+const gantiTokenDalamObjek = (obj: any, resolverToken: (token: string) => any): any => {
+  if (typeof obj === 'string') {
+    // jika seluruh string tepat adalah token seperti "{{@body.name}}",
+    // dan token mengembalikan nilai non-string, ganti dengan nilai bertipe
+    const cocokan = obj.match(/^{{\s*([@$]?[^{}\s]+)\s*}}$/);
+    if (cocokan) {
+      const nilai = resolverToken(cocokan[1]);
+      return nilai === undefined ? obj : nilai;
+    }
+    // jika tidak, lakukan penggantian inline dan kembalikan string
+    return gantiTokenDalamString(obj, /{{\s*([@$]?[^{}\s]+)\s*}}/g, resolverToken);
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(item => gantiTokenDalamObjek(item, resolverToken));
+  }
+
+  if (obj && typeof obj === 'object') {
+    const kunci = Object.keys(obj);
+    for (const kunciItem of kunci) {
+      obj[kunciItem] = gantiTokenDalamObjek(obj[kunciItem], resolverToken);
+    }
+    return obj;
+  }
+
+  return obj;
+};
+
+/**
+ * Memproses templat respons mock dengan menyuntikkan nilai dinamis
+ * @param templatBadan - Templat badan respons
+ * @param jalurPermintaan - Jalur permintaan
+ * @param polaRute - Pola rute
+ * @param variabelLingkungan - Variabel lingkungan yang ditentukan pengguna
+ * @param badanPermintaan - Badan permintaan (opsional)
+ * @returns Badan respons yang telah diproses
+ *
+ * @logikaPemrosesan
+ * 1. Penyuntikan variabel lingkungan pengguna ({{key}})
+ * 2. Penyuntikan parameter rute ({{@param.id}})
+ * 3. Penyuntikan parameter kueri ({{@query.page}})
+ * 4. Penyuntikan dari badan permintaan ({{@body.name}})
+ * 5. Penggantian variabel sistem ({{$uuid}}, dll.)
+ */
+export const prosesResponsMock = (
+  templatBadan: string,
+  jalurPermintaan: string,
+  polaRute: string,
+  variabelLingkungan: EnvironmentVariable[] = [],
+  badanPermintaan: string | null = null
+): string => {
+  let badanTerproses = templatBadan;
+
+  // Coba parsing badan permintaan JSON jika ada
+  let badanTerparse: unknown = null;
+  if (badanPermintaan) {
     try {
-      parsedBody = JSON.parse(requestBody) as unknown;
-    } catch (e) {
-      parsedBody = null;
+      badanTerparse = JSON.parse(badanPermintaan) as unknown;
+    } catch (errorParsing) {
+      badanTerparse = null;
     }
   }
 
-  // Debug helper: if parsedBody is null but requestBody exists, log a warning so we can see malformed JSON (dev only)
-  if (requestBody && parsedBody === null) {
+  // Helper debug: jika badanTerparse null tetapi badanPermintaan ada,
+  // catat peringatan sehingga kita dapat melihat JSON yang tidak valid (hanya dev)
+  if (badanPermintaan && badanTerparse === null) {
     if (import.meta.env?.DEV) {
       try {
-        logger('mockEngine').warn('mockEngine: failed to parse requestBody as JSON', String(requestBody).slice(0, 200));
-      } catch (e) { }
+        logger('mesinMock').warn('mesinMock: gagal memparsing badanPermintaan sebagai JSON', String(badanPermintaan).slice(0, 200));
+      } catch (errorPencatatan) { }
     }
   }
 
-  // 0. Environment Variables Injection (User Defined)
-  // Replaces {{key}} with value
-  envVars.forEach(variable => {
-    // Escape special regex characters in the key if any
-    const escapedKey = variable.key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`{{${escapedKey}}}`, 'g');
-    processedBody = processedBody.replace(regex, variable.value);
+  // 0. Penyuntikan Variabel Lingkungan (Ditentukan Pengguna)
+  // Mengganti {{key}} dengan nilai
+  variabelLingkungan.forEach(variabel => {
+    // Escape karakter regex khusus dalam kunci jika ada
+    const kunciTerescape = variabel.kunci.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`{{${kunciTerescape}}}`, 'g');
+    badanTerproses = badanTerproses.replace(regex, variabel.nilai);
   });
 
-  // 1. Route Param Injection
-  // Example: Pattern /users/:id, Request /users/123 -> Inject {{@param.id}} with 123
-  const [cleanPath, queryString] = requestPath.split('?');
-  const patternSegments = routePattern.split('/').filter(Boolean);
-  const pathSegments = cleanPath.split('/').filter(Boolean);
+  // 1. Penyuntikan Parameter Rute
+  // Contoh: Pola /users/:id, Permintaan /users/123 -> Suntikkan {{@param.id}} dengan 123
+  const [jalurBersih, stringKueri] = jalurPermintaan.split('?');
+  const segmenPola = polaRute.split('/').filter(Boolean);
+  const segmenJalur = jalurBersih.split('/').filter(Boolean);
 
-  patternSegments.forEach((seg, index) => {
-    if (seg.startsWith(':') && pathSegments[index]) {
-      const paramName = seg.substring(1); // remove :
-      const paramValue = pathSegments[index];
-      const regex = new RegExp(`{{@param.${paramName}}}`, 'g');
-      processedBody = processedBody.replace(regex, paramValue);
+  segmenPola.forEach((segmen, indeks) => {
+    if (segmen.startsWith(':') && segmenJalur[indeks]) {
+      const namaParameter = segmen.substring(1); // hapus :
+      const nilaiParameter = segmenJalur[indeks];
+      const regex = new RegExp(`{{@param.${namaParameter}}}`, 'g');
+      badanTerproses = badanTerproses.replace(regex, nilaiParameter);
     }
   });
 
-  // 2. Query Param Injection
-  // Example: Request /users?page=2&sort=asc -> Inject {{@query.page}} with 2
-  if (queryString) {
-    const params = new URLSearchParams(queryString);
-    params.forEach((value, key) => {
-      const regex = new RegExp(`{{@query.${key}}}`, 'g');
-      processedBody = processedBody.replace(regex, value);
+  // 2. Penyuntikan Parameter Kueri
+  // Contoh: Permintaan /users?page=2&sort=asc -> Suntikkan {{@query.page}} dengan 2
+  if (stringKueri) {
+    const parameter = new URLSearchParams(stringKueri);
+    parameter.forEach((nilai, kunci) => {
+      const regex = new RegExp(`{{@query.${kunci}}}`, 'g');
+      badanTerproses = badanTerproses.replace(regex, nilai);
     });
   }
 
-  // 3. Request Body Injection
-  // Allows placeholders like {{@body.name}} to be replaced with values from JSON body
-  if (parsedBody && typeof parsedBody === 'object') {
-    const walk = (obj: Record<string, unknown>, prefix = '') => {
-      Object.keys(obj).forEach(k => {
-        const val = obj[k];
-        const placeholder = `{{@body${prefix}.${k}}}`;
+  // 3. Penyuntikan Badan Permintaan
+  // Memungkinkan placeholder seperti {{@body.name}} diganti dengan nilai dari badan JSON
+  if (badanTerparse && typeof badanTerparse === 'object') {
+    const jelajahiObjek = (obj: Record<string, unknown>, prefiks = '') => {
+      Object.keys(obj).forEach(kunci => {
+        const nilai = obj[kunci];
+        const placeholder = `{{@body${prefiks}.${kunci}}}`;
         const regex = new RegExp(placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
-        const replacement = (val === undefined || val === null) ? '' : String(val);
-        processedBody = processedBody.replace(regex, replacement);
+        const pengganti = (nilai === undefined || nilai === null) ? '' : String(nilai);
+        badanTerproses = badanTerproses.replace(regex, pengganti);
 
-        if (typeof val === 'object' && val !== null) {
-          walk(val as Record<string, unknown>, `${prefix}.${k}`);
+        if (typeof nilai === 'object' && nilai !== null) {
+          jelajahiObjek(nilai as Record<string, unknown>, `${prefiks}.${kunci}`);
         }
       });
     };
-    walk(parsedBody as Record<string, unknown>, '');
+    jelajahiObjek(badanTerparse as Record<string, unknown>, '');
   }
 
-  // 4. Dynamic Variables Replacement (System)
-  const generators: Record<string, () => any> = {
-    '$uuid': () => (crypto?.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2, 10)),
-    '$randomInt': () => Math.floor(Math.random() * 1000),
-    '$timestamp': () => Date.now(),
-    '$isoDate': () => new Date().toISOString(),
-    '$randomName': () => {
-      const names = ['Alice', 'Bob', 'Charlie', 'David', 'Eve', 'Frank', 'Grace', 'Heidi', 'Ivan'];
-      return names[Math.floor(Math.random() * names.length)];
-    },
-    '$randomCity': () => {
-      const cities = ['New York', 'London', 'Tokyo', 'Jakarta', 'Berlin', 'Paris', 'Sydney'];
-      return cities[Math.floor(Math.random() * cities.length)];
-    },
-    '$randomBool': () => Math.random() > 0.5,
+  // 4. Penggantian Variabel Dinamis (Sistem)
+  const regexToken = /{{\s*([@$]?[^{}\s]+)\s*}}/g;
 
-    // Faker-like aliases
-    '$fakerName': () => generators['$randomName'](),
-    '$fakerCity': () => generators['$randomCity'](),
-  };
+  // Pra-hitung parameter rute untuk token @param.*
+  const hasilPencocokanRute = cocokkanRute(polaRute, jalurPermintaan);
+  const parameterRute = hasilPencocokanRute.parameter || {};
 
-  const tokenRegex = /{{\s*([@$]?[^{}\s]+)\s*}}/g;
+  const selesaikanToken = (token: string) => {
+    // contoh token: $uuid, @param.id, @query.page, @body.user.name, my_var
+    if (token.startsWith('$')) {
+      return generatorVariabel[token] ? generatorVariabel[token]() : undefined;
+    }
 
-  // Precompute route params for @param.* tokens
-  const routeMatch = matchRoute(routePattern, requestPath);
-  const routeParams = routeMatch.params || {};
-
-  const resolveToken = (token: string) => {
-    // token examples: $uuid, @param.id, @query.page, @body.user.name, my_var
-    if (token.startsWith('$')) return generators[token] ? generators[token]() : undefined;
     if (token.startsWith('@')) {
-      const parts = token.substring(1).split('.');
-      const ns = parts[0];
-      const rest = parts.slice(1);
-      if (ns === 'param') {
-        return rest.length ? routeParams[rest.join('.')] : undefined;
+      const bagian = token.substring(1).split('.');
+      const namespace = bagian[0];
+      const sisanya = bagian.slice(1);
+
+      if (namespace === 'param') {
+        return sisanya.length ? parameterRute[sisanya.join('.')] : undefined;
       }
-      if (ns === 'query') {
-        const val = new URLSearchParams(queryString || '').get(rest.join('.'));
-        return val;
+
+      if (namespace === 'query') {
+        const nilai = new URLSearchParams(stringKueri || '').get(sisanya.join('.'));
+        return nilai;
       }
-      if (ns === 'body') {
-        // walk parsedBody
-        let p: any = parsedBody;
-        for (const r of rest) {
-          if (!p || typeof p !== 'object') return undefined;
-          p = (p as any)[r];
+
+      if (namespace === 'body') {
+        // jelajahi badanTerparse
+        let penunjuk: any = badanTerparse;
+        for (const bagianDalam of sisanya) {
+          if (!penunjuk || typeof penunjuk !== 'object') return undefined;
+          penunjuk = (penunjuk as any)[bagianDalam];
         }
-        return p;
+        return penunjuk;
       }
+
       return undefined;
     }
 
-    // environment variable from envVars array
-    const v = envVars.find(e => e.key === token);
-    return v ? v.value : undefined;
+    // variabel lingkungan dari array variabelLingkungan
+    const variabel = variabelLingkungan.find(e => e.kunci === token);
+    return variabel ? variabel.nilai : undefined;
   };
 
-  const isInsideQuotes = (str: string, idx: number) => {
-    // naive check: count unescaped double quotes before idx
-    let count = 0;
-    for (let i = 0; i < idx; i++) {
-      if (str[i] === '"') {
-        // skip escaped
-        if (i > 0 && str[i - 1] === '\\') continue;
-        count++;
-      }
-    }
-    return (count % 2) === 1;
-  };
-
-  const replaceTokensInString = (s: string) => {
-    let out = s;
-    // avoid infinite loops; do up to 3 passes
-    for (let pass = 0; pass < 3; pass++) {
-      let changed = false;
-      out = out.replace(tokenRegex, (m, token, offset) => {
-        const val = resolveToken(token);
-        if (val === undefined) return m; // leave unchanged
-        const inside = isInsideQuotes(out, offset);
-        let rep: string;
-        if (inside) {
-          if (typeof val === 'object') rep = JSON.stringify(val);
-          else rep = String(val);
-        } else {
-          // place raw JSON for objects/arrays/booleans/numbers
-          if (typeof val === 'object') rep = JSON.stringify(val);
-          else if (typeof val === 'boolean') rep = val ? 'true' : 'false';
-          else rep = String(val);
-        }
-        changed = true;
-        return rep;
-      });
-      if (!changed) break;
-    }
-    return out;
-  };
-
-  // Apply replacements carefully depending if processedBody is JSON text or plain text
-  // Try to parse; if parse fails, run token replacement on string (with inside-quote awareness)
+  // Terapkan penggantian dengan hati-hati tergantung apakah badanTerproses adalah teks JSON atau teks biasa
+  // Coba parsing; jika parsing gagal, jalankan penggantian token pada string (dengan kesadaran dalam-tanda-kutip)
   try {
-    const maybeJson = JSON.parse(processedBody);
-    // recursively replace tokens in object values
-    const walkReplace = (obj: any) => {
-      if (typeof obj === 'string') {
-        // if the entire string is exactly a token like "{{@body.name}}", and the token resolves to non-string, replace with typed value
-        const m = obj.match(/^{{\s*([@$]?[^{}\s]+)\s*}}$/);
-        if (m) {
-          const v = resolveToken(m[1]);
-          return v === undefined ? obj : v;
-        }
-        // otherwise do inline replacements and return string
-        return replaceTokensInString(obj);
-      }
-      if (Array.isArray(obj)) return obj.map(walkReplace);
-      if (obj && typeof obj === 'object') {
-        const keys = Object.keys(obj);
-        for (const k of keys) {
-          obj[k] = walkReplace(obj[k]);
-        }
-        return obj;
-      }
-      return obj;
-    };
-
-    const replaced = walkReplace(maybeJson);
-    processedBody = JSON.stringify(replaced, null, 2);
-  } catch (e) {
-    // not JSON -> replace tokens in string template
-    processedBody = replaceTokensInString(processedBody);
+    const kemungkinanJson = JSON.parse(badanTerproses);
+    const diganti = gantiTokenDalamObjek(kemungkinanJson, selesaikanToken);
+    badanTerproses = JSON.stringify(diganti, null, 2);
+  } catch (errorParsing) {
+    // bukan JSON -> ganti token dalam templat string
+    badanTerproses = gantiTokenDalamString(badanTerproses, regexToken, selesaikanToken);
   }
 
-  return processedBody;
+  return badanTerproses;
 };
 
-export const MOCK_VARIABLES_HELP = [
-  { label: '{{$uuid}}', desc: 'Random UUID v4' },
-  { label: '{{$randomInt}}', desc: 'Random number (0-1000)' },
-  { label: '{{$randomName}}', desc: 'Random first name' },
-  { label: '{{$randomCity}}', desc: 'Random city' },
-  { label: '{{$isoDate}}', desc: 'Current ISO 8601 Date' },
-  { label: '{{$fakerName}}', desc: 'Faker-like alias for random name' },
-  { label: '{{$fakerCity}}', desc: 'Faker-like alias for random city' },
-  { label: '{{@param.id}}', desc: 'Value from URL path /:id' },
-  { label: '{{@query.page}}', desc: 'Value from query string e.g. ?page=2' },
-  { label: '{{@body.name}}', desc: 'Value from JSON request body' },
-  { label: '{{my_var}}', desc: 'User defined Env Variable' },
-];
-
-export interface SimulationResult {
-  response: {
-    status: number;
-    body: string;
-    headers: { key: string; value: string }[];
-    delay: number;
-  };
-  matchedMockId?: string;
-}
-
-// The core logic that acts as the "Server"
-export const simulateRequest = async (
+/**
+ * Logika inti yang bertindak sebagai "Server" untuk mensimulasikan permintaan HTTP
+ * @param method - Metode HTTP (GET, POST, dll.)
+ * @param url - URL permintaan
+ * @param header - Header permintaan
+ * @param badan - Badan permintaan
+ * @param mock - Daftar endpoint mock yang tersedia
+ * @param variabelLingkungan - Variabel lingkungan (BARU)
+ * @returns Hasil simulasi permintaan
+ *
+ * @logikaSimulasi
+ * 1. Mencari endpoint mock yang cocok dengan metode dan jalur
+ * 2. Memeriksa autentikasi jika dikonfigurasi
+ * 3. Menangani proxy/passthrough jika diaktifkan
+ * 4. Menangani logika stateful (CRUD database) jika ada storeName
+ * 5. Memproses respons dinamis dengan variabel
+ * 6. Mengembalikan respons dengan header dan penundaan yang sesuai
+ */
+export const simulasiPermintaan = async (
   method: string,
   url: string,
-  headers: Record<string, string>, // Headers passed from SW
-  body: string,
-  mocks: MockEndpoint[],
-  envVars: EnvironmentVariable[] = [] // NEW: Env Vars
-): Promise<SimulationResult> => {
-  const urlObj = new URL(url);
-  const pathname = urlObj.pathname;
+  header: Record<string, string>,
+  badan: string,
+  mock: MockEndpoint[],
+  variabelLingkungan: EnvironmentVariable[] = []
+): Promise<HasilSimulasi> => {
+  const objekUrl = new URL(url);
+  const namaJalur = objekUrl.pathname;
+  const metodeUpper = String(method || '').toUpperCase();
 
-  let matchedMock: MockEndpoint | null = null;
-  let urlParams: Record<string, string | undefined> = {};
+  let mockYangCocok: MockEndpoint | null = null;
+  let parameterUrl: Record<string, string | undefined> = {};
 
-  // Find matching route
-  for (const m of mocks) {
-    if (m.isActive && m.method === method) {
-      const result = matchRoute(m.path, pathname);
-      if (result.matches) {
-        matchedMock = m;
-        urlParams = result.params;
+  // Cari rute yang cocok
+  for (const m of mock) {
+    if (m.isActive && String(m.metode).toUpperCase() === metodeUpper) {
+      const hasil = cocokkanRute(m.path, namaJalur);
+      if (hasil.cocok) {
+        mockYangCocok = m;
+        parameterUrl = hasil.parameter;
         break;
       }
     }
   }
 
-  if (!matchedMock) {
+  if (!mockYangCocok) {
     return {
-      response: {
+      respons: {
         status: 404,
-        body: JSON.stringify({ error: "Not Found", message: `No active route found for ${method} ${pathname}` }, null, 2),
-        headers: [{ key: 'Content-Type', value: 'application/json' }],
-        delay: 50
+        badan: JSON.stringify(
+          { error: "Tidak Ditemukan", message: `Tidak ada rute aktif yang ditemukan untuk ${method} ${namaJalur}` },
+          null, 2
+        ),
+        header: [{ kunci: 'Content-Type', nilai: 'application/json' }],
+        penundaan: 50
       }
     };
   }
 
-  // --- SECURITY & AUTHENTICATION CHECK ---
-  if (matchedMock.authConfig && matchedMock.authConfig.type !== 'NONE') {
-    const auth = matchedMock.authConfig;
-    const reqHeadersLower = Object.keys(headers).reduce((acc, key) => {
-      acc[key.toLowerCase()] = headers[key];
-      return acc;
+  // --- PEMERIKSAAN KEAMANAN & AUTENTIKASI ---
+  if (mockYangCocok.authConfig && mockYangCocok.authConfig.jenis !== 'NONE') {
+    const auth = mockYangCocok.authConfig;
+    const headerPermintaanLower = Object.keys(header).reduce((akumulator, kunci) => {
+      akumulator[kunci.toLowerCase()] = header[kunci];
+      return akumulator;
     }, {} as Record<string, string>);
 
-    let isAuthorized = false;
+    let terotorisasi = false;
 
-    if (auth.type === 'BEARER_TOKEN') {
-      const authHeader = reqHeadersLower['authorization'] || '';
-      if (authHeader.startsWith('Bearer ') && authHeader.substring(7) === auth.token) {
-        isAuthorized = true;
+    if (auth.jenis === 'BEARER_TOKEN') {
+      const headerAuth = headerPermintaanLower['authorization'] || '';
+      if (headerAuth.startsWith('Bearer ') && headerAuth.substring(7) === auth.token) {
+        terotorisasi = true;
       }
-    } else if (auth.type === 'API_KEY') {
-      const headerKey = (auth.headerKey || 'x-api-key').toLowerCase();
-      const apiKey = reqHeadersLower[headerKey];
-      if (apiKey === auth.token) {
-        isAuthorized = true;
+    } else if (auth.jenis === 'API_KEY') {
+      const kunciHeader = (auth.headerKey || 'x-api-key').toLowerCase();
+      const kunciApi = headerPermintaanLower[kunciHeader];
+      if (kunciApi === auth.token) {
+        terotorisasi = true;
       }
     }
 
-    if (!isAuthorized) {
+    if (!terotorisasi) {
       return {
-        response: {
+        respons: {
           status: 401,
-          body: JSON.stringify({ error: "Unauthorized", message: "Invalid or missing authentication credentials" }, null, 2),
-          headers: [{ key: 'Content-Type', value: 'application/json' }],
-          delay: matchedMock.delay
+          badan: JSON.stringify(
+            { error: "Tidak Terotorisasi", message: "Kredensial autentikasi tidak valid atau tidak ada" },
+            null, 2
+          ),
+          header: [{ kunci: 'Content-Type', nilai: 'application/json' }],
+          penundaan: mockYangCocok.delay
         },
-        matchedMockId: matchedMock.id
+        idMockYangCocok: mockYangCocok.id
       };
     }
   }
 
   // --- PROXY / PASSTHROUGH ---
-  if (matchedMock.proxy && matchedMock.proxy.enabled && matchedMock.proxy.target) {
+  if (mockYangCocok.proxy && mockYangCocok.proxy.enabled && mockYangCocok.proxy.target) {
     try {
-      const proxyTarget = matchedMock.proxy.target.replace(/\/+$/g, '');
+      const targetProxy = mockYangCocok.proxy.target.replace(/\/+$/g, '');
 
-      // Basic validation: only allow http(s) schemes and block known local/private hosts
+      // Validasi dasar: hanya izinkan skema http(s) dan blokir host lokal/pribadi yang diketahui
       try {
-        const targetUrl = new URL(proxyTarget);
-        const scheme = targetUrl.protocol.replace(':', '').toLowerCase();
-        const hostname = targetUrl.hostname;
+        const urlTarget = new URL(targetProxy);
+        const skema = urlTarget.protocol.replace(':', '').toLowerCase();
+        const namaHost = urlTarget.hostname;
 
-        // Only allow http or https
-        if (scheme !== 'http' && scheme !== 'https') {
+        // Hanya izinkan http atau https
+        if (skema !== 'http' && skema !== 'https') {
           return {
-            response: {
+            respons: {
               status: 400,
-              body: JSON.stringify({ error: 'Invalid Proxy Target', message: 'Only http(s) proxy targets are allowed' }, null, 2),
-              headers: [{ key: 'Content-Type', value: 'application/json' }],
-              delay: matchedMock.delay,
+              badan: JSON.stringify(
+                { error: 'Target Proxy Tidak Valid', message: 'Hanya target proxy http(s) yang diizinkan' },
+                null, 2
+              ),
+              header: [{ kunci: 'Content-Type', nilai: 'application/json' }],
+              penundaan: mockYangCocok.delay,
             },
-            matchedMockId: matchedMock.id,
+            idMockYangCocok: mockYangCocok.id,
           };
         }
 
-        // Disallow common local hostnames and IP ranges (improved checks)
-        const lowerHost = hostname.toLowerCase();
-        const isIpv4 = /^\d+\.\d+\.\d+\.\d+$/.test(lowerHost);
-        const isIpv6 = /^[0-9a-f:]+$/.test(lowerHost);
+        // Larang hostname lokal umum dan rentang IP (pemeriksaan yang ditingkatkan)
+        const namaHostLower = namaHost.toLowerCase();
+        const adalahIpv4 = /^\d+\.\d+\.\d+\.\d+$/.test(namaHostLower);
+        const adalahIpv6 = /^[0-9a-f:]+$/.test(namaHostLower);
 
-        const isPrivateIpv4 = isIpv4 && (() => {
-          const parts = lowerHost.split('.').map(Number);
-          if (parts[0] === 10) return true; // 10/8
-          if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true; // 172.16/12
-          if (parts[0] === 192 && parts[1] === 168) return true; // 192.168/16
-          if (parts[0] === 169 && parts[1] === 254) return true; // link-local
-          if (parts[0] === 127) return true; // loopback
+        const adalahIpv4Pribadi = adalahIpv4 && (() => {
+          const bagian = namaHostLower.split('.').map(Number);
+          if (bagian[0] === 10) return true; // 10/8
+          if (bagian[0] === 172 && bagian[1] >= 16 && bagian[1] <= 31) return true; // 172.16/12
+          if (bagian[0] === 192 && bagian[1] === 168) return true; // 192.168/16
+          if (bagian[0] === 169 && bagian[1] === 254) return true; // link-local
+          if (bagian[0] === 127) return true; // loopback
           return false;
         })();
 
-        const isPrivateIpv6 = isIpv6 && (() => {
+        const adalahIpv6Pribadi = adalahIpv6 && (() => {
           // IPv6 loopback ::1, unique local fc00::/7, link-local fe80::/10
-          if (lowerHost === '::1') return true;
-          if (lowerHost.startsWith('fe80:')) return true;
-          if (lowerHost.startsWith('fc') || lowerHost.startsWith('fd')) return true;
+          if (namaHostLower === '::1') return true;
+          if (namaHostLower.startsWith('fe80:')) return true;
+          if (namaHostLower.startsWith('fc') || namaHostLower.startsWith('fd')) return true;
           return false;
         })();
 
-        const hasLocalSuffix = lowerHost === 'localhost' || lowerHost.endsWith('.local');
+        const memilikiAkhiranLokal = namaHostLower === 'localhost' || namaHostLower.endsWith('.local');
 
-        if (isIpv4 && isPrivateIpv4 || isIpv6 && isPrivateIpv6 || hasLocalSuffix) {
+        if ((adalahIpv4 && adalahIpv4Pribadi) || (adalahIpv6 && adalahIpv6Pribadi) || memilikiAkhiranLokal) {
           return {
-            response: {
+            respons: {
               status: 400,
-              body: JSON.stringify({ error: 'Invalid Proxy Target', message: 'Proxy target resolves to a disallowed local or private address' }, null, 2),
-              headers: [{ key: 'Content-Type', value: 'application/json' }],
-              delay: matchedMock.delay,
+              badan: JSON.stringify(
+                { error: 'Target Proxy Tidak Valid', message: 'Target proxy mengarah ke alamat lokal/pribadi yang tidak diizinkan' },
+                null, 2
+              ),
+              header: [{ kunci: 'Content-Type', nilai: 'application/json' }],
+              penundaan: mockYangCocok.delay,
             },
-            matchedMockId: matchedMock.id,
+            idMockYangCocok: mockYangCocok.id,
           };
         }
-      } catch (err) {
+      } catch (errorValidasi) {
         return {
-          response: {
+          respons: {
             status: 400,
-            body: JSON.stringify({ error: 'Invalid Proxy Target', message: 'Proxy target is not a valid URL' }, null, 2),
-            headers: [{ key: 'Content-Type', value: 'application/json' }],
-            delay: matchedMock.delay,
+            badan: JSON.stringify(
+              { error: 'Target Proxy Tidak Valid', message: 'Target proxy bukan URL yang valid' },
+              null, 2
+            ),
+            header: [{ kunci: 'Content-Type', nilai: 'application/json' }],
+            penundaan: mockYangCocok.delay,
           },
-          matchedMockId: matchedMock.id,
+          idMockYangCocok: mockYangCocok.id,
         };
       }
 
-      const urlObj = new URL(url);
-      const proxyUrl = proxyTarget + urlObj.pathname + (urlObj.search || '');
+      const objekUrl = new URL(url);
+      const urlProxy = targetProxy + objekUrl.pathname + (objekUrl.search || '');
 
-      // Prepare headers for proxy request (pass-through existing headers)
-      const proxyHeaders: Record<string, string> = { ...headers };
+      // Siapkan header untuk permintaan proxy (teruskan header yang ada)
+      const headerProxy: Record<string, string> = { ...header };
 
-      // Use AbortController for timeout
+      // Gunakan AbortController untuk timeout
       const controller = new AbortController();
-      const timeout = typeof matchedMock.proxy.timeout === 'number' ? matchedMock.proxy.timeout : 5000;
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
+      const timeout = typeof mockYangCocok.proxy.timeout === 'number' ? mockYangCocok.proxy.timeout : 5000;
+      const idTimeout = setTimeout(() => controller.abort(), timeout);
 
-      const fetchResponse = await fetch(proxyUrl, {
+      const responsFetch = await fetch(urlProxy, {
         method,
-        headers: proxyHeaders,
-        body: body || undefined,
+        headers: headerProxy,
+        body: badan || undefined,
         signal: controller.signal,
       });
 
-      clearTimeout(timeoutId);
+      clearTimeout(idTimeout);
 
-      // Read response body as text
-      const proxiedBody = await fetchResponse.text();
+      // Baca badan respons sebagai teks
+      const badanProxy = await responsFetch.text();
 
-      // Convert headers to array
-      const finalHeadersArray: { key: string; value: string }[] = [];
+      // Konversi header ke array
+      const arrayHeaderAkhir: { kunci: string; nilai: string }[] = [];
       try {
-        if (fetchResponse.headers && typeof fetchResponse.headers.forEach === 'function') {
-          fetchResponse.headers.forEach((v, k) => finalHeadersArray.push({ key: k, value: String(v) }));
+        if (responsFetch.headers && typeof responsFetch.headers.forEach === 'function') {
+          responsFetch.headers.forEach((nilai, kunci) => arrayHeaderAkhir.push({ kunci, nilai: String(nilai) }));
         }
-      } catch (e) {
-        // ignore header conversion errors
+      } catch (errorKonversi) {
+        // abaikan error konversi header
       }
 
       return {
-        response: {
-          status: fetchResponse.status || 200,
-          body: proxiedBody,
-          headers: finalHeadersArray,
-          delay: matchedMock.delay,
+        respons: {
+          status: responsFetch.status || 200,
+          badan: badanProxy,
+          header: arrayHeaderAkhir,
+          penundaan: mockYangCocok.delay,
         },
-        matchedMockId: matchedMock.id,
+        idMockYangCocok: mockYangCocok.id,
       };
-    } catch (err: any) {
-      // On failure, either fallback to local mock or return 502
-      if (matchedMock.proxy.fallbackToMock) {
-        // continue to mock handling
+    } catch (errorProxy: any) {
+      // Jika gagal, baik fallback ke mock lokal atau kembalikan 502
+      if (mockYangCocok.proxy.fallbackToMock) {
+        // lanjutkan ke penanganan mock
       } else {
         return {
-          response: {
+          respons: {
             status: 502,
-            body: JSON.stringify({ error: 'Bad Gateway', message: String(err.message || err) }, null, 2),
-            headers: [{ key: 'Content-Type', value: 'application/json' }],
-            delay: matchedMock.delay,
+            badan: JSON.stringify(
+              { error: 'Bad Gateway', message: String(errorProxy.message || errorProxy) },
+              null, 2
+            ),
+            header: [{ kunci: 'Content-Type', nilai: 'application/json' }],
+            penundaan: mockYangCocok.delay,
           },
-          matchedMockId: matchedMock.id,
+          idMockYangCocok: mockYangCocok.id,
         };
       }
     }
   }
 
-  let dynamicBody = "";
-  let finalStatus = matchedMock.statusCode;
+  let badanDinamis = "";
+  let statusAkhir = mockYangCocok.statusCode;
 
-  // -- STATEFUL LOGIC START --
-  if (matchedMock.storeName) {
-    const collection = matchedMock.storeName;
+  // -- LOGIKA STATEFUL MULAI --
+  if (mockYangCocok.storeName) {
+    const koleksi = mockYangCocok.storeName;
 
     // GET
-    if (method === HttpMethod.GET) {
-      const paramKeys = Object.keys(urlParams);
-      if (paramKeys.length > 0) {
-        const id = (urlParams as any)[paramKeys[0]];
-        const item = dbService.find(collection, id);
+    if (metodeUpper === HttpMethod.GET) {
+      const kunciParameter = Object.keys(parameterUrl);
+      if (kunciParameter.length > 0) {
+        const id = (parameterUrl as any)[kunciParameter[0]];
+        const item = layananDatabase.temukan(koleksi, id);
         if (item) {
-          dynamicBody = JSON.stringify(item, null, 2);
+          badanDinamis = JSON.stringify(item, null, 2);
         } else {
-          finalStatus = 404;
-          dynamicBody = JSON.stringify({ error: "Item not found" }, null, 2);
+          statusAkhir = 404;
+          badanDinamis = JSON.stringify({ error: "Item tidak ditemukan" }, null, 2);
         }
       } else {
-        const list = dbService.getCollection(collection);
-        dynamicBody = JSON.stringify(list, null, 2);
+        const daftar = layananDatabase.dapatkanKoleksi(koleksi);
+        badanDinamis = JSON.stringify(daftar, null, 2);
       }
     }
     // POST
-    else if (method === HttpMethod.POST) {
+    else if (metodeUpper === HttpMethod.POST) {
       try {
-        const payload = body ? JSON.parse(body) : {};
-        const newItem = dbService.insert(collection, payload);
-        dynamicBody = JSON.stringify(newItem, null, 2);
-      } catch (e) {
-        finalStatus = 400;
-        dynamicBody = JSON.stringify({ error: "Invalid JSON body" }, null, 2);
+        const payload = badan ? JSON.parse(badan) : {};
+        const itemBaru = layananDatabase.sisipkan(koleksi, payload);
+        badanDinamis = JSON.stringify(itemBaru, null, 2);
+      } catch (errorParsing) {
+        statusAkhir = 400;
+        badanDinamis = JSON.stringify({ error: "Badan JSON tidak valid" }, null, 2);
       }
     }
     // PUT / PATCH
-    else if (method === HttpMethod.PUT || method === HttpMethod.PATCH) {
-      const paramKeys = Object.keys(urlParams);
-      if (paramKeys.length > 0) {
-        const id = (urlParams as any)[paramKeys[0]];
+    else if (metodeUpper === HttpMethod.PUT || metodeUpper === HttpMethod.PATCH) {
+      const kunciParameter = Object.keys(parameterUrl);
+      if (kunciParameter.length > 0) {
+        const id = (parameterUrl as any)[kunciParameter[0]];
         try {
-          const payload = body ? JSON.parse(body) : {};
-          const updated = dbService.update(collection, id, payload);
-          if (updated) {
-            dynamicBody = JSON.stringify(updated, null, 2);
+          const payload = badan ? JSON.parse(badan) : {};
+          const diperbarui = layananDatabase.perbarui(koleksi, id, payload);
+          if (diperbarui) {
+            badanDinamis = JSON.stringify(diperbarui, null, 2);
           } else {
-            finalStatus = 404;
-            dynamicBody = JSON.stringify({ error: "Item not found to update" }, null, 2);
+            statusAkhir = 404;
+            badanDinamis = JSON.stringify({ error: "Item tidak ditemukan untuk diperbarui" }, null, 2);
           }
-        } catch (e) {
-          finalStatus = 400;
-          dynamicBody = JSON.stringify({ error: "Invalid JSON body" }, null, 2);
+        } catch (errorParsing) {
+          statusAkhir = 400;
+          badanDinamis = JSON.stringify({ error: "Badan JSON tidak valid" }, null, 2);
         }
       } else {
-        finalStatus = 400;
-        dynamicBody = JSON.stringify({ error: "Missing ID parameter in URL" }, null, 2);
+        statusAkhir = 400;
+        badanDinamis = JSON.stringify({ error: "Parameter ID tidak ada di URL" }, null, 2);
       }
     }
     // DELETE
-    else if (method === HttpMethod.DELETE) {
-      const paramKeys = Object.keys(urlParams);
-      if (paramKeys.length > 0) {
-        const id = (urlParams as any)[paramKeys[0]];
-        const deleted = dbService.delete(collection, id);
-        if (deleted) {
-          finalStatus = 200;
-          dynamicBody = JSON.stringify({ success: true, message: "Item deleted" }, null, 2);
+    else if (metodeUpper === HttpMethod.DELETE) {
+      const kunciParameter = Object.keys(parameterUrl);
+      if (kunciParameter.length > 0) {
+        const id = (parameterUrl as any)[kunciParameter[0]];
+        const dihapus = layananDatabase.hapus(koleksi, id);
+        if (dihapus) {
+          statusAkhir = 200;
+          badanDinamis = JSON.stringify({ success: true, message: "Item dihapus" }, null, 2);
         } else {
-          finalStatus = 404;
-          dynamicBody = JSON.stringify({ error: "Item not found" }, null, 2);
+          statusAkhir = 404;
+          badanDinamis = JSON.stringify({ error: "Item tidak ditemukan" }, null, 2);
         }
       } else {
-        finalStatus = 400;
-        dynamicBody = JSON.stringify({ error: "Missing ID parameter in URL" }, null, 2);
+        statusAkhir = 400;
+        badanDinamis = JSON.stringify({ error: "Parameter ID tidak ada di URL" }, null, 2);
       }
     }
   }
-  // -- STATELESS LOGIC --
+  // -- LOGIKA STATELESS --
   else {
-    // Pass envVars to the processor
-    // Use full path with query to enable {{@query.*}} injection
-    const requestPathWithQuery = urlObj.pathname + (urlObj.search || '');
-    dynamicBody = processMockResponse(matchedMock.responseBody, requestPathWithQuery, matchedMock.path, envVars, body);
+    // Kirim variabelLingkungan ke prosesor
+    // Gunakan jalur lengkap dengan kueri untuk mengaktifkan penyuntikan {{@query.*}}
+    const jalurPermintaanDenganKueri = objekUrl.pathname + (objekUrl.search || '');
+    badanDinamis = prosesResponsMock(
+      mockYangCocok.responseBody,
+      jalurPermintaanDenganKueri,
+      mockYangCocok.path,
+      variabelLingkungan,
+      badan
+    );
   }
 
-  // Merge headers and determine sensible Content-Type when not provided by mock
-  const existingContentType = (matchedMock.headers || []).find(h => h.key.toLowerCase() === 'content-type');
-  let inferredContentType = 'text/plain';
+  // Gabungkan header dan tentukan Content-Type yang masuk akal ketika tidak disediakan oleh mock
+  const tipeKontenYangAda = (mockYangCocok.headers || []).find(h => h.key.toLowerCase() === 'content-type');
+  let tipeKontenTerduga = 'text/plain';
   try {
-    JSON.parse(dynamicBody);
-    inferredContentType = 'application/json';
-  } catch (e) {
-    inferredContentType = 'text/plain';
+    JSON.parse(badanDinamis);
+    tipeKontenTerduga = 'application/json';
+  } catch (errorParsing) {
+    tipeKontenTerduga = 'text/plain';
   }
 
-  const finalHeaders = [
-    ...(matchedMock.headers || []),
-    // Only add Content-Type if mock did not specify one
-    ...(existingContentType ? [] : [{ key: 'Content-Type', value: inferredContentType }]),
+  const headerAkhir = [
+    ...(mockYangCocok.headers || []),
+    // Hanya tambahkan Content-Type jika mock tidak menentukannya
+    ...(tipeKontenYangAda ? [] : [{ key: 'Content-Type', value: tipeKontenTerduga }]),
     { key: 'X-Powered-By', value: 'BackendStudio' }
-  ];
+  ].map(h => ({ kunci: h.key, nilai: h.value }));
 
   return {
-    response: {
-      status: finalStatus,
-      body: dynamicBody,
-      headers: finalHeaders,
-      delay: matchedMock.delay
+    respons: {
+      status: statusAkhir,
+      badan: badanDinamis,
+      header: headerAkhir,
+      penundaan: mockYangCocok.delay
     },
-    matchedMockId: matchedMock.id
+    idMockYangCocok: mockYangCocok.id
   };
-}
+};
+
+/**
+ * Ekspor konstanta bantuan untuk dokumentasi UI
+ */
+export { VARIABEL_SISTEM_BANTUAN as VARIABEL_BANTUAN };
+
+// Backward-compatible English-shaped exports used by UI/older modules
+export const MOCK_VARIABLES_HELP = VARIABEL_SISTEM_BANTUAN.map(v => ({ label: v.label, desc: v.deskripsi }));
+export const patternsConflict = apakahPolaBerkonflik;
+export const simulateRequest = simulasiPermintaan;

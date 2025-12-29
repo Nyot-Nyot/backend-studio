@@ -30,6 +30,8 @@ interface PropsSidebar {
 	tampilanSaatIni: StateTampilan;
 	/** Callback saat pengguna mengganti tampilan */
 	padaUbahTampilan: (tampilan: StateTampilan) => void;
+	/** Callback saat pengguna ingin kembali ke landing page (opsional) */
+	onShowLanding?: () => void;
 	/** Callback saat pengguna membuat mock endpoint baru */
 	padaMockBaru: () => void;
 	/** Callback saat pengguna menggunakan fitur pembuatan otomatis dengan AI */
@@ -67,6 +69,7 @@ export const Sidebar: React.FC<PropsSidebar> = ({
 	padaHapusProyek,
 	padaTriggerPaletPerintah,
 	padaDeploy,
+	onShowLanding,
 }) => {
 	// --- STATE LOKAL --- //
 
@@ -208,20 +211,27 @@ export const Sidebar: React.FC<PropsSidebar> = ({
 					sedangCollapsed ? "justify-center" : "space-x-3"
 				} transition-all`}
 			>
-				<div className="p-2.5 bg-gradient-to-br from-brand-500 to-brand-600 rounded-xl shadow-lg shadow-brand-900/20 ring-1 ring-white/10 flex-shrink-0">
-					<Box className="w-6 h-6 text-white" strokeWidth={2.5} />
-				</div>
-
-				{!sedangCollapsed && (
-					<div className="animate-in fade-in slide-in-from-left-2 duration-300 overflow-hidden whitespace-nowrap">
-						<h1 className="text-lg font-bold text-white tracking-tight leading-none mb-1">
-							Backend Studio
-						</h1>
-						<p className="text-[11px] text-brand-400 font-medium tracking-wide uppercase opacity-90">
-							Desain & Prototipe
-						</p>
+				<button
+					type="button"
+					onClick={() => onShowLanding?.()}
+					aria-label="Kembali ke landing"
+					className="flex items-center gap-3 p-1 rounded-md hover:bg-slate-800/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50"
+				>
+					<div className="p-2.5 bg-gradient-to-br from-brand-500 to-brand-600 rounded-xl shadow-lg shadow-brand-900/20 ring-1 ring-white/10 flex-shrink-0">
+						<Box className="w-6 h-6 text-white" strokeWidth={2.5} />
 					</div>
-				)}
+
+					{!sedangCollapsed && (
+						<div className="animate-in fade-in slide-in-from-left-2 duration-300 overflow-hidden whitespace-nowrap text-left">
+							<h1 className="text-lg font-bold text-white tracking-tight leading-none mb-1">
+								Backend Studio
+							</h1>
+							<p className="text-[11px] text-brand-400 font-medium tracking-wide uppercase opacity-90">
+								Desain & Prototipe
+							</p>
+						</div>
+					)}
+				</button>
 			</div>
 
 			{/* Selektor Proyek dan Pencarian */}

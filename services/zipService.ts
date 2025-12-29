@@ -1,60 +1,138 @@
-import JSZip from "jszip";
-import { ZipGenerationError, ZipSizeError } from './zipErrors';
+// layananZip.ts
+// Layanan untuk membuat file ZIP dari kumpulan file dengan validasi ukuran
 
-export type CreateZipOptions = {
-  maxEntrySize?: number; // bytes
-  maxTotalSize?: number; // bytes
-  outputType?: 'blob' | 'arraybuffer' | 'nodebuffer';
+import JSZip from "jszip";
+import { ErrorGenerasiZip, ErrorUkuranZip } from './zipErrors';
+
+/**
+ * Opsi untuk pembuatan file ZIP
+ */
+export type OpsiBuatZip = {
+  /** Ukuran maksimum per entri (dalam bytes) */
+  maksUkuranPerEntri?: number;
+  /** Ukuran total maksimum ZIP (dalam bytes) */
+  maksUkuranTotal?: number;
+  /** Tipe output yang dihasilkan */
+  tipeOutput?: 'blob' | 'arraybuffer' | 'nodebuffer';
 };
 
-export async function createZipBlob(files: { name: string; blob: Blob }[], opts: CreateZipOptions = {}) {
-  const maxEntry = typeof opts.maxEntrySize === 'number' ? opts.maxEntrySize : 20 * 1024 * 1024; // 20MB per entry default
-  const maxTotal = typeof opts.maxTotalSize === 'number' ? opts.maxTotalSize : 200 * 1024 * 1024; // 200MB total default
+/**
+ * Membuat file ZIP dari kumpulan file
+ *
+ * Fungsi ini melakukan dua tahap:
+ * 1. Tahap pertama: Mengukur ukuran file secara konservatif untuk mencegah OOM
+ * 2. Tahap kedua: Menambahkan file ke ZIP dan menghasilkan output
+ *
+ * @param file - Array objek file dengan nama dan blob
+ * @param opsi - Opsi konfigurasi pembuatan ZIP
+ * @returns Promise yang mengembalikan ZIP dalam tipe yang ditentukan
+ * @throws ErrorUkuranZip jika ukuran file melebihi batas
+ * @throws ErrorGenerasiZip jika gagal menambahkan file atau menghasilkan ZIP
+ *
+ * @contohPenggunaan
+ * ```
+ * const file = [
+ *   { nama: 'laporan.pdf', blob: blobPdf },
+ *   { nama: 'data.json', blob: blobJson }
+ * ];
+ *
+ * const zip = await buatBlobZip(file, {
+ *   maksUkuranPerEntri: 10 * 1024 * 1024, // 10MB
+ *   maksUkuranTotal: 50 * 1024 * 1024,    // 50MB
+ *   tipeOutput: 'blob'
+ * });
+ * ```
+ */
+export async function buatBlobZip(
+  file: { nama: string; blob: Blob }[],
+  opsi: OpsiBuatZip = {}
+) {
+  // Tentukan batas ukuran dengan nilai default jika tidak disediakan
+  const batasPerEntri = typeof opsi.maksUkuranPerEntri === 'number'
+    ? opsi.maksUkuranPerEntri
+    : 20 * 1024 * 1024; // 20MB per entri default
+
+  const batasTotal = typeof opsi.maksUkuranTotal === 'number'
+    ? opsi.maksUkuranTotal
+    : 200 * 1024 * 1024; // 200MB total default
 
   const zip = new JSZip();
 
-  // First pass: measure sizes conservatively without loading everything when possible
-  let totalEstimate = 0;
-  for (const f of files) {
-    let size: number | undefined = (f.blob as any)?.size;
-    if (typeof size !== 'number') {
-      // as a last resort we must read it to determine size
+  // Tahap pertama: Perkiraan ukuran secara konservatif tanpa memuat semua file jika memungkinkan
+  let totalPerkiraan = 0;
+
+  for (const fileSaatIni of file) {
+    let ukuran: number | undefined = (fileSaatIni.blob as any)?.size;
+
+    // Jika ukuran tidak tersedia, baca file untuk menentukannya
+    if (typeof ukuran !== 'number') {
       try {
-        const buf = await (f.blob as any).arrayBuffer();
-        size = buf.byteLength;
-      } catch (e) {
-        // if we can't determine size, assume worst-case: reject to avoid OOM
-        throw new ZipSizeError(`Unable to determine size for ${f.name}`);
+        const buffer = await (fileSaatIni.blob as any).arrayBuffer();
+        ukuran = buffer.byteLength;
+      } catch (errorPembacaan) {
+        // Jika tidak dapat menentukan ukuran, tolak untuk menghindari OOM
+        throw new ErrorUkuranZip(
+          `Tidak dapat menentukan ukuran untuk file ${fileSaatIni.nama}`
+        );
       }
     }
-    if (size > maxEntry) {
-      throw new ZipSizeError(`Entry ${f.name} is too large (${size} bytes), limit is ${maxEntry} bytes`);
+
+    // Validasi ukuran per entri
+    if (ukuran > batasPerEntri) {
+      throw new ErrorUkuranZip(
+        `Entri ${fileSaatIni.nama} terlalu besar (${ukuran} bytes), ` +
+        `batas adalah ${batasPerEntri} bytes`
+      );
     }
-    totalEstimate += size;
-    if (totalEstimate > maxTotal) {
-      throw new ZipSizeError(`Total zip size estimate ${totalEstimate} exceeds limit ${maxTotal}`);
+
+    totalPerkiraan += ukuran;
+
+    // Validasi ukuran total
+    if (totalPerkiraan > batasTotal) {
+      throw new ErrorUkuranZip(
+        `Total perkiraan ukuran ZIP (${totalPerkiraan} bytes) ` +
+        `melebihi batas (${batasTotal} bytes)`
+      );
     }
   }
 
-  // Second pass: add files (use ArrayBuffer in Node or when necessary)
-  for (const f of files) {
+  // Tahap kedua: Tambahkan file ke ZIP (gunakan ArrayBuffer di Node.js atau jika diperlukan)
+  for (const fileSaatIni of file) {
     try {
-      if (typeof (f.blob as any).arrayBuffer === 'function') {
-        const buf = await (f.blob as any).arrayBuffer();
-        zip.file(f.name, buf);
+      if (typeof (fileSaatIni.blob as any).arrayBuffer === 'function') {
+        const buffer = await (fileSaatIni.blob as any).arrayBuffer();
+        zip.file(fileSaatIni.nama, buffer);
       } else {
-        zip.file(f.name, f.blob as any);
+        zip.file(fileSaatIni.nama, fileSaatIni.blob as any);
       }
-    } catch (e: any) {
-      throw new ZipGenerationError(`Failed to add ${f.name} to zip: ${e?.message || String(e)}`);
+    } catch (errorPenambahan: any) {
+      throw new ErrorGenerasiZip(
+        `Gagal menambahkan ${fileSaatIni.nama} ke ZIP: ` +
+        `${errorPenambahan?.message || String(errorPenambahan)}`
+      );
     }
   }
 
+  // Hasilkan file ZIP
   try {
-    const type = opts.outputType ?? 'blob';
-    const result = await zip.generateAsync({ type });
-    return result;
-  } catch (e: any) {
-    throw new ZipGenerationError(`Failed to generate zip: ${e?.message || String(e)}`);
+    const tipe = opsi.tipeOutput ?? 'blob';
+    const hasil = await zip.generateAsync({ type: tipe });
+    return hasil;
+  } catch (errorGenerasi: any) {
+    throw new ErrorGenerasiZip(
+      `Gagal menghasilkan ZIP: ${errorGenerasi?.message || String(errorGenerasi)}`
+    );
   }
 }
+
+// Backward-compatible English alias that accepts English-shaped file entries
+export const createZipBlob = (
+  files: { name?: string; nama?: string; blob: Blob }[],
+  opsi?: OpsiBuatZip
+) => {
+  const normalized = files.map(f => ({ nama: (f as any).nama ?? (f as any).name, blob: f.blob }));
+  return buatBlobZip(normalized as { nama: string; blob: Blob }[], opsi);
+};
+
+// Default export for convenience
+export default { buatBlobZip, createZipBlob };

@@ -98,6 +98,18 @@ export interface KonfigurasiEndpointTerhasil {
   responseBody: string; // JSON yang telah di-stringify
 }
 
+// GeneratedEndpointConfig (English-shaped) used by OpenRouter client and some modules
+export interface GeneratedEndpointConfig {
+  name: string;
+  path: string;
+  method?: string;
+  statusCode?: number;
+  responseBody?: string;
+}
+
+// Backward-compatible alias (if other code expects the Indonesian name)
+export type GeneratedEndpointConfigAlias = GeneratedEndpointConfig;
+
 // ================================
 // TIPE DATA SCHEMA DAN GENERATOR
 // ================================
@@ -121,6 +133,10 @@ export interface SchemaResource {
   nama: string; // contoh: 'pengguna'
   fields: FieldResource[];
 }
+
+// Backward-compatible English-shaped aliases for data generator
+export type ResourceField = FieldResource;
+export type ResourceSchema = SchemaResource;
 
 // ================================
 // TIPE DATA LOGGING
@@ -188,8 +204,14 @@ export type { Proyek as Project, StateTampilan as ViewState };
 // Alias untuk konfigurasi autentikasi (kompatibilitas)
 export type AuthConfig = KonfigurasiAutentikasi;
 
+// Alias tipe untuk tipe autentikasi (compatibility)
+export type TipeAutentikasi = KonfigurasiAutentikasi['jenis'];
+
 // Alias untuk konsol uji (nama Inggris yang dipakai di beberapa komponen)
 export type TestConsoleState = StateKonsolPengujian;
+
+// Alias untuk variabel lingkungan (English-shaped)
+export type { VariabelLingkungan as EnvironmentVariable };
 
 /**
  * Tipe untuk toast notifikasi.
@@ -330,6 +352,10 @@ export interface EksekusiScenario<T = unknown> {
   stepLogs: LogLangkahScenario<T>[];
 }
 
+// Backward-compatible aliases for scenario types (English-shaped)
+export type ScenarioRun<T = unknown> = EksekusiScenario<T>;
+export type ScenarioStepLog<T = unknown> = LogLangkahScenario<T>;
+
 // ================================
 // TIPE DATA KONEKTOR
 // ================================
@@ -347,6 +373,8 @@ export interface Konektor<C extends Record<string, unknown> = Record<string, unk
   createdAt: number;
 }
 
+// Backward-compatible English alias for Connector
+export type Connector = Konektor;
 // ================================
 // TIPE DATA EKSPOR (UNTUK KEMUDIAH IMPOR)
 // ================================

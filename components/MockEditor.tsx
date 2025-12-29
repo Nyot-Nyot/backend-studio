@@ -989,6 +989,7 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 			addToast("Response body berhasil digenerate", "success");
 		} catch (e) {
 			const err = e as any;
+			console.error("AI generate failed:", err);
 			if (err?.code === "OPENROUTER_DISABLED") {
 				addToast("Provider OpenRouter dinonaktifkan. Aktifkan di Settings.", "error");
 			} else if (err?.code === "OPENROUTER_TIMEOUT") {
@@ -1006,7 +1007,8 @@ export const MockEditor: React.FC<MockEditorProps> = ({
 					"error"
 				);
 			} else {
-				addToast("Gagal melakukan generate", "error");
+				const detail = err?.message ? `: ${String(err.message).slice(0, 200)}` : "";
+				addToast(`Gagal melakukan generate${detail}. Lihat console (DevTools) untuk detail.`, "error");
 			}
 		} finally {
 			setSedangGenerate(false);

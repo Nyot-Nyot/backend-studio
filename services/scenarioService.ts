@@ -1,225 +1,392 @@
+// layananSkenario.ts
+// Layanan untuk mengelola dan menjalankan skenario pengujian
+
 import { Connector, Scenario, ScenarioRun, ScenarioStepLog } from '../types';
-import { fetchRandomUser } from './apiService';
+import { ambilPenggunaAcak } from './apiService';
 import { indexedDbService } from './indexedDbService';
-import { ScenarioNotFoundError, StepFailedError, TemplateError } from './scenarioErrors';
+import {
+  ErrorSkenarioTidakDitemukan,
+  ErrorStepGagal,
+  ErrorTemplate
+} from './scenarioErrors';
 
-const SCENARIO_STORE = 'scenarios';
-const RUNS_STORE = 'runs';
-const CONNECTOR_STORE = 'connectors';
+/**
+ * Nama store untuk penyimpanan data
+ */
+const STORE_SKENARIO = 'skenario';
+const STORE_RUNS = 'runs';
+const STORE_KONEKTOR = 'konektor';
 
-// Simple internal event bus for UI subscriptions
-export const ScenarioBus = new EventTarget();
+/**
+ * Bus event sederhana untuk subskripsi UI
+ */
+export const BusSkenario = new EventTarget();
 
-function now() { return Date.now(); }
+/**
+ * Mendapatkan timestamp saat ini
+ */
+const waktuSekarang = () => Date.now();
 
-function resolvePath(obj: unknown, path: string): unknown {
-  // Supports dotted paths and bracket indices, e.g. "response.items[0].name" or "response.items.0.name"
+/**
+ * Mengambil nilai dari objek menggunakan jalur (path) bertingkat
+ * @param obj - Objek sumber
+ * @param jalur - Jalur untuk mengakses nilai (misal: "response.items[0].name")
+ * @returns Nilai yang ditemukan atau undefined
+ *
+ * @catatan
+ * Mendukung jalur dengan titik dan indeks array, contoh:
+ * - "response.items[0].name"
+ * - "response.items.0.name"
+ */
+const ambilNilaiDariJalur = (obj: unknown, jalur: string): unknown => {
   try {
-    if (typeof path !== 'string' || path.length === 0) return undefined;
+    if (typeof jalur !== 'string' || jalur.length === 0) return undefined;
     if (typeof obj !== 'object' || obj === null) return undefined;
-    const segs: string[] = [];
-    const re = /([^.[\]]+)|\[(\d+)\]/g;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(path)) !== null) {
-      segs.push(m[1] ?? m[2]);
+
+    const segmen: string[] = [];
+    const regex = /([^.[\]]+)|\[(\d+)\]/g;
+    let kecocokan: RegExpExecArray | null;
+
+    while ((kecocokan = regex.exec(jalur)) !== null) {
+      segmen.push(kecocokan[1] ?? kecocokan[2]);
     }
-    let acc: unknown = obj;
-    for (const s of segs) {
-      if (acc === undefined || acc === null) return undefined;
-      if (Array.isArray(acc)) {
-        const idx = Number(s);
-        if (!Number.isNaN(idx) && idx in acc as any) {
-          acc = (acc as any)[idx];
+
+    let akumulator: unknown = obj;
+    for (const segmenSaatIni of segmen) {
+      if (akumulator === undefined || akumulator === null) return undefined;
+
+      if (Array.isArray(akumulator)) {
+        const indeks = Number(segmenSaatIni);
+        if (!Number.isNaN(indeks) && indeks in (akumulator as any)) {
+          akumulator = (akumulator as any)[indeks];
           continue;
         }
       }
-      if (typeof acc === 'object' && acc !== null && (s in (acc as Record<string, unknown>))) {
-        acc = (acc as Record<string, unknown>)[s];
+
+      if (typeof akumulator === 'object' && akumulator !== null &&
+        (segmenSaatIni in (akumulator as Record<string, unknown>))) {
+        akumulator = (akumulator as Record<string, unknown>)[segmenSaatIni];
       } else {
         return undefined;
       }
     }
-    return acc;
-  } catch (e) {
+
+    return akumulator;
+  } catch (errorAmbil) {
     return undefined;
   }
-}
+};
 
-function applyTemplate(input: unknown, ctx: unknown): unknown {
+/**
+ * Menerapkan template pada input menggunakan konteks
+ * @param input - Data input yang mungkin berisi template
+ * @param konteks - Konteks untuk mengganti placeholder
+ * @returns Data dengan template yang sudah diterapkan
+ */
+const terapkanTemplate = (input: unknown, konteks: unknown): unknown => {
   if (typeof input === 'string') {
-    return input.replace(/{{\s*([^}]+)\s*}}/g, (_m: string, key: string) => {
+    return input.replace(/{{\s*([^}]+)\s*}}/g, (cocokan: string, kunci: string) => {
       try {
-        const val = resolvePath(ctx, key.trim());
-        return (val === undefined || val === null) ? '' : String(val);
-      } catch (e) {
-        // Be conservative: on template resolution failure, return empty string but record nothing else
+        const nilai = ambilNilaiDariJalur(konteks, kunci.trim());
+        return (nilai === undefined || nilai === null) ? '' : String(nilai);
+      } catch (errorTemplate) {
+        // Konservatif: jika gagal mengurai template, kembalikan string kosong
         return '';
       }
     });
   }
-  if (Array.isArray(input)) return input.map(i => applyTemplate(i, ctx));
+
+  if (Array.isArray(input)) {
+    return input.map(item => terapkanTemplate(item, konteks));
+  }
+
   if (typeof input === 'object' && input !== null) {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
-      out[k] = applyTemplate(v, ctx);
+    const keluaran: Record<string, unknown> = {};
+    for (const [kunci, nilai] of Object.entries(input as Record<string, unknown>)) {
+      keluaran[kunci] = terapkanTemplate(nilai, konteks);
     }
-    return out;
+    return keluaran;
   }
+
   return input;
-}
+};
 
-export class ScenarioService {
-  static async listScenarios(): Promise<Scenario[]> {
-    return (await indexedDbService.getCollection(SCENARIO_STORE)) as Scenario[];
+export class LayananSkenario {
+  /**
+   * Mendapatkan daftar semua skenario
+   */
+  static async daftarSkenario(): Promise<Scenario[]> {
+    return (await indexedDbService.dapatkanKoleksi(STORE_SKENARIO)) as Scenario[];
   }
 
-  static async getScenario(id: string): Promise<Scenario | undefined> {
-    const list = (await indexedDbService.getCollection(SCENARIO_STORE)) as Scenario[];
-    return list.find((s) => s.id === id);
+  /**
+   * Mendapatkan skenario berdasarkan ID
+   * @param id - ID skenario
+   * @returns Skenario jika ditemukan, undefined jika tidak
+   */
+  static async dapatkanSkenario(id: string): Promise<Scenario | undefined> {
+    const daftar = (await indexedDbService.dapatkanKoleksi(STORE_SKENARIO)) as Scenario[];
+    return daftar.find((skenario) => skenario.id === id);
   }
 
-  static async saveScenario(s: Scenario): Promise<void> {
-    s.updatedAt = Date.now();
-    if (!s.id) {
-      await indexedDbService.insert(SCENARIO_STORE, s);
+  /**
+   * Menyimpan skenario (buat baru atau perbarui yang sudah ada)
+   * @param skenario - Objek skenario
+   */
+  static async simpanSkenario(skenario: Scenario): Promise<void> {
+    skenario.updatedAt = Date.now();
+    if (!skenario.id) {
+      await indexedDbService.sisipkan(STORE_SKENARIO, skenario);
     } else {
-      await indexedDbService.update(SCENARIO_STORE, s.id, s);
+      await indexedDbService.perbarui(STORE_SKENARIO, skenario.id, skenario);
     }
   }
 
-  static async deleteScenario(id: string): Promise<void> {
-    await indexedDbService.delete(SCENARIO_STORE, id);
+  /**
+   * Menghapus skenario berdasarkan ID
+   * @param id - ID skenario
+   */
+  static async hapusSkenario(id: string): Promise<void> {
+    await indexedDbService.hapus(STORE_SKENARIO, id);
   }
 
-  // Run a scenario by id. Emits events on ScenarioBus about run progress.
-  static async runScenario(scenarioId: string, opts?: {
-    fetchFn?: (input: string, init?: RequestInit) => Promise<Response>;
-    eventTarget?: EventTarget;
-    uuidFn?: () => string;
-    nowFn?: () => number;
-  }): Promise<ScenarioRun> {
-    const scenario = await this.getScenario(scenarioId);
-    if (!scenario) throw new ScenarioNotFoundError(scenarioId);
+  /**
+   * Menjalankan skenario berdasarkan ID
+   * @param idSkenario - ID skenario yang akan dijalankan
+   * @param opsi - Opsi tambahan untuk menjalankan skenario
+   * @returns Hasil run skenario
+   *
+   * @catatan
+   * - Mengirimkan event ke BusSkenario untuk melaporkan kemajuan
+   * - Menyimpan log setiap step ke database
+   * - Mendukung template dalam payload step
+   */
+  static async jalankanSkenario(
+    idSkenario: string,
+    opsi?: {
+      fetchFn?: (input: string, init?: RequestInit) => Promise<Response>;
+      eventTarget?: EventTarget;
+      uuidFn?: () => string;
+      nowFn?: () => number;
+    }
+  ): Promise<ScenarioRun> {
+    const skenario = await this.dapatkanSkenario(idSkenario);
+    if (!skenario) {
+      throw new ErrorSkenarioTidakDitemukan(idSkenario);
+    }
 
-    const fetchFn = opts?.fetchFn ?? (typeof fetch !== 'undefined' ? fetch.bind(globalThis) : async () => { throw new Error('fetch not available'); });
-    const eventTarget = opts?.eventTarget ?? (typeof window !== 'undefined' ? window : ScenarioBus);
-    const uuidFn = opts?.uuidFn ?? (() => (typeof crypto !== 'undefined' && typeof (crypto as any).randomUUID === 'function' ? (crypto as any).randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`));
-    const nowFn = opts?.nowFn ?? (() => Date.now());
+    const fetchFn = opsi?.fetchFn ??
+      (typeof fetch !== 'undefined'
+        ? fetch.bind(globalThis)
+        : async () => {
+          throw new Error('fetch tidak tersedia di lingkungan ini');
+        }
+      );
+
+    const eventTarget = opsi?.eventTarget ??
+      (typeof window !== 'undefined' ? window : BusSkenario);
+
+    const uuidFn = opsi?.uuidFn ??
+      (() => (typeof crypto !== 'undefined' &&
+        typeof (crypto as any).randomUUID === 'function'
+        ? (crypto as any).randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+      ));
+
+    const nowFn = opsi?.nowFn ?? (() => Date.now());
 
     const run: ScenarioRun = {
       id: uuidFn(),
-      scenarioId: scenario.id,
+      scenarioId: skenario.id,
       startedAt: nowFn(),
       status: 'running',
       stepLogs: []
     };
 
-    await indexedDbService.insert(RUNS_STORE, run);
+    // Simpan run ke database
+    await indexedDbService.sisipkan(STORE_RUNS, run);
 
-    ScenarioBus.dispatchEvent(new CustomEvent('run:update', { detail: { run } }));
+    // Kirim event bahwa run telah dimulai
+    BusSkenario.dispatchEvent(
+      new CustomEvent('run:update', { detail: { run } })
+    );
 
     try {
-      let lastOutput: unknown = undefined;
-      for (const step of scenario.steps) {
-        const stepLog: ScenarioStepLog = {
+      let keluaranTerakhir: unknown = undefined;
+
+      // Jalankan setiap step dalam skenario
+      for (const step of skenario.steps) {
+        const logStep: ScenarioStepLog = {
           stepId: step.id,
           startedAt: nowFn(),
           status: 'running'
         };
-        run.stepLogs.push(stepLog);
-        ScenarioBus.dispatchEvent(new CustomEvent('run:step', { detail: { run, step: step, stepLog } }));
+
+        run.stepLogs.push(logStep);
+
+        BusSkenario.dispatchEvent(
+          new CustomEvent('run:step', {
+            detail: { run, step: step, stepLog: logStep }
+          })
+        );
 
         try {
-          // Optional delay
-          if (step.delay) await new Promise(r => setTimeout(r, step.delay));
+          // Penundaan opsional sebelum menjalankan step
+          if (step.delay) {
+            await new Promise(selesaikan => setTimeout(selesaikan, step.delay));
+          }
 
-          // Ensure templates in payload are applied with context
+          // Terapkan template pada payload dengan konteks keluaran sebelumnya
           let payload: unknown;
           try {
-            payload = applyTemplate(step.payload || {}, { response: lastOutput });
-          } catch (e) {
-            throw new TemplateError('Failed to apply templates');
+            payload = terapkanTemplate(
+              step.payload || {},
+              { response: keluaranTerakhir }
+            );
+          } catch (errorTemplate) {
+            throw new ErrorTemplate('Gagal menerapkan template pada payload');
           }
+
           const payloadObj = (payload as unknown) as Record<string, unknown>;
 
-          // Handle step types
-          if (step.type === 'callApi') {
-            // crude handling: if payload.mock === 'randomUser' use fetchRandomUser
-            let output: unknown = null;
-            if (typeof payloadObj?.mock === 'string' && payloadObj.mock === 'randomUser') {
-              output = await fetchRandomUser();
-            } else if (typeof payloadObj?.url === 'string') {
-              const res = await fetchFn(payloadObj.url as string, { method: (typeof payloadObj.method === 'string' ? payloadObj.method : 'GET') });
-              output = { status: res.status, body: await res.text() } as const;
-            }
-            stepLog.output = output;
-            stepLog.status = 'success';
-            lastOutput = stepLog.output;
+          // Tangani berdasarkan tipe step
+          const tipeStep = (step as any).tipe ?? (step as any).type;
+          if (tipeStep === 'callApi') {
+            // Penanganan sederhana: jika payload.mock === 'randomUser' gunakan ambilPenggunaAcak
+            let keluaran: unknown = null;
 
-          } else if (step.type === 'emitSocket') {
-            const payloadData = payloadObj || {};
-            // Emit a custom event that UI SocketConsole can listen for (injectable for tests)
-            eventTarget.dispatchEvent(new CustomEvent('scenario:socket', { detail: payloadData }));
-            stepLog.output = payloadData;
-            stepLog.status = 'success';
-            lastOutput = stepLog.output;
-          } else if (step.type === 'wait') {
-            const payloadData = payloadObj || {};
-            const ms = typeof (payloadData as any).ms === 'number' ? (payloadData as any).ms : 500;
-            await new Promise(r => setTimeout(r, ms));
-            stepLog.status = 'success';
+            if (typeof payloadObj?.mock === 'string' && payloadObj.mock === 'randomUser') {
+              keluaran = await ambilPenggunaAcak();
+            } else if (typeof payloadObj?.url === 'string') {
+              const methodStr = typeof payloadObj?.method === 'string'
+                ? payloadObj.method
+                : (typeof payloadObj?.metode === 'string' ? payloadObj?.metode : 'GET');
+
+              const respons = await fetchFn(
+                payloadObj.url as string,
+                {
+                  method: methodStr
+                }
+              );
+
+              keluaran = {
+                status: respons.status,
+                body: await respons.text()
+              } as const;
+            }
+
+            logStep.output = keluaran;
+            logStep.status = 'success';
+            keluaranTerakhir = logStep.output;
+
+          } else if (tipeStep === 'emitSocket') {
+            const dataPayload = payloadObj || {};
+
+            // Kirim event kustom yang dapat didengarkan oleh UI SocketConsole
+            eventTarget.dispatchEvent(
+              new CustomEvent('scenario:socket', { detail: dataPayload })
+            );
+
+            logStep.output = dataPayload;
+            logStep.status = 'success';
+            keluaranTerakhir = logStep.output;
+
+          } else if (tipeStep === 'wait') {
+            const dataPayload = payloadObj || {};
+            const milidetik = typeof (dataPayload as any).ms === 'number'
+              ? (dataPayload as any).ms
+              : 500;
+
+            await new Promise(selesaikan => setTimeout(selesaikan, milidetik));
+            logStep.status = 'success';
+
           } else {
-            stepLog.status = 'success';
-            stepLog.output = { note: 'noop' };
-            lastOutput = stepLog.output;
+            // Tipe step tidak dikenali, anggap sebagai no-op
+            logStep.status = 'success';
+            logStep.output = { note: 'noop' };
+            keluaranTerakhir = logStep.output;
           }
-        } catch (err: unknown) {
-          const wrapped = new StepFailedError(step.id, (err as Error)?.message || String(err), (err as Error) || undefined);
-          stepLog.status = 'failed';
-          stepLog.error = wrapped.message;
+        } catch (errorStep: unknown) {
+          const errorDibungkus = new ErrorStepGagal(
+            step.id,
+            (errorStep as Error)?.message || String(errorStep),
+            (errorStep as Error) || undefined
+          );
+
+          logStep.status = 'failed';
+          logStep.error = errorDibungkus.message;
           run.status = 'failed';
-          // record and rethrow to stop scenario
-          await indexedDbService.update(RUNS_STORE, run.id, run as any);
-          ScenarioBus.dispatchEvent(new CustomEvent('run:update', { detail: { run } }));
-          throw wrapped;
+
+          // Simpan status run yang gagal dan kirim event
+          await indexedDbService.perbarui(STORE_RUNS, run.id, run as any);
+          BusSkenario.dispatchEvent(
+            new CustomEvent('run:update', { detail: { run } })
+          );
+
+          throw errorDibungkus;
         }
 
-        stepLog.endedAt = nowFn();
-        // persist intermediate run
-        await indexedDbService.update(RUNS_STORE, run.id, run as any);
-        ScenarioBus.dispatchEvent(new CustomEvent('run:step:done', { detail: { run, step, stepLog } }));
+        logStep.endedAt = nowFn();
+
+        // Simpan run setelah setiap step selesai
+        await indexedDbService.perbarui(STORE_RUNS, run.id, run as any);
+        BusSkenario.dispatchEvent(
+          new CustomEvent('run:step:done', {
+            detail: { run, step, stepLog: logStep }
+          })
+        );
       }
+
+      // Semua step berhasil diselesaikan
       run.endedAt = nowFn();
       run.status = 'completed';
-      await indexedDbService.update(RUNS_STORE, run.id, run);
-      ScenarioBus.dispatchEvent(new CustomEvent('run:complete', { detail: { run } }));
+      await indexedDbService.perbarui(STORE_RUNS, run.id, run);
+
+      BusSkenario.dispatchEvent(
+        new CustomEvent('run:complete', { detail: { run } })
+      );
 
       return run;
-    } catch (err) {
+    } catch (errorRun) {
+      // Tangani error yang tidak tertangkap dalam loop step
       run.endedAt = nowFn();
       run.status = 'failed';
-      await indexedDbService.update(RUNS_STORE, run.id, run);
-      ScenarioBus.dispatchEvent(new CustomEvent('run:complete', { detail: { run } }));
-      throw err;
+      await indexedDbService.perbarui(STORE_RUNS, run.id, run);
+
+      BusSkenario.dispatchEvent(
+        new CustomEvent('run:complete', { detail: { run } })
+      );
+
+      throw errorRun;
     }
   }
 
-  static async listRunsForScenario(scenarioId: string): Promise<ScenarioRun[]> {
-    const runs = (await indexedDbService.getCollection(RUNS_STORE)) as ScenarioRun[];
-    return runs.filter(r => r.scenarioId === scenarioId);
+  /**
+   * Mendapatkan daftar run untuk skenario tertentu
+   * @param idSkenario - ID skenario
+   * @returns Array run skenario
+   */
+  static async daftarRunUntukSkenario(idSkenario: string): Promise<ScenarioRun[]> {
+    const runs = (await indexedDbService.dapatkanKoleksi(STORE_RUNS)) as ScenarioRun[];
+    return runs.filter(run => run.scenarioId === idSkenario);
   }
 
-  // connectors
-  static async listConnectors(): Promise<Connector[]> {
-    return (await indexedDbService.getCollection(CONNECTOR_STORE)) as Connector[];
+  /**
+   * Mendapatkan daftar semua konektor
+   */
+  static async daftarKonektor(): Promise<Connector[]> {
+    return (await indexedDbService.dapatkanKoleksi(STORE_KONEKTOR)) as Connector[];
   }
 
-  static async saveConnector(connector: Connector) {
-    if (!connector.id) {
-      await indexedDbService.insert(CONNECTOR_STORE, connector);
+  /**
+   * Menyimpan konektor (buat baru atau perbarui yang sudah ada)
+   * @param konektor - Objek konektor
+   */
+  static async simpanKonektor(konektor: Connector): Promise<void> {
+    if (!konektor.id) {
+      await indexedDbService.sisipkan(STORE_KONEKTOR, konektor);
     } else {
-      await indexedDbService.update(CONNECTOR_STORE, connector.id, connector);
+      await indexedDbService.perbarui(STORE_KONEKTOR, konektor.id, konektor);
     }
   }
 }
-

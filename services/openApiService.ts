@@ -1,45 +1,83 @@
+// layananOpenApi.ts
+// Layanan untuk menghasilkan spesifikasi OpenAPI dari endpoint tiruan
+
 import { MockEndpoint, Project } from "../types";
 
-// Helper to convert internal path "/users/:id" to OpenAPI path "/users/{id}"
-const convertPathToOpenApi = (path: string) => {
-  return path.replace(/:([a-zA-Z0-9_]+)/g, "{$1}");
+/**
+ * Mengonversi jalur internal "/users/:id" ke jalur OpenAPI "/users/{id}"
+ * @param jalur - Jalur dengan parameter dinamis (misalnya ":id")
+ * @returns Jalur dalam format OpenAPI
+ *
+ * @contoh
+ * ```
+ * const hasil = konversiJalurKeOpenApi('/users/:id/posts/:postId');
+ * // Hasil: '/users/{id}/posts/{postId}'
+ * ```
+ */
+const konversiJalurKeOpenApi = (jalur: string): string => {
+  return jalur.replace(/:([a-zA-Z0-9_]+)/g, "{$1}");
 };
 
-// Helper to extract parameters from path
-const extractPathParams = (path: string) => {
-  const matches = path.match(/:([a-zA-Z0-9_]+)/g);
-  if (!matches) return [];
-  return matches.map((m) => ({
-    name: m.substring(1),
+/**
+ * Mengekstrak parameter dari jalur
+ * @param jalur - Jalur dengan parameter dinamis
+ * @returns Array parameter untuk OpenAPI
+ *
+ * @contoh
+ * ```
+ * const parameter = ekstrakParameterJalur('/users/:id/posts/:postId');
+ * // Hasil: [
+ * //   { name: 'id', in: 'path', required: true, ... },
+ * //   { name: 'postId', in: 'path', required: true, ... }
+ * // ]
+ * ```
+ */
+const ekstrakParameterJalur = (jalur: string): any[] => {
+  const kecocokan = jalur.match(/:([a-zA-Z0-9_]+)/g);
+  if (!kecocokan) return [];
+
+  return kecocokan.map((parameter) => ({
+    name: parameter.substring(1),
     in: "path",
     required: true,
     schema: { type: "string" },
-    description: `${m.substring(1)} parameter`,
+    description: `Parameter ${parameter.substring(1)}`,
   }));
 };
 
-// Helper to infer JSON Schema from a value (Recursive)
-const inferSchema = (data: any): any => {
+/**
+ * Menduga skema JSON dari nilai (Rekursif)
+ * @param data - Data untuk dianalisis
+ * @returns Skema JSON untuk OpenAPI
+ *
+ * @logika
+ * 1. Untuk null: tipe string dengan nullable: true
+ * 2. Untuk array: tipe array dengan items berdasarkan elemen pertama
+ * 3. Untuk objek: tipe object dengan properties dan required
+ * 4. Untuk number: periksa apakah integer atau number
+ * 5. Untuk boolean: tipe boolean
+ * 6. Default: tipe string dengan contoh nilai
+ */
+const dugaSkema = (data: any): any => {
   if (data === null) return { type: "string", nullable: true };
 
-  const type = typeof data;
+  const tipe = typeof data;
 
   if (Array.isArray(data)) {
-    const itemSchema =
-      data.length > 0 ? inferSchema(data[0]) : { type: "object" };
+    const skemaItem = data.length > 0 ? dugaSkema(data[0]) : { type: "object" };
     return {
       type: "array",
-      items: itemSchema,
+      items: skemaItem,
     };
   }
 
-  if (type === "object") {
+  if (tipe === "object") {
     const properties: any = {};
     const required: string[] = [];
 
-    Object.keys(data).forEach((key) => {
-      properties[key] = inferSchema(data[key]);
-      required.push(key);
+    Object.keys(data).forEach((kunci) => {
+      properties[kunci] = dugaSkema(data[kunci]);
+      required.push(kunci);
     });
 
     return {
@@ -49,133 +87,170 @@ const inferSchema = (data: any): any => {
     };
   }
 
-  if (type === "number")
+  if (tipe === "number") {
     return { type: Number.isInteger(data) ? "integer" : "number" };
-  if (type === "boolean") return { type: "boolean" };
+  }
 
-  // Default to string (handles dynamic variables like {{$uuid}})
+  if (tipe === "boolean") {
+    return { type: "boolean" };
+  }
+
+  // Default ke string (menangani variabel dinamis seperti {{$uuid}})
   return { type: "string", example: data };
 };
 
-// Helper to get human-readable description for HTTP status codes
-const getStatusDescription = (statusCode: number, method: string): string => {
-  const descriptions: { [key: number]: string } = {
-    200: "OK - Request successful",
-    201: "Created - Resource created successfully",
-    204: "No Content - Request successful, no content to return",
-    400: "Bad Request - Invalid request",
-    401: "Unauthorized - Authentication required",
-    403: "Forbidden - Access denied",
-    404: "Not Found - Resource not found",
+/**
+ * Mendapatkan deskripsi yang mudah dibaca manusia untuk kode status HTTP
+ * @param kodeStatus - Kode status HTTP
+ * @param method - Metode HTTP
+ * @returns Deskripsi kode status
+ */
+const dapatkanDeskripsiStatus = (kodeStatus: number, method: string): string => {
+  const deskripsi: Record<number, string> = {
+    200: "OK - Permintaan berhasil",
+    201: "Created - Sumber daya berhasil dibuat",
+    204: "No Content - Permintaan berhasil, tidak ada konten untuk dikembalikan",
+    400: "Bad Request - Permintaan tidak valid",
+    401: "Unauthorized - Diperlukan autentikasi",
+    403: "Forbidden - Akses ditolak",
+    404: "Not Found - Sumber daya tidak ditemukan",
     500: "Internal Server Error",
   };
 
-  return descriptions[statusCode] || `Response with status ${statusCode}`;
+  return deskripsi[kodeStatus] || `Respons dengan status ${kodeStatus}`;
 };
 
-export const generateOpenApiSpec = (
-  project: Project,
-  mocks: MockEndpoint[]
+/**
+ * Mengekstrak tag dari jalur (misalnya /users/:id -> users)
+ * @param jalur - Jalur endpoint
+ * @returns Tag untuk pengelompokan di OpenAPI
+ */
+const ekstrakTagDariJalur = (jalur: string): string => {
+  const bagian = jalur.split("/").filter(Boolean);
+  return bagian.length > 0 ? bagian[0] : "default";
+};
+
+/**
+ * Membuat spesifikasi OpenAPI dari proyek dan endpoint tiruan
+ * @param proyek - Proyek yang berisi informasi umum
+ * @param mock - Daftar endpoint tiruan
+ * @returns Objek spesifikasi OpenAPI
+ *
+ * @contohPenggunaan
+ * ```
+ * const spesifikasi = hasilkanSpesifikasiOpenApi(proyekSaya, daftarMock);
+ * console.log(spesifikasi.info.title); // "API Proyek Saya"
+ * ```
+ *
+ * @catatan
+ * - Hanya endpoint aktif dalam proyek yang akan disertakan
+ * - Skema respons diduga dari responseBody
+ * - Parameter jalur otomatis diekstrak
+ * - Tag dihasilkan dari segmen pertama jalur
+ */
+export const hasilkanSpesifikasiOpenApi = (
+  proyek: Project,
+  mock: MockEndpoint[]
 ) => {
-  const activeMocks = mocks.filter(
-    (m) => m.isActive && m.projectId === project.id
+  // Filter hanya mock yang aktif dan milik proyek ini
+  const mockAktif = mock.filter(
+    (m) => m.isActive && m.projectId === proyek.id
   );
 
-  const paths: any = {};
+  const paths: Record<string, any> = {};
 
-  activeMocks.forEach((mock) => {
-    const openApiPath = convertPathToOpenApi(mock.path);
+  mockAktif.forEach((mockEndpoint) => {
+    const jalurOpenApi = konversiJalurKeOpenApi(mockEndpoint.path);
 
-    if (!paths[openApiPath]) {
-      paths[openApiPath] = {};
+    if (!paths[jalurOpenApi]) {
+      paths[jalurOpenApi] = {};
     }
 
-    const pathParams = extractPathParams(mock.path);
+    const parameterJalur = ekstrakParameterJalur(mockEndpoint.path);
 
-    let responseSchema = { type: "object" };
-    let responseExample = null;
+    let skemaRespons = { type: "object" };
+    let contohRespons = null;
 
     try {
-      responseExample = JSON.parse(mock.responseBody);
-      responseSchema = inferSchema(responseExample);
-    } catch (e) {
-      // If response body is not valid JSON, treat as plain text/string
-      responseSchema = { type: "string" };
-      responseExample = mock.responseBody;
+      contohRespons = JSON.parse(mockEndpoint.responseBody);
+      skemaRespons = dugaSkema(contohRespons);
+    } catch (errorParsing) {
+      // Jika badan respons bukan JSON valid, perlakukan sebagai teks biasa/string
+      skemaRespons = { type: "string" };
+      contohRespons = mockEndpoint.responseBody;
     }
 
-    // Build operation object
-    const operation: any = {
-      summary: mock.name,
-      description: `${mock.method} ${mock.path} endpoint`,
-      tags: [extractTagFromPath(mock.path)],
+    // Bangun objek operasi
+    const operasi: Record<string, any> = {
+      summary: mockEndpoint.nama,
+      description: `Endpoint ${String(mockEndpoint.metode)} ${mockEndpoint.path}`,
+      tags: [ekstrakTagDariJalur(mockEndpoint.path)],
     };
 
-    // Add parameters if any
-    if (pathParams.length > 0) {
-      operation.parameters = pathParams;
+    // Tambahkan parameter jika ada
+    if (parameterJalur.length > 0) {
+      operasi.parameters = parameterJalur;
     }
 
-    // Add request body for POST/PUT/PATCH
-    if (["POST", "PUT", "PATCH"].includes(mock.method)) {
-      // Try to infer request schema from response, or use a generic object
-      let requestSchema = {
+    // Tambahkan request body untuk POST/PUT/PATCH
+    if (["POST", "PUT", "PATCH"].includes(String(mockEndpoint.metode).toUpperCase())) {
+      // Coba duga skema permintaan dari respons, atau gunakan objek generik
+      let skemaPermintaan = {
         type: "object",
         properties: { data: { type: "object" } },
       };
-      let requestExample = { data: {} };
+      let contohPermintaan = { data: {} };
 
       try {
-        const parsed = JSON.parse(mock.responseBody);
-        if (typeof parsed === "object" && !Array.isArray(parsed)) {
-          requestSchema = inferSchema(parsed);
-          requestExample = parsed;
+        const terparse = JSON.parse(mockEndpoint.responseBody);
+        if (typeof terparse === "object" && !Array.isArray(terparse)) {
+          skemaPermintaan = dugaSkema(terparse);
+          contohPermintaan = terparse;
         }
-      } catch (e) {
-        // Keep defaults
+      } catch (errorParsing) {
+        // Tetap gunakan default
       }
 
-      operation.requestBody = {
+      operasi.requestBody = {
         required: true,
-        description: `Request body for ${mock.method.toLowerCase()} ${
-          mock.path
-        }`,
+        description: `Badan permintaan untuk ${String(mockEndpoint.metode).toLowerCase()} ${mockEndpoint.path}`,
         content: {
           "application/json": {
-            schema: requestSchema,
-            example: requestExample,
+            schema: skemaPermintaan,
+            example: contohPermintaan,
           },
         },
       };
     }
 
-    // Add responses
-    operation.responses = {
-      [mock.statusCode]: {
-        description: getStatusDescription(mock.statusCode, mock.method),
+    // Tambahkan respons
+    operasi.responses = {
+      [mockEndpoint.statusCode]: {
+        description: dapatkanDeskripsiStatus(mockEndpoint.statusCode, String(mockEndpoint.metode)),
         content: {
           "application/json": {
-            schema: responseSchema,
-            ...(responseExample && { example: responseExample }),
+            schema: skemaRespons,
+            ...(contohRespons && { example: contohRespons }),
           },
         },
       },
     };
 
-    paths[openApiPath][mock.method.toLowerCase()] = operation;
+    paths[jalurOpenApi][String(mockEndpoint.metode).toLowerCase()] = operasi;
   });
 
+  // Kembalikan spesifikasi OpenAPI lengkap
   return {
     openapi: "3.0.0",
     info: {
-      title: project.name || "API",
-      description: "Generated by Backend Studio",
+      title: proyek.nama || "API",
+      description: "Dihasilkan oleh Backend Studio",
       version: "1.0.0",
     },
     servers: [
       {
         url: "http://localhost:3000",
-        description: "Local Development Server",
+        description: "Server Pengembangan Lokal",
       },
     ],
     paths: paths,
@@ -185,8 +260,5 @@ export const generateOpenApiSpec = (
   };
 };
 
-// Helper to extract a tag from path (e.g. /users/:id -> users)
-const extractTagFromPath = (path: string): string => {
-  const parts = path.split("/").filter(Boolean);
-  return parts.length > 0 ? parts[0] : "default";
-};
+// Backward-compatible English alias
+export const generateOpenApiSpec = hasilkanSpesifikasiOpenApi;

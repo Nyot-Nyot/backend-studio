@@ -26,6 +26,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Dashboard } from "./components/Dashboard";
 import { DatabaseView } from "./components/DatabaseView";
 import EmailExportModal from "./components/EmailExportModal";
+import ExportModal from "./components/ExportModal";
+import LandingPage from "./components/LandingPage";
 import { PenampilLog } from "./components/LogViewer";
 import { MockEditor } from "./components/MockEditor";
 import { Sidebar } from "./components/Sidebar";
@@ -102,6 +104,9 @@ const normalizeMock = (m: any): MockEndpoint & { name?: string; method?: MetodeH
 import { dbService } from "./services/dbService";
 
 function Aplikasi() {
+	// Toggle penggunaan modal ekspor baru. Jika true, gunakan `ExportModal` dan jangan render `EmailExportModal` lama.
+	const PAKAI_EXPORT_MODAL_BARU = true;
+
 	// --- STATE APLIKASI --- //
 
 	// State untuk tampilan aktif (dashboard, editor, pengaturan, dll)
@@ -112,6 +117,21 @@ function Aplikasi() {
 
 	// ID proyek yang sedang aktif (dipilih pengguna)
 	const [idProyekAktif, setIdProyekAktif] = useState<string>("");
+
+	// Landing page: tunjukkan UI landing sebelum memasuki studio
+	const [tampilkanLanding, setTampilkanLanding] = useState<boolean>(true);
+
+	const handleStartStudio = () => {
+		setTampilkanLanding(false);
+		setTampilanAktif("dashboard");
+		// Pastikan ada proyek aktif
+		if (daftarProyek.length === 0) {
+			setDaftarProyek([PROYEK_DEFAULT]);
+			setIdProyekAktif(PROYEK_DEFAULT.id);
+		} else if (!idProyekAktif) {
+			setIdProyekAktif(daftarProyek[0].id);
+		}
+	};
 
 	// Semua endpoint mock yang telah dibuat pengguna
 	const [daftarMock, setDaftarMock] = useState<MockEndpoint[]>([]);
@@ -388,14 +408,34 @@ function Aplikasi() {
 					return;
 				}
 
+				// Normalisasi response dari mockEngine (support bahasa Indonesia/Inggris)
+				const rawResp = hasilSimulasi?.response ?? hasilSimulasi?.respons ?? null;
+				let respForSW: any = null;
+				if (rawResp) {
+					respForSW = {
+						status: rawResp.status ?? rawResp.kodeStatus ?? 200,
+						body: rawResp.body ?? rawResp.badan ?? null,
+						delay: rawResp.delay ?? rawResp.penundaan ?? 0,
+						headers: Array.isArray(rawResp.headers)
+							? rawResp.headers.map((h: any) => ({ key: h.key ?? h.kunci, value: h.value ?? h.nilai }))
+							: rawResp.headers || {},
+					};
+				} else {
+					// Tidak ada response valid dari simulator
+					if (event.ports && event.ports[0]) {
+						postErrorResponseToPort(event.ports[0], "Mock engine tidak menghasilkan response");
+					}
+					return;
+				}
+
 				// Tambahkan log lokal
 				const logBaru: EntriLog = {
 					id: crypto.randomUUID(),
 					timestamp: Date.now(),
 					metode: payload.method as MetodeHttp,
 					path: new URL(payload.url).pathname,
-					statusCode: hasilSimulasi.response.status,
-					duration: hasilSimulasi.response.delay,
+					statusCode: respForSW.status,
+					duration: respForSW.delay,
 					ip: "127.0.0.1", // Alamat IP simulasi
 				};
 				setLogAplikasi(prev => [logBaru, ...prev].slice(0, 500));
@@ -439,7 +479,7 @@ function Aplikasi() {
 
 				// Kirim response kembali ke Service Worker
 				if (port) {
-					port.postMessage({ response: hasilSimulasi.response });
+					port.postMessage({ response: respForSW });
 				}
 			}
 		};
@@ -671,6 +711,7 @@ function Aplikasi() {
 			tampilkanToast("Draft berhasil dibuat dengan AI", "success");
 		} catch (error) {
 			const err = error as any;
+			console.error("AI generate endpoint failed:", err);
 
 			if (err?.code === "OPENROUTER_DISABLED") {
 				tampilkanToast("Penyedia OpenRouter dinonaktifkan. Aktifkan di Pengaturan.", "error");
@@ -679,8 +720,17 @@ function Aplikasi() {
 					"Permintaan OpenRouter timeout. Periksa jaringan atau tingkatkan timeout proxy (OPENROUTER_TIMEOUT_MS)",
 					"error"
 				);
+			} else if (
+				(err?.message && err.message.includes("OPENROUTER_API_KEY not configured")) ||
+				err?.code === "OPENROUTER_UNAUTHORIZED"
+			) {
+				tampilkanToast(
+					"API Key OpenRouter tidak ada atau proxy tidak berjalan. Konfigurasi atau mulai proxy.",
+					"error"
+				);
 			} else {
-				tampilkanToast("Gagal membuat endpoint. Periksa API Key atau proxy.", "error");
+				const detil = err?.message ? `: ${String(err.message).slice(0, 200)}` : "";
+				tampilkanToast(`Gagal membuat endpoint${detil}`, "error");
 			}
 		}
 	};
@@ -1137,6 +1187,11 @@ function Aplikasi() {
 	// Filter mock endpoints untuk proyek yang aktif
 	const mockProyekAktif = daftarMock.filter(mock => mock.projectId === idProyekAktif);
 
+	// Jika landing belum ditutup, tampilkan landing page dan jangan render UI utama
+	if (tampilkanLanding) {
+		return <LandingPage onStart={handleStartStudio} />;
+	}
+
 	return (
 		<div className="flex h-screen bg-slate-50 overflow-hidden font-sans text-slate-900">
 			<Sidebar
@@ -1154,6 +1209,7 @@ function Aplikasi() {
 				padaHapusProyek={handleHapusProyek}
 				padaTriggerPaletPerintah={() => tampilkanToast("Command Palette akan segera hadir", "info")}
 				padaDeploy={() => setApakahModalDeployTerbuka(true)}
+				onShowLanding={() => setTampilkanLanding(true)}
 			/>
 
 			<main className="flex-1 overflow-auto relative bg-[#f8fafc]">
@@ -1250,19 +1306,44 @@ function Aplikasi() {
 				/>
 			)}
 
-			<EmailExportModal
-				terbuka={apakahModalEmailTerbuka}
-				padaTutup={() => setApakahModalEmailTerbuka(false)}
-				padaKirim={kirimEmail}
-				sedangMengirim={sedangMengirimEmail}
-				dapatkanPratinjauLampiran={opsi =>
-					dapatkanPreviewAttachment({
-						includeWorkspace: (opsi as any).sertakanWorkspace,
-						includeOpenApi: (opsi as any).sertakanOpenApi,
-						includeServer: (opsi as any).sertakanServer,
-					})
-				}
-			/>
+			{!PAKAI_EXPORT_MODAL_BARU && (
+				<EmailExportModal
+					terbuka={apakahModalEmailTerbuka}
+					padaTutup={() => setApakahModalEmailTerbuka(false)}
+					padaKirim={kirimEmail}
+					sedangMengirim={sedangMengirimEmail}
+					dapatkanPratinjauLampiran={opsi =>
+						dapatkanPreviewAttachment({
+							includeWorkspace: (opsi as any).sertakanWorkspace,
+							includeOpenApi: (opsi as any).sertakanOpenApi,
+							includeServer: (opsi as any).sertakanServer,
+						})
+					}
+				/>
+			)}
+
+			{/* New ExportModal (experimental UI) */}
+			{PAKAI_EXPORT_MODAL_BARU && apakahModalEmailTerbuka && (
+				<ExportModal
+					project={daftarProyek.find(p => p.id === idProyekAktif)}
+					endpoints={daftarMock.filter(m => m.projectId === idProyekAktif)}
+					onClose={() => setApakahModalEmailTerbuka(false)}
+					onToast={tampilkanToast}
+					onSend={async (recipients, subject, message) => {
+						// Reuse existing kirimEmail handler by mapping to EmailExportParams
+						await kirimEmail({
+							recipients,
+							subject,
+							message,
+							includeWorkspace: true,
+							includeOpenApi: true,
+							includeServer: false,
+						});
+					}}
+					isSending={sedangMengirimEmail}
+				/>
+			)}
+
 			<KontainerToast daftarToast={daftarToast} hapusToast={hapusToast} />
 		</div>
 	);
