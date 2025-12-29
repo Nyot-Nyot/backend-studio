@@ -1,87 +1,141 @@
+// Toast.tsx
 import { AlertCircle, CheckCircle, Info, X } from "lucide-react";
 import React, { useEffect } from "react";
 
-export type ToastType = "success" | "error" | "info";
+/**
+ * Tipe notifikasi Toast yang tersedia
+ * - success: Untuk pesan sukses
+ * - error: Untuk pesan error
+ * - info: Untuk pesan informasi
+ */
+export type TipeToast = "success" | "error" | "info";
 
-// Allow callers to specify an optional duration (ms) per toast.
-export interface ToastMessage {
-	id: string;
-	type: ToastType;
-	message: string;
-	duration?: number; // milliseconds; if omitted, a default based on type is used. 0 or negative -> persistent until manual dismiss
+/**
+ * Interface untuk pesan Toast
+ * Memungkinkan pemanggil menentukan durasi opsional (ms) per toast
+ */
+export interface PesanToast {
+	id: string; // ID unik untuk toast
+	tipe: TipeToast; // Tipe toast
+	pesan: string; // Pesan yang akan ditampilkan
+	durasi?: number; // Durasi dalam milidetik; jika tidak disediakan, akan digunakan default berdasarkan tipe. 0 atau negatif -> tetap tampil sampai ditutup manual
 }
 
-interface ToastProps {
-	toasts: ToastMessage[];
-	removeToast: (id: string) => void;
-	defaultDuration?: number; // optional global override
+/**
+ * Properti untuk komponen KontainerToast
+ */
+interface PropertiToast {
+	daftarToast: PesanToast[]; // Daftar toast yang akan ditampilkan
+	hapusToast: (id: string) => void; // Fungsi untuk menghapus toast berdasarkan ID
+	durasiDefault?: number; // Override global opsional untuk durasi default
 }
 
-export const ToastContainer: React.FC<ToastProps> = ({ toasts, removeToast }) => {
+/**
+ * Durasi default per tipe toast (dalam milidetik)
+ */
+const DURASI_DEFAULT: Record<TipeToast, number> = {
+	success: 4000, // 4 detik untuk pesan sukses
+	info: 4000, // 4 detik untuk pesan info
+	error: 8000, // 8 detik untuk pesan error (lebih lama karena penting)
+};
+
+/**
+ * Komponen kontainer untuk menampilkan semua toast
+ * Toast akan ditampilkan di sudut kanan bawah layar
+ */
+export const KontainerToast: React.FC<PropertiToast> = ({ daftarToast, hapusToast }) => {
 	return (
 		<div
 			className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 pointer-events-none"
-			aria-live="polite"
-			aria-atomic="true"
-			role="region"
+			aria-live="polite" // Untuk screen reader, membaca toast secara sopan
+			aria-atomic="true" // Membaca seluruh konten toast sebagai satu unit
+			role="region" // Menandakan area khusus untuk toast
 		>
-			{toasts.map(toast => (
-				<ToastItem key={toast.id} toast={toast} onRemove={() => removeToast(toast.id)} />
+			{daftarToast.map(toast => (
+				<ItemToast key={toast.id} toast={toast} onHapus={() => hapusToast(toast.id)} />
 			))}
 		</div>
 	);
 };
 
-// Default durations per type (ms)
-const DEFAULT_DURATIONS: Record<ToastType, number> = {
-	success: 4000,
-	info: 4000,
-	// errors are important; give them a longer default so users have time to read
-	error: 8000,
-};
+/**
+ * Komponen untuk setiap item toast individual
+ * Menangani logika penghapusan otomatis berdasarkan durasi
+ */
+const ItemToast: React.FC<{
+	toast: PesanToast;
+	onHapus: () => void;
+}> = ({ toast, onHapus }) => {
+	/**
+	 * Menentukan durasi toast:
+	 * 1. Gunakan durasi yang disediakan dalam toast jika ada
+	 * 2. Jika tidak, gunakan durasi default berdasarkan tipe
+	 */
+	const durasi = toast.durasi ?? DURASI_DEFAULT[toast.tipe];
 
-const ToastItem: React.FC<{ toast: ToastMessage; onRemove: () => void }> = ({ toast, onRemove }) => {
-	const duration = toast.duration ?? DEFAULT_DURATIONS[toast.type];
-
+	/**
+	 * Efek untuk menghapus toast secara otomatis setelah durasi tertentu
+	 * Hanya berjalan jika durasi > 0
+	 */
 	useEffect(() => {
-		if (typeof duration === "number" && duration > 0) {
+		if (typeof durasi === "number" && durasi > 0) {
 			const timer = setTimeout(() => {
-				onRemove();
-			}, duration);
+				onHapus();
+			}, durasi);
+
+			// Cleanup: hapus timer jika komponen unmount atau durasi berubah
 			return () => clearTimeout(timer);
 		}
 		return;
-	}, [onRemove, duration]);
+	}, [onHapus, durasi]);
 
-	const bgColors = {
+	/**
+	 * Warna latar belakang untuk setiap tipe toast
+	 * Menggunakan kombinasi theme dan border color untuk konsistensi
+	 */
+	const warnaLatar: Record<TipeToast, string> = {
 		success: "theme-surface theme-border border-green-200",
 		error: "theme-surface theme-border border-red-200",
 		info: "theme-surface theme-border border-blue-200",
 	};
 
-	const icons = {
+	/**
+	 * Ikon untuk setiap tipe toast
+	 * Menggunakan ikon dari lucide-react yang sesuai
+	 */
+	const ikonToast: Record<TipeToast, React.ReactNode> = {
 		success: <CheckCircle className="w-5 h-5 text-green-500" />,
 		error: <AlertCircle className="w-5 h-5 text-red-500" />,
 		info: <Info className="w-5 h-5 text-brand-500" />,
 	};
 
-	const ariaLive = toast.type === "error" ? "assertive" : "polite";
+	/**
+	 * Menentukan aria-live untuk aksesibilitas:
+	 * - error: assertive (akan dibaca segera)
+	 * - lainnya: polite (akan dibaca saat sibuk)
+	 */
+	const ariaLive = toast.tipe === "error" ? "assertive" : "polite";
 
 	return (
 		<div
-			role="status"
-			aria-live={ariaLive}
-			aria-atomic="true"
+			role="status" // Role untuk elemen yang memberikan status
+			aria-live={ariaLive} // Atribut aksesibilitas untuk screen reader
+			aria-atomic="true" // Membaca seluruh konten sebagai satu unit
 			className={`pointer-events-auto flex items-center p-4 rounded-xl shadow-lg border ${
-				bgColors[toast.type]
+				warnaLatar[toast.tipe]
 			} min-w-[300px] animate-in slide-in-from-right-10 fade-in duration-300`}
 		>
-			<div className="flex-shrink-0 mr-3">{icons[toast.type]}</div>
-			<p className="text-sm font-medium text-slate-700 flex-1">{toast.message}</p>
+			{/* Ikon toast */}
+			<div className="flex-shrink-0 mr-3">{ikonToast[toast.tipe]}</div>
+
+			{/* Pesan toast */}
+			<p className="text-sm font-medium text-slate-700 flex-1">{toast.pesan}</p>
+
+			{/* Tombol tutup */}
 			<button
-				aria-label="Dismiss notification"
+				aria-label="Tutup notifikasi"
 				type="button"
-				onClick={onRemove}
+				onClick={onHapus}
 				className="ml-3 text-slate-400 hover:text-slate-600 transition-colors"
 			>
 				<X className="w-4 h-4" />

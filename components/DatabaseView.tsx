@@ -1,161 +1,272 @@
+// DatabaseView.tsx
 import { Database, RefreshCw, Save, Table, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { DbItem, dbService } from "../services/dbService";
 
+/**
+ * Komponen untuk melihat dan mengelola data dalam memory store (database sementara)
+ * Menampilkan koleksi data dari endpoint yang stateful
+ */
 export const DatabaseView = () => {
-	const [collections, setCollections] = useState<string[]>([]);
-	const [activeCollection, setActiveCollection] = useState<string | null>(null);
+	// Daftar koleksi yang tersedia
+	const [daftarKoleksi, setDaftarKoleksi] = useState<string[]>([]);
+
+	// Koleksi yang sedang aktif dilihat
+	const [koleksiAktif, setKoleksiAktif] = useState<string | null>(null);
+
+	// Data dalam koleksi aktif
 	const [data, setData] = useState<DbItem[]>([]);
-	const [rawEditor, setRawEditor] = useState("");
-	const [prevRawEditor, setPrevRawEditor] = useState<string | null>(null);
-	const [isEditing, setIsEditing] = useState(false);
-	const [jsonError, setJsonError] = useState<string | null>(null);
-	const [showDiff, setShowDiff] = useState(false);
-	const [page, setPage] = useState(1);
-	const [pageSize, setPageSize] = useState(50);
+
+	// Editor raw JSON untuk koleksi
+	const [editorRaw, setEditorRaw] = useState("");
+
+	// State sebelumnya untuk editor raw (untuk diff/undo)
+	const [editorRawSebelumnya, setEditorRawSebelumnya] = useState<string | null>(null);
+
+	// Apakah sedang dalam mode edit raw JSON
+	const [sedangEdit, setSedangEdit] = useState(false);
+
+	// Error validasi JSON
+	const [errorJson, setErrorJson] = useState<string | null>(null);
+
+	// Menampilkan perbedaan (diff) antara data lama dan baru
+	const [tampilkanDiff, setTampilkanDiff] = useState(false);
+
+	// Halaman saat ini untuk pagination
+	const [halaman, setHalaman] = useState(1);
+
+	// Jumlah item per halaman
+	const [ukuranHalaman, setUkuranHalaman] = useState(50);
+
+	// Error umum
 	const [error, setError] = useState<string | null>(null);
 
-	const loadCollections = () => {
-		const cols = dbService.listCollections();
-		setCollections(cols);
-		if (!activeCollection && cols.length > 0) {
-			handleSelectCollection(cols[0]);
+	/**
+	 * Memuat daftar koleksi dari service
+	 */
+	const muatKoleksi = () => {
+		const koleksi = dbService.listCollections();
+		setDaftarKoleksi(koleksi);
+
+		// Jika tidak ada koleksi aktif dan ada koleksi tersedia, pilih koleksi pertama
+		if (!koleksiAktif && koleksi.length > 0) {
+			handlePilihKoleksi(koleksi[0]);
 		}
 	};
 
-	const handleSelectCollection = (name: string) => {
-		setActiveCollection(name);
-		const colData = dbService.getCollection(name) as DbItem[];
-		setData(colData);
-		setRawEditor(JSON.stringify(colData, null, 2));
-		setPrevRawEditor(null);
-		setIsEditing(false);
-		setJsonError(null);
-		setShowDiff(false);
-		setPage(1);
+	/**
+	 * Menangani pemilihan koleksi untuk dilihat/diedit
+	 * @param nama - Nama koleksi yang dipilih
+	 */
+	const handlePilihKoleksi = (nama: string) => {
+		setKoleksiAktif(nama);
+
+		// Ambil data koleksi dari service
+		const dataKoleksi = dbService.getCollection(nama) as DbItem[];
+		setData(dataKoleksi);
+
+		// Set editor raw dengan data yang diformat
+		setEditorRaw(JSON.stringify(dataKoleksi, null, 2));
+		setEditorRawSebelumnya(null);
+		setSedangEdit(false);
+		setErrorJson(null);
+		setTampilkanDiff(false);
+		setHalaman(1);
 		setError(null);
 	};
 
+	// Muat koleksi saat komponen pertama kali di-render
 	useEffect(() => {
-		loadCollections();
+		muatKoleksi();
 	}, []);
 
+	/**
+	 * Mendapatkan header (nama kolom) dari data
+	 * Mengambil semua kunci unik dari semua item dalam data
+	 */
 	const headers = useMemo(() => {
-		const keys = new Set<string>();
-		data.forEach(item => Object.keys(item || {}).forEach(k => keys.add(k)));
-		const arr = Array.from(keys);
-		if (arr.includes("id")) return ["id", ...arr.filter(k => k !== "id").sort()];
-		return arr.sort();
+		const kunci = new Set<string>();
+
+		// Kumpulkan semua kunci dari setiap item
+		data.forEach(item => {
+			if (item) {
+				Object.keys(item).forEach(k => kunci.add(k));
+			}
+		});
+
+		const arrayKunci = Array.from(kunci);
+
+		// Jika ada kolom 'id', pastikan dia menjadi kolom pertama
+		if (arrayKunci.includes("id")) {
+			return ["id", ...arrayKunci.filter(k => k !== "id").sort()];
+		}
+
+		return arrayKunci.sort();
 	}, [data]);
 
-	const totalPages = Math.max(1, Math.ceil(data.length / pageSize));
-	const pageData = useMemo(() => data.slice((page - 1) * pageSize, page * pageSize), [data, page, pageSize]);
+	/**
+	 * Menghitung total halaman berdasarkan jumlah data dan ukuran halaman
+	 */
+	const totalHalaman = Math.max(1, Math.ceil(data.length / ukuranHalaman));
 
+	/**
+	 * Data untuk halaman saat ini (pagination)
+	 */
+	const dataHalaman = useMemo(
+		() => data.slice((halaman - 1) * ukuranHalaman, halaman * ukuranHalaman),
+		[data, halaman, ukuranHalaman]
+	);
+
+	/**
+	 * Menyesuaikan halaman saat ini jika total halaman berubah
+	 * (misalnya saat data berkurang)
+	 */
 	useEffect(() => {
-		setPage(p => Math.min(p, totalPages));
-	}, [totalPages]);
+		setHalaman(halamanSaatIni => Math.min(halamanSaatIni, totalHalaman));
+	}, [totalHalaman]);
 
+	/**
+	 * Menangani refresh data dan daftar koleksi
+	 */
 	const handleRefresh = () => {
-		if (activeCollection) handleSelectCollection(activeCollection);
-		loadCollections();
+		if (koleksiAktif) {
+			handlePilihKoleksi(koleksiAktif);
+		}
+		muatKoleksi();
 	};
 
-	const handleClearCollection = () => {
-		if (activeCollection && window.confirm(`Clear all data in '${activeCollection}'?`)) {
-			dbService.clearCollection(activeCollection);
+	/**
+	 * Menangani penghapusan semua data dalam koleksi aktif
+	 */
+	const handleHapusKoleksi = () => {
+		if (koleksiAktif && window.confirm(`Hapus semua data dalam koleksi '${koleksiAktif}'?`)) {
+			dbService.clearCollection(koleksiAktif);
 			handleRefresh();
 		}
 	};
 
-	const assignStableIds = (collection: string) => {
-		const newData = data.map((item, idx) => {
+	/**
+	 * Menetapkan ID yang stabil untuk semua item dalam koleksi
+	 * @param koleksi - Nama koleksi yang akan diberi ID stabil
+	 */
+	const tetapkanIdStabil = (koleksi: string) => {
+		const dataBaru = data.map((item, indeks) => {
+			// Jika item tidak memiliki id, buat id baru
 			if (item.id === undefined || item.id === null) {
 				return {
 					...item,
 					id:
-						typeof crypto !== "undefined" && (crypto as any).randomUUID
-							? (crypto as any).randomUUID().split("-")[0]
-							: `id-${Date.now()}-${idx}`,
+						typeof crypto !== "undefined" && crypto.randomUUID
+							? crypto.randomUUID().split("-")[0] // Ambil bagian pertama UUID
+							: `id-${Date.now()}-${indeks}`, // Fallback ID
 				};
 			}
 			return item;
 		});
-		dbService.saveCollection(collection, newData);
-		setData(newData);
-		setRawEditor(JSON.stringify(newData, null, 2));
+
+		// Simpan koleksi dengan ID baru
+		dbService.saveCollection(koleksi, dataBaru);
+		setData(dataBaru);
+		setEditorRaw(JSON.stringify(dataBaru, null, 2));
 	};
 
-	const handleDeleteItem = (index: number) => {
-		if (!activeCollection || !data[index]) return;
+	/**
+	 * Menangani penghapusan item berdasarkan indeks
+	 * @param indeks - Indeks item yang akan dihapus
+	 */
+	const handleHapusItem = (indeks: number) => {
+		if (!koleksiAktif || !data[indeks]) return;
 
-		const item = data[index];
-		const itemId = (item as DbItem).id;
+		const item = data[indeks];
+		const idItem = item.id;
 
-		if (itemId === undefined || itemId === null) {
-			const assign = window.confirm(
-				"This record does not have a stable `id`.\n\nOK = Assign stable IDs to all records (recommended).\nCancel = Delete by index (unsafe)."
+		// Jika item tidak memiliki ID yang stabil
+		if (idItem === undefined || idItem === null) {
+			const setujui = window.confirm(
+				"Data ini tidak memiliki ID yang stabil.\n\nOK = Berikan ID stabil untuk semua data (disarankan).\nBatal = Hapus berdasarkan indeks (tidak aman)."
 			);
 
-			if (assign) {
-				assignStableIds(activeCollection);
-				// After assigning ids, delete by id
-				const assigned = dbService.getCollection(activeCollection);
-				const idToDelete = assigned[index]?.id;
-				if (idToDelete !== undefined) {
-					dbService.delete(activeCollection, idToDelete as any);
-					setData(assigned.filter((_, i) => i !== index));
+			if (setujui) {
+				// Berikan ID stabil untuk semua item lalu hapus berdasarkan ID
+				tetapkanIdStabil(koleksiAktif);
+
+				const dataDenganId = dbService.getCollection(koleksiAktif);
+				const idUntukDihapus = dataDenganId[indeks]?.id;
+
+				if (idUntukDihapus !== undefined) {
+					dbService.delete(koleksiAktif, idUntukDihapus as any);
+					setData(dataDenganId.filter((_, i) => i !== indeks));
 				}
 				return;
 			}
 
-			// user chose to delete by index
-			if (window.confirm(`Delete item (index ${index})? This is index-based and may be fragile.`)) {
-				const newData = data.filter((_, i) => i !== index);
-				dbService.saveCollection(activeCollection, newData);
-				setData(newData);
+			// Pengguna memilih untuk menghapus berdasarkan indeks
+			if (window.confirm(`Hapus item (indeks ${indeks})? Penghapusan berdasarkan indeks mungkin tidak aman.`)) {
+				const dataBaru = data.filter((_, i) => i !== indeks);
+				dbService.saveCollection(koleksiAktif, dataBaru);
+				setData(dataBaru);
 			}
 			return;
 		}
 
-		if (window.confirm(`Delete item ${String(itemId)}?`)) {
-			const deleted = dbService.delete(activeCollection, itemId as any);
-			if (deleted) {
-				// Keep UI in sync by removing the item by id
-				setData(prev => prev.filter(d => d.id != itemId));
+		// Jika item memiliki ID, hapus berdasarkan ID
+		if (window.confirm(`Hapus item dengan ID ${String(idItem)}?`)) {
+			const terhapus = dbService.delete(koleksiAktif, idItem as any);
+
+			if (terhapus) {
+				// Perbarui UI dengan menghapus item berdasarkan ID
+				setData(prev => prev.filter(d => d.id != idItem));
 			} else {
-				// As a safety fallback, reload collection from storage
-				const reloaded = dbService.getCollection(activeCollection);
-				setData(reloaded as DbItem[]);
+				// Fallback: muat ulang data dari penyimpanan
+				const dataDimuatUlang = dbService.getCollection(koleksiAktif);
+				setData(dataDimuatUlang as DbItem[]);
 			}
 		}
 	};
 
-	const handleClearAllDB = () => {
-		if (window.confirm("Delete ALL collections and data? This cannot be undone.")) {
+	/**
+	 * Menangani penghapusan semua koleksi dan data
+	 */
+	const handleHapusSemuaDatabase = () => {
+		if (window.confirm("Hapus SEMUA koleksi dan data? Tindakan ini tidak dapat dibatalkan.")) {
 			dbService.clearAllCollections();
-			setCollections([]);
-			setActiveCollection(null);
+			setDaftarKoleksi([]);
+			setKoleksiAktif(null);
 			setData([]);
-			setRawEditor("");
+			setEditorRaw("");
 		}
 	};
 
-	const handleSave = () => {
-		if (!activeCollection) return;
+	/**
+	 * Menangani penyimpanan perubahan dari editor raw JSON
+	 */
+	const handleSimpan = () => {
+		if (!koleksiAktif) return;
+
 		try {
-			const parsed = JSON.parse(rawEditor);
-			if (!Array.isArray(parsed)) throw new Error("Data must be an array");
-			// Ensure parsed items are objects
-			if (!parsed.every((p: any) => typeof p === "object" && p !== null && !Array.isArray(p)))
-				throw new Error("Each item must be an object");
-			dbService.saveCollection(activeCollection, parsed as DbItem[]);
-			setData(parsed as DbItem[]);
-			setIsEditing(false);
-			setPrevRawEditor(null);
-			setJsonError(null);
+			const terparse = JSON.parse(editorRaw);
+
+			// Validasi: data harus berupa array
+			if (!Array.isArray(terparse)) {
+				throw new Error("Data harus berupa array");
+			}
+
+			// Validasi: setiap item harus berupa object
+			if (!terparse.every((item: any) => typeof item === "object" && item !== null && !Array.isArray(item))) {
+				throw new Error("Setiap item harus berupa object");
+			}
+
+			// Simpan ke service
+			dbService.saveCollection(koleksiAktif, terparse as DbItem[]);
+
+			// Perbarui state
+			setData(terparse as DbItem[]);
+			setSedangEdit(false);
+			setEditorRawSebelumnya(null);
+			setErrorJson(null);
 			setError(null);
-		} catch (e) {
-			setError((e as Error).message);
+		} catch (error) {
+			setError((error as Error).message);
 		}
 	};
 
@@ -164,15 +275,17 @@ export const DatabaseView = () => {
 			className="max-w-6xl mx-auto h-full flex flex-col animate-in fade-in"
 			style={{ padding: "var(--space-6)" }}
 		>
+			{/* Header */}
 			<div className="flex items-center justify-between mb-8">
 				<div>
 					<h1 className="text-2xl font-bold text-slate-900 flex items-center">
 						<Database className="w-6 h-6 mr-3 text-brand-500" />
 						Memory Store
 					</h1>
-					<p className="text-slate-500 mt-1">View and manage the stateful data for your active endpoints.</p>
+					<p className="text-slate-500 mt-1">Lihat dan kelola data stateful untuk endpoint aktif Anda.</p>
 				</div>
 				<div className="flex items-center gap-2">
+					{/* Tombol Refresh */}
 					<button
 						onClick={handleRefresh}
 						className="hover:bg-slate-100 rounded-lg text-slate-500 hover:text-brand-600 transition-colors"
@@ -181,122 +294,127 @@ export const DatabaseView = () => {
 					>
 						<RefreshCw className="w-5 h-5" />
 					</button>
+
+					{/* Tombol Hapus Semua Database */}
 					<button
-						onClick={handleClearAllDB}
+						onClick={handleHapusSemuaDatabase}
 						className="hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-600 transition-colors"
 						style={{ padding: "var(--space-1)" }}
-						title="Clear all collections"
+						title="Hapus semua koleksi"
 					>
 						<Trash2 className="w-5 h-5" />
 					</button>
 				</div>
 			</div>
 
+			{/* Konten Utama: Daftar Koleksi dan Editor */}
 			<div className="grid grid-cols-12 gap-6 flex-1 min-h-0">
-				{/* Sidebar List */}
+				{/* Sidebar: Daftar Koleksi */}
 				<div className="col-span-3 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col overflow-hidden">
 					<div className="border-b border-slate-100 bg-slate-50/50" style={{ padding: "var(--space-2)" }}>
-						<h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Collections</h3>
+						<h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Koleksi</h3>
 					</div>
 					<div className="flex-1 overflow-y-auto p-2">
-						{collections.length === 0 ? (
+						{daftarKoleksi.length === 0 ? (
 							<div className="text-center text-slate-400 text-sm" style={{ padding: "var(--space-2)" }}>
-								No active data buckets. Enable "Stateful" on an endpoint to create one.
+								Tidak ada data bucket aktif. Aktifkan "Stateful" pada endpoint untuk membuat koleksi.
 							</div>
 						) : (
-							collections.map(col => (
+							daftarKoleksi.map(koleksi => (
 								<button
-									key={col}
-									onClick={() => handleSelectCollection(col)}
+									key={koleksi}
+									onClick={() => handlePilihKoleksi(koleksi)}
 									className={`w-full text-left rounded-xl mb-1 text-sm font-medium transition-all flex items-center justify-between ${
-										activeCollection === col
+										koleksiAktif === koleksi
 											? "bg-brand-50 text-brand-700 shadow-sm ring-1 ring-brand-100"
 											: "text-slate-600 hover:bg-slate-50"
 									}`}
 									style={{ padding: "var(--space-3) var(--space-4)" }}
 								>
-									<span className="truncate">{col}</span>
-									{activeCollection === col && <div className="w-2 h-2 rounded-full bg-brand-500" />}
+									<span className="truncate">{koleksi}</span>
+									{koleksiAktif === koleksi && <div className="w-2 h-2 rounded-full bg-brand-500" />}
 								</button>
 							))
 						)}
 					</div>
 				</div>
 
-				{/* Editor Area */}
+				{/* Area Editor */}
 				<div className="col-span-9 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col overflow-hidden">
-					{activeCollection ? (
+					{koleksiAktif ? (
 						<>
+							{/* Header Editor */}
 							<div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
 								<div className="flex items-center gap-2">
 									<Table className="w-4 h-4 text-slate-400" />
-									<span className="font-mono text-sm font-bold text-slate-700">
-										{activeCollection}
-									</span>
+									<span className="font-mono text-sm font-bold text-slate-700">{koleksiAktif}</span>
 									<div className="flex items-center gap-2">
 										<span className="bg-slate-200 text-slate-600 text-[10px] px-2 py-0.5 rounded-full">
-											{data.length} records
+											{data.length} data
 										</span>
-										{!isEditing && data.length > 0 && (
+										{!sedangEdit && data.length > 0 && (
 											<>
+												{/* Navigasi Halaman */}
 												<button
-													onClick={() => setPage(p => Math.max(1, p - 1))}
+													onClick={() => setHalaman(h => Math.max(1, h - 1))}
 													className="rounded bg-white border text-slate-600 text-xs"
 													style={{ padding: "var(--space-1) var(--space-2)" }}
-													disabled={page <= 1}
+													disabled={halaman <= 1}
 												>
-													Prev
+													Sebelumnya
 												</button>
 												<span className="text-xs text-slate-500">
-													Page {page}/{totalPages}
+													Halaman {halaman}/{totalHalaman}
 												</span>
 												<button
-													onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+													onClick={() => setHalaman(h => Math.min(totalHalaman, h + 1))}
 													className="rounded bg-white border text-slate-600 text-xs"
 													style={{ padding: "var(--space-1) var(--space-2)" }}
-													disabled={page >= totalPages}
+													disabled={halaman >= totalHalaman}
 												>
-													Next
+													Berikutnya
 												</button>
 											</>
 										)}
 									</div>
 								</div>
 								<div className="flex items-center gap-2">
-									{isEditing ? (
+									{sedangEdit ? (
 										<>
+											{/* Mode Edit: Tombol Batal dan Simpan */}
 											<button
 												onClick={() => {
-													setIsEditing(false);
-													setRawEditor(JSON.stringify(data, null, 2));
+													setSedangEdit(false);
+													setEditorRaw(JSON.stringify(data, null, 2));
 													setError(null);
 												}}
 												className="text-xs font-medium text-slate-500 hover:text-slate-700 px-3 py-1.5"
 											>
-												Cancel
+												Batal
 											</button>
 											<button
-												onClick={handleSave}
+												onClick={handleSimpan}
 												className="bg-brand-600 hover:bg-brand-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center shadow-sm"
 											>
-												<Save className="w-3.5 h-3.5 mr-1.5" /> Save Changes
+												<Save className="w-3.5 h-3.5 mr-1.5" /> Simpan Perubahan
 											</button>
 										</>
 									) : (
 										<>
+											{/* Mode View: Tombol Edit dan Hapus */}
 											<button
 												onClick={() => {
-													setPrevRawEditor(rawEditor);
-													setIsEditing(true);
+													setEditorRawSebelumnya(editorRaw);
+													setSedangEdit(true);
 												}}
 												className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
 											>
-												Edit Raw JSON
+												Edit JSON Mentah
 											</button>
 											<button
-												onClick={handleClearCollection}
+												onClick={handleHapusKoleksi}
 												className="text-red-500 hover:bg-red-50 px-2 py-1.5 rounded-lg transition-colors"
-												title="Clear Data"
+												title="Hapus Data"
 											>
 												<Trash2 className="w-4 h-4" />
 											</button>
@@ -305,20 +423,23 @@ export const DatabaseView = () => {
 								</div>
 							</div>
 
+							{/* Konten Editor/Tabel */}
 							<div className="flex-1 relative">
-								{isEditing ? (
+								{sedangEdit ? (
+									// Mode Edit: Textarea untuk edit JSON mentah
 									<textarea
-										value={rawEditor}
-										onChange={e => setRawEditor(e.target.value)}
+										value={editorRaw}
+										onChange={e => setEditorRaw(e.target.value)}
 										className="w-full h-full p-4 font-mono text-sm text-slate-700 bg-slate-50 focus:outline-none resize-none"
 									/>
 								) : (
+									// Mode View: Tampilkan data dalam tabel
 									<div className="p-0 h-full overflow-y-auto">
 										{data.length === 0 ? (
 											<div className="h-full flex flex-col items-center justify-center text-slate-400">
-												<p className="text-sm">Collection is empty.</p>
+												<p className="text-sm">Koleksi kosong.</p>
 												<p className="text-xs mt-1">
-													POST requests to this endpoint will populate this list.
+													Request POST ke endpoint ini akan mengisi koleksi ini.
 												</p>
 											</div>
 										) : (
@@ -336,14 +457,14 @@ export const DatabaseView = () => {
 																</th>
 															))}
 														<th className="p-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 w-12">
-															Action
+															Aksi
 														</th>
 													</tr>
 												</thead>
 												<tbody className="text-sm">
-													{pageData.map((row, i) => (
+													{dataHalaman.map((row, i) => (
 														<tr
-															key={(row as any).id ?? (page - 1) * pageSize + i}
+															key={(row as any).id ?? (halaman - 1) * ukuranHalaman + i}
 															className="border-b border-slate-100 hover:bg-slate-50/50 font-mono text-xs"
 														>
 															{headers.slice(0, 5).map(key => (
@@ -359,10 +480,12 @@ export const DatabaseView = () => {
 															<td className="p-3 w-12">
 																<button
 																	onClick={() =>
-																		handleDeleteItem((page - 1) * pageSize + i)
+																		handleHapusItem(
+																			(halaman - 1) * ukuranHalaman + i
+																		)
 																	}
 																	className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded transition-colors"
-																	title="Delete item"
+																	title="Hapus item"
 																>
 																	<X className="w-4 h-4" />
 																</button>
@@ -374,6 +497,8 @@ export const DatabaseView = () => {
 										)}
 									</div>
 								)}
+
+								{/* Tampilkan error jika ada */}
 								{error && (
 									<div className="absolute bottom-4 left-4 right-4 bg-red-100 text-red-700 p-3 rounded-lg text-sm border border-red-200 shadow-lg flex items-center">
 										<span className="font-bold mr-2">Error:</span> {error}
@@ -382,9 +507,10 @@ export const DatabaseView = () => {
 							</div>
 						</>
 					) : (
+						// State saat tidak ada koleksi yang dipilih
 						<div className="flex-1 flex flex-col items-center justify-center text-slate-400">
 							<Database className="w-12 h-12 mb-4 opacity-20" />
-							<p>Select a collection to view data</p>
+							<p>Pilih koleksi untuk melihat data</p>
 						</div>
 					)}
 				</div>

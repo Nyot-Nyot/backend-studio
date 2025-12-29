@@ -12,8 +12,8 @@ export const Basic = () => (
 	>
 		<p>Konten modal</p>
 		<div className="mt-4 flex justify-end gap-3">
-			<Button variant="ghost">Batal</Button>
-			<Button variant="primary">Ok</Button>
+			<Button varian="ghost">Batal</Button>
+			<Button varian="primary">Ok</Button>
 		</div>
 	</Modal>
 );

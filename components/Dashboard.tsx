@@ -15,9 +15,8 @@ import {
 	X,
 } from "lucide-react";
 import React, { useEffect, useState } from "react";
-import { HttpMethod, MockEndpoint } from "../types";
+import { HttpMethod, MockEndpoint, TipeToast } from "../types";
 import Button from "./Button";
-import { ToastType } from "./Toast";
 
 // Properti yang diterima oleh komponen Dashboard
 interface DashboardProps {
@@ -27,7 +26,7 @@ interface DashboardProps {
 	onBulkDelete: (ids: string[]) => void;
 	onToggle: (id: string) => void;
 	onDuplicate: (mock: MockEndpoint) => void;
-	addToast: (message: string, type: ToastType) => void;
+	addToast: (message: string, type: TipeToast) => void;
 }
 
 // Komponen utama Dashboard untuk menampilkan dan mengelola endpoint mock
@@ -495,7 +494,7 @@ interface PropsTombolAksi {
 }
 
 const TombolAksi: React.FC<PropsTombolAksi> = ({ onClick, ikon, warna, judul }) => (
-	<Button variant="icon" onClick={onClick} className={`transition-all active:scale-90 ${warna}`} title={judul}>
+	<Button varian="icon" onClick={onClick} className={`transition-all active:scale-90 ${warna}`} title={judul}>
 		{ikon}
 	</Button>
 );

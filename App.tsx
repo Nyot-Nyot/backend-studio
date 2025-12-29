@@ -25,12 +25,12 @@ import {
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Dashboard } from "./components/Dashboard";
 import { DatabaseView } from "./components/DatabaseView";
-import EmailExportModal, { EmailExportParams } from "./components/EmailExportModal";
-import { LogViewer } from "./components/LogViewer";
+import EmailExportModal from "./components/EmailExportModal";
+import { PenampilLog } from "./components/LogViewer";
 import { MockEditor } from "./components/MockEditor";
 import { Sidebar } from "./components/Sidebar";
-import { TestConsole } from "./components/TestConsole";
-import { ToastContainer, ToastMessage, ToastType } from "./components/Toast";
+import { KonsolPengujian } from "./components/TestConsole";
+import { KontainerToast, PesanToast, TipeToast } from "./components/Toast";
 import { FEATURES } from "./config/featureFlags";
 import { sendEmailViaEmailJS } from "./services/emailService";
 import { generateServerCode as buildServerCode } from "./services/exportService";
@@ -38,6 +38,7 @@ import { simulateRequest } from "./services/mockEngine";
 import { generateOpenApiSpec } from "./services/openApiService";
 import socketClient from "./services/socketClient";
 import { postErrorResponseToPort } from "./services/swHelpers";
+import type { ParameterEksporEmail as EmailExportParams } from "./types";
 import {
 	EntriLog,
 	KonfigurasiAutentikasi,
@@ -122,7 +123,7 @@ function Aplikasi() {
 	const [logAplikasi, setLogAplikasi] = useState<EntriLog[]>([]);
 
 	// Daftar toast notifikasi untuk pengguna
-	const [daftarToast, setDaftarToast] = useState<ToastMessage[]>([]);
+	const [daftarToast, setDaftarToast] = useState<PesanToast[]>([]);
 
 	// Status koneksi socket untuk real-time logging
 	const [statusSocket, setStatusSocket] = useState<"connected" | "connecting" | "disconnected">("disconnected");
@@ -532,9 +533,9 @@ function Aplikasi() {
 	 * @param tipe - Jenis toast (success, error, info, warning)
 	 * @param opsi - Opsi tambahan seperti durasi
 	 */
-	const tampilkanToast = (pesan: string, tipe: ToastType, opsi?: { duration?: number }): void => {
+	const tampilkanToast = (pesan: string, tipe: TipeToast, opsi?: { duration?: number }): void => {
 		const id = crypto.randomUUID();
-		setDaftarToast(prev => [...prev, { id, message: pesan, type: tipe, duration: opsi?.duration }]);
+		setDaftarToast(prev => [...prev, { id, pesan, tipe, durasi: opsi?.duration }]);
 	};
 
 	const hapusToast = (id: string): void => {
@@ -939,7 +940,7 @@ function Aplikasi() {
 		includeWorkspace: boolean;
 		includeOpenApi: boolean;
 		includeServer: boolean;
-	}): Promise<{ name: string; size: number }[]> => {
+	}): Promise<{ nama: string; ukuran: number }[]> => {
 		const files: { name: string; blob: Blob }[] = [];
 
 		if (opsi.includeWorkspace) {
@@ -987,13 +988,13 @@ function Aplikasi() {
 			const zipBlob = (await createZipBlob(files)) as Blob;
 			return [
 				{
-					name: `backend-studio-export-${new Date().toISOString().slice(0, 10)}.zip`,
-					size: zipBlob.size,
+					nama: `backend-studio-export-${new Date().toISOString().slice(0, 10)}.zip`,
+					ukuran: zipBlob.size,
 				},
 			];
 		}
 
-		return files.map(file => ({ name: file.name, size: file.blob.size || 0 }));
+		return files.map(file => ({ nama: file.name, ukuran: file.blob.size || 0 }));
 	};
 
 	/**
@@ -1092,7 +1093,15 @@ function Aplikasi() {
 			}
 
 			// Kirim email (tanpa attachment, sudah menggunakan tautan)
-			await sendEmailViaEmailJS(serviceId, templateId, publicKey, recipients, subject, pesanUntukDikirim, []);
+			await sendEmailViaEmailJS(
+				serviceId,
+				templateId,
+				publicKey,
+				Array.isArray(recipients) ? recipients.join(", ") : String(recipients),
+				subject,
+				pesanUntukDikirim,
+				[]
+			);
 			tampilkanToast("Email berhasil dikirim!", "success");
 			setApakahModalEmailTerbuka(false);
 		} catch (error: any) {
@@ -1177,7 +1186,6 @@ function Aplikasi() {
 						addToast={tampilkanToast}
 					/>
 				)}
-
 				{tampilanAktif === "editor" && (
 					<MockEditor
 						initialData={mockYangDiedit}
@@ -1188,19 +1196,20 @@ function Aplikasi() {
 						addToast={tampilkanToast}
 					/>
 				)}
-
 				{tampilanAktif === "test" && (
-					<TestConsole
+					<KonsolPengujian
 						mocks={mockProyekAktif}
 						state={stateKonsolPengujian}
 						setState={setStateKonsolPengujian}
 					/>
 				)}
-
 				{tampilanAktif === "logs" && FEATURES.LOG_VIEWER() && (
-					<LogViewer logs={logAplikasi} onClearLogs={() => setLogAplikasi([])} socketStatus={statusSocket} />
+					<PenampilLog
+						log={logAplikasi}
+						padaHapusLog={() => setLogAplikasi([])}
+						statusSocket={statusSocket}
+					/>
 				)}
-
 				{tampilanAktif === "database" && <DatabaseView />}
 
 				{tampilanAktif === "settings" && (
@@ -1242,13 +1251,19 @@ function Aplikasi() {
 			)}
 
 			<EmailExportModal
-				isOpen={apakahModalEmailTerbuka}
-				onClose={() => setApakahModalEmailTerbuka(false)}
-				onSend={kirimEmail}
-				sending={sedangMengirimEmail}
-				getAttachmentPreview={dapatkanPreviewAttachment}
+				terbuka={apakahModalEmailTerbuka}
+				padaTutup={() => setApakahModalEmailTerbuka(false)}
+				padaKirim={kirimEmail}
+				sedangMengirim={sedangMengirimEmail}
+				dapatkanPratinjauLampiran={opsi =>
+					dapatkanPreviewAttachment({
+						includeWorkspace: (opsi as any).sertakanWorkspace,
+						includeOpenApi: (opsi as any).sertakanOpenApi,
+						includeServer: (opsi as any).sertakanServer,
+					})
+				}
 			/>
-			<ToastContainer toasts={daftarToast} removeToast={hapusToast} />
+			<KontainerToast daftarToast={daftarToast} hapusToast={hapusToast} />
 		</div>
 	);
 }

@@ -140,6 +140,9 @@ export interface EntriLog {
   duration: number; // durasi dalam milidetik
 }
 
+// Alias kompatibilitas: tipe log dengan nama bahasa Inggris (dipakai di beberapa komponen)
+export type LogEntry = EntriLog;
+
 // ================================
 // TIPE DATA TESTING
 // ================================
@@ -184,6 +187,9 @@ export { MetodeHttp as HttpMethod };
 export type { Proyek as Project, StateTampilan as ViewState };
 // Alias untuk konfigurasi autentikasi (kompatibilitas)
 export type AuthConfig = KonfigurasiAutentikasi;
+
+// Alias untuk konsol uji (nama Inggris yang dipakai di beberapa komponen)
+export type TestConsoleState = StateKonsolPengujian;
 
 /**
  * Tipe untuk toast notifikasi.

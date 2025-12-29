@@ -32,8 +32,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { FEATURES } from "../config/featureFlags";
 import { formatAuthPreview } from "../services/authUtils";
 import { MOCK_VARIABLES_HELP, patternsConflict } from "../services/mockEngine";
-import { HttpMethod, MockEndpoint } from "../types";
-import { ToastType } from "./Toast";
+import { HttpMethod, MockEndpoint, TipeToast } from "../types";
 import { klonDalam, konversiSkemaKeJson, parseJsonKeSkema, SchemaField, validasiStrukturJson } from "./mockEditorUtils";
 
 // Properti untuk komponen MockEditor
@@ -43,7 +42,7 @@ interface MockEditorProps {
 	onSave: (mock: MockEndpoint) => void; // Handler untuk menyimpan mock
 	onDelete: (id: string) => void; // Handler untuk menghapus mock
 	onCancel: () => void; // Handler untuk membatalkan edit
-	addToast: (message: string, type: ToastType) => void; // Handler untuk menampilkan toast
+	addToast: (message: string, type: TipeToast) => void; // Handler untuk menampilkan toast
 }
 
 // Data default untuk mock baru
