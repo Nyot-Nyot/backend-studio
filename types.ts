@@ -1,5 +1,17 @@
+/**
+ * Tipe data untuk aplikasi Backend Studio.
+ * Mendefinisikan struktur data utama yang digunakan di seluruh aplikasi.
+ */
 
-export enum HttpMethod {
+// ================================
+// ENUMERASI
+// ================================
+
+/**
+ * Metode HTTP yang didukung oleh aplikasi.
+ * Digunakan untuk menentukan jenis permintaan API.
+ */
+export enum MetodeHttp {
   GET = 'GET',
   POST = 'POST',
   PUT = 'PUT',
@@ -7,83 +19,136 @@ export enum HttpMethod {
   PATCH = 'PATCH'
 }
 
-export interface Project {
+// ================================
+// TIPE DATA UTAMA
+// ================================
+
+/**
+ * Representasi proyek atau workspace dalam aplikasi.
+ * Setiap proyek berisi kumpulan endpoint mock yang terkait.
+ */
+export interface Proyek {
   id: string;
-  name: string;
-  createdAt: number;
+  nama: string;
+  createdAt: number; // Timestamp dalam milidetik
 }
 
-export interface AuthConfig {
-  type: 'NONE' | 'BEARER_TOKEN' | 'API_KEY';
-  token?: string;      // The expected token/key value
-  headerKey?: string;  // Custom header key for API_KEY type (e.g. 'x-api-key')
+/**
+ * Konfigurasi autentikasi untuk endpoint.
+ * Menentukan jenis dan parameter autentikasi yang diperlukan.
+ */
+export interface KonfigurasiAutentikasi {
+  jenis: 'NONE' | 'BEARER_TOKEN' | 'API_KEY';
+  token?: string;      // Nilai token/kunci yang diharapkan
+  headerKey?: string;  // Kunci header kustom untuk jenis API_KEY (contoh: 'x-api-key')
 }
 
-export interface ProxyConfig {
+/**
+ * Konfigurasi proxy untuk meneruskan permintaan ke server eksternal.
+ */
+export interface KonfigurasiProxy {
   enabled: boolean;
-  target?: string; // full URL to forward requests to (e.g., https://api.example.com)
-  timeout?: number; // in ms
-  fallbackToMock?: boolean; // if true, fall back to local mock on proxy failure
+  target?: string; // URL lengkap untuk meneruskan permintaan (contoh: https://api.contoh.com)
+  timeout?: number; // dalam milidetik
+  fallbackToMock?: boolean; // jika true, kembalikan ke mock lokal jika proxy gagal
 }
 
-export interface EnvironmentVariable {
+/**
+ * Variabel lingkungan yang dapat digunakan dalam response mock.
+ * Mendukung substitusi dengan sintaks {{nama_variabel}}.
+ */
+export interface VariabelLingkungan {
   id: string;
-  key: string;
-  value: string;
+  kunci: string;
+  nilai: string;
 }
 
+/**
+ * Endpoint mock yang mensimulasikan API.
+ * Merupakan konfigurasi utama untuk setiap route yang dibuat pengguna.
+ */
 export interface MockEndpoint {
   id: string;
-  projectId: string; // Link to Project
-  name: string;
+  projectId: string; // Tautan ke Proyek
+  nama: string;
   path: string;
-  method: HttpMethod;
+  metode: MetodeHttp;
   statusCode: number;
-  delay: number; // in ms
-  responseBody: string; // JSON string
+  delay: number; // dalam milidetik
+  responseBody: string; // String JSON
   isActive: boolean;
-  version: string;
+  versi: string;
   createdAt: number;
   requestCount: number;
   headers: { key: string; value: string }[];
-  storeName?: string; // NEW: If set, this endpoint interacts with a data bucket
-  authConfig?: AuthConfig; // NEW: Built-in auth validation
-  proxy?: ProxyConfig; // Optional per-route proxy passthrough configuration
+  storeName?: string; // Jika diatur, endpoint ini berinteraksi dengan bucket data
+  authConfig?: KonfigurasiAutentikasi; // Validasi autentikasi bawaan
+  proxy?: KonfigurasiProxy; // Konfigurasi proxy passthrough opsional per-route
 }
 
-export interface GeneratedEndpointConfig {
-  name: string;
+/**
+ * Konfigurasi endpoint yang dihasilkan oleh layanan AI.
+ * Digunakan saat membuat endpoint secara otomatis.
+ */
+export interface KonfigurasiEndpointTerhasil {
+  nama: string;
   path: string;
-  method: HttpMethod | string;
+  metode: MetodeHttp | string;
   statusCode: number;
-  responseBody: string; // stringified JSON
+  responseBody: string; // JSON yang telah di-stringify
 }
 
-// Resource Schema types for schema-driven data generation
-export interface ResourceField {
-  name: string;
-  type: 'string' | 'number' | 'boolean' | 'date' | 'object' | 'array';
-  generator?: string; // e.g. 'uuid', 'randomName', 'email', 'number'
-  nestedSchemaId?: string; // reference to another ResourceSchema for nested objects/arrays
+// ================================
+// TIPE DATA SCHEMA DAN GENERATOR
+// ================================
+
+/**
+ * Field dalam resource schema untuk generasi data berbasis schema.
+ */
+export interface FieldResource {
+  nama: string;
+  tipe: 'string' | 'number' | 'boolean' | 'date' | 'object' | 'array';
+  generator?: string; // contoh: 'uuid', 'randomName', 'email', 'number'
+  nestedSchemaId?: string; // referensi ke ResourceSchema lain untuk object/array bersarang
 }
 
-export interface ResourceSchema {
+/**
+ * Schema resource untuk generasi data terstruktur.
+ * Mendefinisikan struktur data yang dapat digunakan untuk mock data yang realistis.
+ */
+export interface SchemaResource {
   id: string;
-  name: string; // e.g. 'users'
-  fields: ResourceField[];
+  nama: string; // contoh: 'pengguna'
+  fields: FieldResource[];
 }
 
-export interface LogEntry {
+// ================================
+// TIPE DATA LOGGING
+// ================================
+
+/**
+ * Entri log yang mencatat permintaan dan response.
+ * Digunakan untuk melacak aktivitas API.
+ */
+export interface EntriLog {
   id: string;
   timestamp: number;
-  method: HttpMethod;
+  metode: MetodeHttp;
   path: string;
   statusCode: number;
   ip: string;
-  duration: number;
+  duration: number; // durasi dalam milidetik
 }
 
-export interface ResponseState {
+// ================================
+// TIPE DATA TESTING
+// ================================
+
+/**
+ * State response untuk konsol pengujian.
+ * Menyimpan hasil dari permintaan pengujian.
+ */
+export interface StateResponse {
   status: number;
   body: string;
   time: number;
@@ -91,100 +156,214 @@ export interface ResponseState {
   error?: string;
 }
 
-export interface TestConsoleState {
-  method: HttpMethod;
+/**
+ * State untuk konsol pengujian.
+ * Menyimpan konfigurasi dan hasil pengujian manual.
+ */
+export interface StateKonsolPengujian {
+  metode: MetodeHttp;
   path: string;
-  response: ResponseState | null;
-  body?: string; // NEW: For POST/PUT requests in console
+  response: StateResponse | null;
+  body?: string; // Untuk permintaan POST/PUT dalam konsol
 }
 
-export type ViewState = 'dashboard' | 'editor' | 'logs' | 'settings' | 'test' | 'database';
+// ================================
+// TIPE DATA UI DAN NAVIGASI
+// ================================
 
-// Scenario types
-export interface CallApiPayload {
+/**
+ * State tampilan aktif dalam aplikasi.
+ * Menentukan halaman mana yang sedang ditampilkan.
+ */
+export type StateTampilan = 'dashboard' | 'editor' | 'logs' | 'settings' | 'test' | 'database';
+
+// --- Alias ekspor untuk kompatibilitas (nama Inggris) ---
+// Beberapa modul (komponen) masih mengimpor nama bahasa Inggris seperti `HttpMethod`.
+// Menyediakan alias membuat perubahan ini kecil dan aman.
+export { MetodeHttp as HttpMethod };
+export type { Proyek as Project, StateTampilan as ViewState };
+
+/**
+ * Tipe untuk toast notifikasi.
+ * Menentukan kategori pesan yang ditampilkan.
+ */
+export type TipeToast = 'success' | 'error' | 'info' | 'warning';
+
+/**
+ * Pesan toast yang ditampilkan kepada pengguna.
+ * Digunakan untuk komunikasi status dan notifikasi.
+ */
+export interface PesanToast {
+  id: string;
+  pesan: string;
+  tipe: TipeToast;
+  durasi?: number; // durasi dalam milidetik (opsional)
+}
+
+// ================================
+// TIPE DATA SCENARIO (ALUR KERJA)
+// ================================
+
+/**
+ * Payload untuk langkah memanggil API dalam scenario.
+ */
+export interface PayloadPanggilApi {
   url: string;
-  method: HttpMethod;
+  metode: MetodeHttp;
   headers?: Record<string, string>;
   body?: unknown;
 }
 
-export interface EmitSocketPayload {
+/**
+ * Payload untuk langkah emit socket dalam scenario.
+ */
+export interface PayloadEmitSocket {
   event: string;
   data?: unknown;
 }
 
-export interface WaitPayload {
-  duration: number; // in ms
+/**
+ * Payload untuk langkah wait dalam scenario.
+ */
+export interface PayloadTunggu {
+  duration: number; // dalam milidetik
 }
 
-export interface BaseScenarioStep {
+/**
+ * Langkah dasar dalam scenario.
+ * Semua langkah scenario mewarisi dari tipe ini.
+ */
+export interface LangkahScenarioDasar {
   id: string;
-  delay?: number;
+  delay?: number; // penundaan sebelum eksekusi (dalam ms)
 }
 
-export interface CallApiStep extends BaseScenarioStep {
-  type: 'callApi';
-  payload: CallApiPayload;
+/**
+ * Langkah scenario untuk memanggil API.
+ */
+export interface LangkahPanggilApi extends LangkahScenarioDasar {
+  tipe: 'callApi';
+  payload: PayloadPanggilApi;
 }
 
-export interface EmitSocketStep extends BaseScenarioStep {
-  type: 'emitSocket';
-  payload: EmitSocketPayload;
+/**
+ * Langkah scenario untuk mengirim event socket.
+ */
+export interface LangkahEmitSocket extends LangkahScenarioDasar {
+  tipe: 'emitSocket';
+  payload: PayloadEmitSocket;
 }
 
-export interface WaitStep extends BaseScenarioStep {
-  type: 'wait';
-  payload: WaitPayload;
+/**
+ * Langkah scenario untuk menunggu.
+ */
+export interface LangkahTunggu extends LangkahScenarioDasar {
+  tipe: 'wait';
+  payload: PayloadTunggu;
 }
 
-export interface NoopStep extends BaseScenarioStep {
-  type: 'noop';
+/**
+ * Langkah scenario tanpa operasi (placeholder).
+ */
+export interface LangkahNoop extends LangkahScenarioDasar {
+  tipe: 'noop';
   payload?: undefined;
 }
 
-export type ScenarioStep =
-  | CallApiStep
-  | EmitSocketStep
-  | WaitStep
-  | NoopStep;
+/**
+ * Union type untuk semua jenis langkah scenario.
+ * Digunakan untuk menentukan langkah-langkah dalam scenario.
+ */
+export type LangkahScenario =
+  | LangkahPanggilApi
+  | LangkahEmitSocket
+  | LangkahTunggu
+  | LangkahNoop;
+
+/**
+ * Scenario yang mendefinisikan alur kerja otomatis.
+ * Digunakan untuk testing otomatis atau simulasi alur bisnis.
+ */
 export interface Scenario {
   id: string;
-  name: string;
-  description?: string;
+  nama: string;
+  deskripsi?: string;
   createdAt: number;
   updatedAt?: number;
-  steps: ScenarioStep[];
+  steps: LangkahScenario[];
 }
 
-export interface ScenarioStepLog<T = unknown> {
+/**
+ * Log untuk setiap langkah scenario yang dieksekusi.
+ * Mencatat status dan output dari eksekusi langkah.
+ */
+export interface LogLangkahScenario<T = unknown> {
   stepId: string;
   startedAt: number;
   endedAt?: number;
   status: 'running' | 'success' | 'failed';
   /**
-   * Output can be any serializable value produced by the step.
-   * Use the generic parameter `T` to express a narrower type at the call site,
-   * or leave as the default `unknown` and narrow where the value is consumed.
+   * Output bisa berupa nilai serializable apa pun yang dihasilkan langkah.
    */
   output?: T;
   error?: string;
 }
 
-export interface ScenarioRun<T = unknown> {
+/**
+ * Eksekusi scenario yang berjalan.
+ * Menyimpan status dan log untuk semua langkah dalam eksekusi scenario.
+ */
+export interface EksekusiScenario<T = unknown> {
   id: string;
   scenarioId: string;
   startedAt: number;
   endedAt?: number;
   status: 'running' | 'completed' | 'failed';
-  stepLogs: ScenarioStepLog<T>[];
+  stepLogs: LogLangkahScenario<T>[];
 }
 
-export interface Connector<C extends Record<string, unknown> = Record<string, unknown>> {
+// ================================
+// TIPE DATA KONEKTOR
+// ================================
+
+/**
+ * Konektor untuk integrasi dengan layanan eksternal.
+ * Mendukung berbagai jenis konektor dengan konfigurasi spesifik.
+ */
+export interface Konektor<C extends Record<string, unknown> = Record<string, unknown>> {
   id: string;
-  name: string;
-  type: string;
-  /** Connector configuration is connector-specific; use a generic to type it per-connector */
+  nama: string;
+  tipe: string;
+  /** Konfigurasi konektor spesifik; gunakan generic untuk mengetiknya per-konektor */
   config?: C;
   createdAt: number;
 }
 
+// ================================
+// TIPE DATA EKSPOR (UNTUK KEMUDIAH IMPOR)
+// ================================
+
+/**
+ * Struktur data untuk ekspor/import workspace.
+ * Memastikan format yang konsisten untuk backup dan restore.
+ */
+export interface DataWorkspaceEkspor {
+  versi: string;
+  timestamp: number;
+  projects: Proyek[];
+  mocks: MockEndpoint[];
+  envVars: VariabelLingkungan[];
+}
+
+/**
+ * Parameter untuk modal ekspor email.
+ * Digunakan saat mengirim konfigurasi via email.
+ */
+export interface ParameterEksporEmail {
+  recipients: string[];
+  subject: string;
+  message: string;
+  includeWorkspace: boolean;
+  includeOpenApi: boolean;
+  includeServer: boolean;
+}

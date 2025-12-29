@@ -1,10 +1,10 @@
 # Daftar polish
 
--   [ ] [App.tsx](./App.tsx)
--   [ ] [index.tsx](./index.tsx)
--   [ ] [sw.js](./sw.js)
--   [ ] [types.ts](./types.ts)
--   [ ] [src/theme/](./src/theme/)
+-   [x] [App.tsx](./App.tsx)
+-   [x] [index.tsx](./index.tsx)
+-   [x] [sw.js](./sw.js)
+-   [x] [types.ts](./types.ts)
+-   [x] [src/theme/](./src/theme/)
 
 -   [ ] [components/Button.tsx](./components/Button.tsx)
 -   [ ] [components/Dashboard.tsx](./components/Dashboard.tsx)
